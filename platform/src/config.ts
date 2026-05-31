@@ -9,6 +9,7 @@ const envSchema = z.object({
   SESSION_SECRET: z.string().min(16),
   DS_URL: z.string().url(),
   DS_JWT_SECRET: z.string().min(8),
+  TRUST_PROXY: z.string().default('false'),
 });
 
 export const config = envSchema.parse(process.env);
