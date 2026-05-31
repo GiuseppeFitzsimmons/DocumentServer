@@ -62,6 +62,13 @@ app.get('/health', (_req, res) => {
 app.use('/example', requireAuth, createProxyMiddleware({
   target: config.DS_URL,
   changeOrigin: true,
+  pathRewrite: undefined,
+  on: {
+    proxyReq: (proxyReq, req) => {
+      // Preserve the original /example path
+      proxyReq.path = (req as any).originalUrl;
+    },
+  },
 }));
 
 // Authenticated root
