@@ -1,5 +1,5 @@
 :80 {
-	# DocumentServer paths (example app, editor, API)
+	# DocumentServer paths (example app, editor, API, versioned assets)
 	handle /example* {
 		reverse_proxy documentserver:80
 	}
@@ -7,6 +7,9 @@
 		reverse_proxy documentserver:80
 	}
 	handle /sdkjs/* {
+		reverse_proxy documentserver:80
+	}
+	handle /sdkjs-plugins/* {
 		reverse_proxy documentserver:80
 	}
 	handle /fonts/* {
@@ -25,6 +28,12 @@
 		reverse_proxy documentserver:80
 	}
 	handle /ConvertService.ashx {
+		reverse_proxy documentserver:80
+	}
+
+	# Versioned DS assets (e.g. /9.3.1-hash/web-apps/...)
+	@versioned path_regexp ^/[0-9]+\.[0-9]+\.[0-9]+
+	handle @versioned {
 		reverse_proxy documentserver:80
 	}
 
