@@ -1,0 +1,10 @@
+# Copy this file to terraform.tfvars and fill in your values.
+# Do NOT commit terraform.tfvars to version control.
+
+hcloud_token   = "your-hetzner-api-token"
+ssh_public_key = "ssh-ed25519 AAAA... you@machine"
+jwt_secret     = "generate-a-strong-random-secret-here"
+
+# Optional overrides:
+# server_type = "cx31"
+# location    = "fsn1"
