@@ -1,8 +1,5 @@
 :80 {
-	# DocumentServer paths (example app, editor, API, versioned assets)
-	handle /example* {
-		reverse_proxy documentserver:80
-	}
+	# DocumentServer assets and API (public, needed by editor iframe)
 	handle /web-apps/* {
 		reverse_proxy documentserver:80
 	}
@@ -37,7 +34,7 @@
 		reverse_proxy documentserver:80
 	}
 
-	# Portal app (everything else)
+	# Everything else goes to portal (including /example, gated by auth)
 	handle /* {
 		reverse_proxy portal:3000
 	}
