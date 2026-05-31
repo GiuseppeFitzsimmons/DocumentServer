@@ -1,11 +1,35 @@
 :80 {
-	# Portal app
-	handle /* {
-		reverse_proxy portal:3000
+	# DocumentServer paths (example app, editor, API)
+	handle /example* {
+		reverse_proxy documentserver:80
+	}
+	handle /web-apps/* {
+		reverse_proxy documentserver:80
+	}
+	handle /sdkjs/* {
+		reverse_proxy documentserver:80
+	}
+	handle /fonts/* {
+		reverse_proxy documentserver:80
+	}
+	handle /cache/* {
+		reverse_proxy documentserver:80
+	}
+	handle /coauthoring/* {
+		reverse_proxy documentserver:80
+	}
+	handle /doc/* {
+		reverse_proxy documentserver:80
+	}
+	handle /healthcheck {
+		reverse_proxy documentserver:80
+	}
+	handle /ConvertService.ashx {
+		reverse_proxy documentserver:80
 	}
 
-	# DocumentServer — proxied, not directly exposed
-	handle_path /ds/* {
-		reverse_proxy documentserver:80
+	# Portal app (everything else)
+	handle /* {
+		reverse_proxy portal:3000
 	}
 }
