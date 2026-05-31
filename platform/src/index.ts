@@ -9,6 +9,10 @@ import { sessionMiddleware } from './session.js';
 import { authRouter } from './auth/routes.js';
 import { pageRouter } from './pages/routes.js';
 import { requireAuth } from './auth/middleware.js';
+import { fileRouter, folderRouter } from './storage/routes.js';
+import { serveRouter } from './ds/serve.js';
+import { callbackRouter } from './ds/callback.js';
+import { editorRouter } from './pages/editor.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -30,6 +34,10 @@ app.set('views', path.join(__dirname, 'views'));
 app.use((req, res, next) => {
   const originalRender = res.render.bind(res);
   res.render = (view: string, options: any = {}) => {
+    if (options.layout === false) {
+      originalRender(view, options);
+      return;
+    }
     originalRender(view, options, (err: Error | null, body: string) => {
       if (err) return next(err);
       originalRender('layout', { ...options, body });
@@ -57,6 +65,17 @@ app.get('/health', (_req, res) => {
 });
 
 // --- Everything below requires login ---
+
+// DocumentServer integration (no session auth — JWT-based, must be before fileRouter)
+app.use('/api/files/serve', serveRouter);
+app.use('/api/ds/callback', callbackRouter);
+
+// File storage API
+app.use('/api/files', fileRouter);
+app.use('/api/folders', folderRouter);
+
+// Editor page (authenticated)
+app.use(editorRouter);
 
 // Proxy /example to DocumentServer (authenticated)
 app.use('/example', requireAuth, createProxyMiddleware({
