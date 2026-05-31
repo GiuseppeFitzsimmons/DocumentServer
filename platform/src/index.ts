@@ -3,10 +3,12 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 import { config } from './config.js';
 import { sessionMiddleware } from './session.js';
 import { authRouter } from './auth/routes.js';
 import { pageRouter } from './pages/routes.js';
+import { requireAuth } from './auth/middleware.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -43,7 +45,7 @@ const authLimiter = rateLimit({
 // API auth routes
 app.use('/auth', authLimiter, authRouter);
 
-// Page routes (login, register, logout)
+// Page routes (login, register, logout — public)
 app.use(pageRouter);
 
 // Health check (public)
@@ -51,27 +53,18 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Auth gate — everything below requires login
-app.use((req, res, next) => {
-  if (!req.session.userId) {
-    res.redirect('/login');
-    return;
-  }
-  next();
-});
-
-// Authenticated root — redirect to example for now
-app.get('/', (_req, res) => {
-  res.redirect('/example');
-});
+// --- Everything below requires login ---
 
 // Proxy /example to DocumentServer (authenticated)
-import { createProxyMiddleware } from 'http-proxy-middleware';
-
-app.use('/example', createProxyMiddleware({
+app.use('/example', requireAuth, createProxyMiddleware({
   target: config.DS_URL,
   changeOrigin: true,
 }));
+
+// Authenticated root
+app.get('/', requireAuth, (_req, res) => {
+  res.redirect('/example');
+});
 
 app.listen(config.PORT, () => {
   console.log(`Portal running on port ${config.PORT}`);
