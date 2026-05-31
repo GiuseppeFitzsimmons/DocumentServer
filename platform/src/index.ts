@@ -14,7 +14,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 
-app.use(helmet());
+app.use(helmet({
+  hsts: false,
+  contentSecurityPolicy: false,
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(sessionMiddleware);
