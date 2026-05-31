@@ -33,6 +33,7 @@ services:
     environment:
       JWT_SECRET: ${JWT_SECRET}
       ALLOW_PRIVATE_IP_ADDRESS: "true"
+      EXAMPLE_ENABLED: "true"
     # Not exposed to host — only reachable via caddy on the docker network
 
   postgres:

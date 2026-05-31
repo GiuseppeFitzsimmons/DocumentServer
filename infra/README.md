@@ -47,6 +47,10 @@ Logs:
 ```bash
 cd /opt/euro-office && docker compose logs -f
 ```
+alternatively,
+```
+ssh -i ~/.ssh/euro-office root@<server-ip>
+```
 
 ## Variables
 
