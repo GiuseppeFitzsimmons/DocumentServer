@@ -1,0 +1,58 @@
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - portal
+      - documentserver
+
+  portal:
+    build: ../platform
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+      DATABASE_URL: postgres://portal:${DB_PASSWORD}@postgres:5432/portal
+      REDIS_URL: redis://redis:6379
+      SESSION_SECRET: ${SESSION_SECRET}
+      DS_URL: http://documentserver
+      DS_JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      - postgres
+      - redis
+
+  documentserver:
+    image: ghcr.io/euro-office/documentserver:latest
+    restart: unless-stopped
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      ALLOW_PRIVATE_IP_ADDRESS: "true"
+    # Not exposed to host — only reachable via caddy on the docker network
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: portal
+      POSTGRES_USER: portal
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pg_data:
+  redis_data:

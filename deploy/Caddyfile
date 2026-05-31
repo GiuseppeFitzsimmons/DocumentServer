@@ -1,0 +1,11 @@
+:80 {
+	# Portal app
+	handle /* {
+		reverse_proxy portal:3000
+	}
+
+	# DocumentServer — proxied, not directly exposed
+	handle_path /ds/* {
+		reverse_proxy documentserver:80
+	}
+}

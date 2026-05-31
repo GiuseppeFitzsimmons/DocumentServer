@@ -26,3 +26,21 @@ variable "jwt_secret" {
   type        = string
   sensitive   = true
 }
+
+variable "db_password" {
+  description = "PostgreSQL password for the portal database"
+  type        = string
+  sensitive   = true
+}
+
+variable "session_secret" {
+  description = "Secret for signing session cookies"
+  type        = string
+  sensitive   = true
+}
+
+variable "repo_url" {
+  description = "Git repository URL to clone on the server"
+  type        = string
+  default     = "https://github.com/YOUR_USER/DocumentServer.git"
+}

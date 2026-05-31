@@ -4,6 +4,9 @@
 hcloud_token   = "your-hetzner-api-token"
 ssh_public_key = "ssh-ed25519 AAAA... you@machine"
 jwt_secret     = "generate-a-strong-random-secret-here"
+db_password = "xxx"
+session_secret = "xxx"
+repo_url = "https://github.com/GiuseppeFitzsimmons/DocumentServer.git"
 
 # Optional overrides:
 # server_type = "cx31"

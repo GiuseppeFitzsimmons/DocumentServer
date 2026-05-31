@@ -9,24 +9,24 @@ packages:
   - curl
   - gnupg
   - lsb-release
+  - git
 
 write_files:
-  - path: /opt/euro-office/docker-compose.yml
-    permissions: "0644"
+  - path: /opt/euro-office/.env
+    permissions: "0600"
     content: |
-      services:
-        documentserver:
-          image: ghcr.io/euro-office/documentserver:latest
-          restart: unless-stopped
-          ports:
-            - "80:80"
-          environment:
-            - JWT_SECRET=${jwt_secret}
-            - EXAMPLE_ENABLED=true
+      JWT_SECRET=${jwt_secret}
+      DB_PASSWORD=${db_password}
+      SESSION_SECRET=${session_secret}
 
 runcmd:
   # Install Docker
   - curl -fsSL https://get.docker.com | sh
 
-  # Start the stack
-  - cd /opt/euro-office && docker compose up -d
+  # Clone the repo
+  - git clone ${repo_url} /opt/euro-office/repo
+
+  # Copy env file into deploy directory and start the stack
+  - |
+    cp /opt/euro-office/.env /opt/euro-office/repo/deploy/.env
+    cd /opt/euro-office/repo/deploy && docker compose up -d --build

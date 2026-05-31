@@ -39,7 +39,12 @@ resource "hcloud_firewall" "euro_office" {
     source_ips = ["0.0.0.0/0", "::/0"]
   }
 
-
+  rule {
+    direction = "in"
+    protocol  = "tcp"
+    port      = "443"
+    source_ips = ["0.0.0.0/0", "::/0"]
+  }
 }
 
 # --- Server ---
@@ -54,7 +59,10 @@ resource "hcloud_server" "euro_office" {
   firewall_ids = [hcloud_firewall.euro_office.id]
 
   user_data = templatefile("${path.module}/cloud-init.yaml", {
-    jwt_secret = var.jwt_secret
+    jwt_secret     = var.jwt_secret
+    db_password    = var.db_password
+    session_secret = var.session_secret
+    repo_url       = var.repo_url
   })
 
   public_net {
