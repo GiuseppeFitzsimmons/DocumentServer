@@ -5,7 +5,7 @@ import {
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
-import { config } from '../config';
+import { config } from '../config.js';
 
 const s3 = new S3Client({
   endpoint: config.S3_ENDPOINT,
