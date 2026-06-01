@@ -13,6 +13,7 @@ import { fileRouter, folderRouter } from './storage/routes.js';
 import { serveRouter } from './ds/serve.js';
 import { callbackRouter } from './ds/callback.js';
 import { editorRouter } from './pages/editor.js';
+import { fileManagerRouter } from './pages/fileManager.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -102,10 +103,8 @@ app.use('/example', requireAuth, createProxyMiddleware({
   },
 }));
 
-// Authenticated root
-app.get('/', requireAuth, (_req, res) => {
-  res.redirect('/example');
-});
+// File manager (authenticated root)
+app.use('/', fileManagerRouter);
 
 app.listen(config.PORT, () => {
   console.log(`Portal running on port ${config.PORT}`);

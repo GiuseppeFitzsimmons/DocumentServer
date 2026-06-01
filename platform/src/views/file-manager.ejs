@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>File Manager — Euro-Office</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f5f5;
+      color: #333;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 24px;
+      background: #fff;
+      border-bottom: 1px solid #e0e0e0;
+      flex-wrap: wrap;
+    }
+    .toolbar h1 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-right: auto;
+    }
+    .btn-primary {
+      background: #0082C9;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 8px 16px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .btn-primary:hover { background: #006ba3; }
+    .btn-secondary {
+      background: #fff;
+      color: #333;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 8px 16px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .btn-secondary:hover { background: #f0f0f0; }
+    .dropdown-wrapper { position: relative; display: inline-block; }
+    .dropdown-menu {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      margin-top: 4px;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      min-width: 200px;
+      z-index: 100;
+      overflow: hidden;
+    }
+    .dropdown-menu.open { display: block; }
+    .dropdown-menu button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 10px 16px;
+      border: none;
+      background: none;
+      font-size: 14px;
+      cursor: pointer;
+      color: #333;
+    }
+    .dropdown-menu button:hover { background: #f5f5f5; }
+    .dropdown-menu .separator {
+      height: 1px;
+      background: #e0e0e0;
+      margin: 4px 0;
+    }
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 10px 24px;
+      background: #fff;
+      border-bottom: 1px solid #e0e0e0;
+      font-size: 14px;
+    }
+    .breadcrumb button {
+      background: none;
+      border: none;
+      color: #0082C9;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px 4px;
+      border-radius: 4px;
+    }
+    .breadcrumb button:hover { background: #e8f4fc; }
+    .breadcrumb .separator { color: #999; margin: 0 2px; }
+    .breadcrumb .current { color: #333; font-weight: 500; }
+    .file-list-container {
+      flex: 1;
+      padding: 16px 24px;
+      overflow-y: auto;
+    }
+    .file-list {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .file-list th {
+      text-align: left;
+      padding: 12px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    .file-list td {
+      padding: 10px 16px;
+      font-size: 14px;
+      border-bottom: 1px solid #f0f0f0;
+      vertical-align: middle;
+    }
+    .file-list tr:last-child td { border-bottom: none; }
+    .file-list tr:hover td { background: #f8f9fa; }
+    .file-list tr { cursor: pointer; }
+    .item-name-cell {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .item-icon {
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .item-icon svg { width: 20px; height: 20px; }
+    .item-name { font-weight: 400; }
+    .item-name-input {
+      border: 1px solid #0082C9;
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 14px;
+      outline: none;
+      width: 200px;
+    }
+    .action-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 18px;
+      color: #666;
+      line-height: 1;
+    }
+    .action-btn:hover { background: #e0e0e0; }
+    .context-menu {
+      position: absolute;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      min-width: 150px;
+      z-index: 200;
+      overflow: hidden;
+    }
+    .context-menu button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 10px 16px;
+      border: none;
+      background: none;
+      font-size: 14px;
+      cursor: pointer;
+      color: #333;
+    }
+    .context-menu button:hover { background: #f5f5f5; }
+    .context-menu button.danger { color: #d32f2f; }
+    .context-menu button.danger:hover { background: #fef0f0; }
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 24px;
+      color: #999;
+    }
+    .empty-state svg { width: 64px; height: 64px; margin-bottom: 16px; opacity: 0.5; }
+    .empty-state p { font-size: 16px; }
+    .progress-bar-container {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 0 8px;
+    }
+    .progress-bar-container.active { display: flex; }
+    .progress-bar {
+      width: 120px;
+      height: 6px;
+      background: #e0e0e0;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: #0082C9;
+      width: 0%;
+      transition: width 0.2s;
+    }
+    .progress-text { font-size: 12px; color: #666; }
+    .toast-container {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .toast {
+      padding: 12px 20px;
+      border-radius: 4px;
+      font-size: 14px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      animation: slideIn 0.3s ease;
+      max-width: 360px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .toast-error { background: #d32f2f; color: #fff; }
+    .toast-success { background: #2e7d32; color: #fff; }
+    .toast-dismiss {
+      background: none;
+      border: none;
+      color: inherit;
+      cursor: pointer;
+      font-size: 18px;
+      margin-left: auto;
+      padding: 0 4px;
+      opacity: 0.8;
+    }
+    .toast-dismiss:hover { opacity: 1; }
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 500;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: #fff;
+      border-radius: 8px;
+      padding: 24px;
+      min-width: 320px;
+      max-width: 480px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    }
+    .modal h3 { font-size: 16px; margin-bottom: 16px; }
+    .modal p { font-size: 14px; margin-bottom: 16px; color: #555; }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .folder-picker-list {
+      max-height: 240px;
+      overflow-y: auto;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      margin-bottom: 16px;
+    }
+    .folder-picker-item {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 10px 16px;
+      border: none;
+      background: none;
+      font-size: 14px;
+      cursor: pointer;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .folder-picker-item:hover { background: #f5f5f5; }
+    .folder-picker-item.selected { background: #e8f4fc; font-weight: 500; }
+    .folder-picker-item:last-child { border-bottom: none; }
+    /* Responsive */
+    @media (max-width: 768px) {
+      .toolbar { padding: 10px 16px; }
+      .breadcrumb { padding: 8px 16px; }
+      .file-list-container { padding: 12px 16px; }
+      .col-size, .col-date { display: none; }
+      .toolbar h1 { font-size: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toast-container" id="toastContainer"></div>
+  <div class="toolbar">
+    <h1>My Files</h1>
+    <div class="dropdown-wrapper" id="newDropdown">
+      <button class="btn-primary" id="newBtn">+ New</button>
+      <div class="dropdown-menu" id="newMenu">
+        <button data-type="docx">📄 Word Document (.docx)</button>
+        <button data-type="xlsx">📊 Spreadsheet (.xlsx)</button>
+        <button data-type="pptx">📽️ Presentation (.pptx)</button>
+        <div class="separator"></div>
+        <button id="newFolderBtn">📁 New Folder</button>
+      </div>
+    </div>
+    <button class="btn-secondary" id="uploadBtn">⬆ Upload</button>
+    <input type="file" id="fileInput" style="display:none">
+    <div class="progress-bar-container" id="uploadProgress">
+      <div class="progress-bar"><div class="progress-bar-fill" id="progressFill"></div></div>
+      <span class="progress-text" id="progressText">0%</span>
+    </div>
+  </div>
+
+  <nav class="breadcrumb" id="breadcrumb"></nav>
+
+  <div class="file-list-container" id="fileListContainer"></div>
+
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal" id="modalContent"></div>
+  </div>
+
+  <script>
+    // --- State ---
+    var state = {
+      currentFolderId: null,
+      breadcrumb: [{ id: null, name: 'My Files' }],
+      items: [],
+      loading: false
+    };
+
+    // --- Toast Notifications (Task 8.1) ---
+    function showToast(message, type) {
+      var container = document.getElementById('toastContainer');
+      var toast = document.createElement('div');
+      toast.className = 'toast toast-' + type;
+      toast.innerHTML = '<span>' + escapeHtml(message) + '</span><button class="toast-dismiss" onclick="this.parentElement.remove()">&times;</button>';
+      container.appendChild(toast);
+      setTimeout(function() { if (toast.parentElement) toast.remove(); }, 5000);
+    }
+    function showError(message) { showToast(message, 'error'); }
+    function showSuccess(message) { showToast(message, 'success'); }
+    function escapeHtml(str) {
+      var div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    // --- API Client (Tasks 2.1, 2.2, 2.3, 8.2) ---
+    async function apiRequest(method, url, body) {
+      var opts = { method: method, headers: {} };
+      if (body) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      var res = await fetch(url, opts);
+      if (res.status === 401) {
+        window.location.href = '/login';
+        throw new Error('Unauthorized');
+      }
+      if (!res.ok) {
+        var data = {};
+        try { data = await res.json(); } catch(e) {}
+        var err = new Error(data.error || 'Request failed');
+        err.status = res.status;
+        throw err;
+      }
+      if (res.status === 204) return null;
+      return res.json();
+    }
+
+    window.FileManagerAPI = {
+      listFolder: function(folderId) {
+        var url = '/api/files';
+        if (folderId) url += '?folderId=' + encodeURIComponent(folderId);
+        return apiRequest('GET', url);
+      },
+      createDocument: function(type, folderId) {
+        return apiRequest('POST', '/api/files/create', { type: type, folderId: folderId });
+      },
+      createFolder: function(name, parentId) {
+        return apiRequest('POST', '/api/folders', { name: name, parentId: parentId });
+      },
+      uploadFile: function(file, folderId, onProgress) {
+        return new Promise(function(resolve, reject) {
+          var xhr = new XMLHttpRequest();
+          xhr.open('POST', '/api/files/upload');
+          xhr.upload.onprogress = function(e) {
+            if (e.lengthComputable && onProgress) {
+              onProgress(Math.round((e.loaded / e.total) * 100));
+            }
+          };
+          xhr.onload = function() {
+            if (xhr.status === 401) {
+              window.location.href = '/login';
+              reject(new Error('Unauthorized'));
+              return;
+            }
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve(JSON.parse(xhr.responseText));
+            } else {
+              var data = {};
+              try { data = JSON.parse(xhr.responseText); } catch(e) {}
+              reject(new Error(data.error || 'Upload failed'));
+            }
+          };
+          xhr.onerror = function() { reject(new Error('Network error — please try again')); };
+          var formData = new FormData();
+          formData.append('file', file);
+          if (folderId) formData.append('folderId', folderId);
+          xhr.send(formData);
+        });
+      },
+      renameFile: function(id, name) {
+        return apiRequest('PATCH', '/api/files/' + encodeURIComponent(id), { name: name });
+      },
+      renameFolder: function(id, name) {
+        return apiRequest('PATCH', '/api/folders/' + encodeURIComponent(id), { name: name });
+      },
+      deleteFile: function(id) {
+        return apiRequest('DELETE', '/api/files/' + encodeURIComponent(id));
+      },
+      deleteFolder: function(id) {
+        return apiRequest('DELETE', '/api/folders/' + encodeURIComponent(id));
+      },
+      moveFile: function(id, targetFolderId) {
+        return apiRequest('PATCH', '/api/files/' + encodeURIComponent(id), { folderId: targetFolderId });
+      }
+    };
+
+    // --- Icons ---
+    function getFolderIcon() {
+      return '<svg viewBox="0 0 24 24" fill="#F9A825"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>';
+    }
+    function getFileIcon(mimeType) {
+      var color = '#90CAF9';
+      if (mimeType && mimeType.indexOf('spreadsheet') !== -1) color = '#A5D6A7';
+      if (mimeType && mimeType.indexOf('presentation') !== -1) color = '#FFAB91';
+      return '<svg viewBox="0 0 24 24" fill="' + color + '"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/></svg>';
+    }
+    function getEmptyIcon() {
+      return '<svg viewBox="0 0 24 24" fill="#ccc"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>';
+    }
+
+    // --- Sort (Task 3.2) ---
+    function sortItems(items) {
+      return items.slice().sort(function(a, b) {
+        if (a.type === 'folder' && b.type !== 'folder') return -1;
+        if (a.type !== 'folder' && b.type === 'folder') return 1;
+        return a.name.localeCompare(b.name);
+      });
+    }
+
+    // --- Format helpers ---
+    function formatSize(bytes) {
+      if (bytes == null) return '—';
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+    function formatDate(isoStr) {
+      if (!isoStr) return '—';
+      var d = new Date(isoStr);
+      return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    // --- Render Items (Task 3.1, 3.3) ---
+    function renderItems(items) {
+      var container = document.getElementById('fileListContainer');
+      state.items = items;
+      var sorted = sortItems(items);
+
+      if (sorted.length === 0) {
+        container.innerHTML = '<div class="empty-state">' + getEmptyIcon() + '<p>No files or folders yet</p></div>';
+        return;
+      }
+
+      var html = '<table class="file-list"><thead><tr><th>Name</th><th class="col-size">Size</th><th class="col-date">Modified</th><th></th></tr></thead><tbody>';
+      sorted.forEach(function(item) {
+        var icon = item.type === 'folder' ? getFolderIcon() : getFileIcon(item.mimeType);
+        html += '<tr data-id="' + item.id + '" data-type="' + item.type + '" data-name="' + escapeHtml(item.name) + '">';
+        html += '<td><div class="item-name-cell"><span class="item-icon">' + icon + '</span><span class="item-name">' + escapeHtml(item.name) + '</span></div></td>';
+        html += '<td class="col-size">' + (item.type === 'file' ? formatSize(item.size) : '—') + '</td>';
+        html += '<td class="col-date">' + formatDate(item.updatedAt) + '</td>';
+        html += '<td><button class="action-btn" data-action="menu" data-id="' + item.id + '" data-type="' + item.type + '" data-name="' + escapeHtml(item.name) + '" onclick="event.stopPropagation(); openContextMenu(event, this)">⋮</button></td>';
+        html += '</tr>';
+      });
+      html += '</tbody></table>';
+      container.innerHTML = html;
+
+      // Wire row clicks (Task 4.3, 4.4)
+      container.querySelectorAll('tr[data-id]').forEach(function(row) {
+        row.addEventListener('click', function() {
+          var id = row.getAttribute('data-id');
+          var type = row.getAttribute('data-type');
+          var name = row.getAttribute('data-name');
+          if (type === 'folder') {
+            navigateToFolder(id, name);
+          } else {
+            window.location.href = '/editor/' + encodeURIComponent(id);
+          }
+        });
+      });
+    }
+
+    // --- Breadcrumb (Task 4.2) ---
+    function renderBreadcrumb() {
+      var el = document.getElementById('breadcrumb');
+      var html = '';
+      state.breadcrumb.forEach(function(seg, i) {
+        if (i > 0) html += '<span class="separator">/</span>';
+        if (i === state.breadcrumb.length - 1) {
+          html += '<span class="current">' + escapeHtml(seg.name) + '</span>';
+        } else {
+          html += '<button onclick="navigateToBreadcrumb(' + i + ')">' + escapeHtml(seg.name) + '</button>';
+        }
+      });
+      el.innerHTML = html;
+    }
+
+    // --- Navigation (Task 4.1) ---
+    async function navigateToFolder(folderId, folderName) {
+      try {
+        state.currentFolderId = folderId;
+        if (folderName) {
+          state.breadcrumb.push({ id: folderId, name: folderName });
+        }
+        renderBreadcrumb();
+        var items = await FileManagerAPI.listFolder(folderId);
+        renderItems(items);
+      } catch (err) {
+        showError(err.message || 'Failed to load folder');
+        // Navigate back to root on 404
+        if (err.status === 404) {
+          state.currentFolderId = null;
+          state.breadcrumb = [{ id: null, name: 'My Files' }];
+          renderBreadcrumb();
+          var rootItems = await FileManagerAPI.listFolder(null);
+          renderItems(rootItems);
+        }
+      }
+    }
+
+    function navigateToBreadcrumb(index) {
+      var seg = state.breadcrumb[index];
+      state.breadcrumb = state.breadcrumb.slice(0, index + 1);
+      state.currentFolderId = seg.id;
+      renderBreadcrumb();
+      FileManagerAPI.listFolder(seg.id).then(function(items) {
+        renderItems(items);
+      }).catch(function(err) {
+        showError(err.message || 'Failed to load folder');
+      });
+    }
+
+    // --- Refresh current folder ---
+    async function refreshCurrentFolder() {
+      try {
+        var items = await FileManagerAPI.listFolder(state.currentFolderId);
+        renderItems(items);
+      } catch (err) {
+        showError(err.message || 'Failed to refresh folder');
+      }
+    }
+
+    // --- New Dropdown (Task 5.1) ---
+    document.getElementById('newBtn').addEventListener('click', function(e) {
+      e.stopPropagation();
+      document.getElementById('newMenu').classList.toggle('open');
+    });
+
+    // Create document (Task 5.2)
+    document.querySelectorAll('#newMenu button[data-type]').forEach(function(btn) {
+      btn.addEventListener('click', async function() {
+        document.getElementById('newMenu').classList.remove('open');
+        var type = btn.getAttribute('data-type');
+        try {
+          var file = await FileManagerAPI.createDocument(type, state.currentFolderId);
+          window.location.href = '/editor/' + encodeURIComponent(file.id);
+        } catch (err) {
+          showError(err.message || 'Failed to create document');
+        }
+      });
+    });
+
+    // Create folder (Task 5.3)
+    document.getElementById('newFolderBtn').addEventListener('click', function() {
+      document.getElementById('newMenu').classList.remove('open');
+      var name = prompt('Enter folder name:');
+      if (!name || !name.trim()) return;
+      FileManagerAPI.createFolder(name.trim(), state.currentFolderId).then(function() {
+        refreshCurrentFolder();
+        showSuccess('Folder created');
+      }).catch(function(err) {
+        showError(err.message || 'Failed to create folder');
+      });
+    });
+
+    // --- Upload (Tasks 6.1, 6.2, 6.3) ---
+    document.getElementById('uploadBtn').addEventListener('click', function() {
+      document.getElementById('fileInput').click();
+    });
+
+    document.getElementById('fileInput').addEventListener('change', function() {
+      var file = this.files[0];
+      if (!file) return;
+      this.value = '';
+      var progressContainer = document.getElementById('uploadProgress');
+      var progressFill = document.getElementById('progressFill');
+      var progressText = document.getElementById('progressText');
+      progressContainer.classList.add('active');
+      progressFill.style.width = '0%';
+      progressText.textContent = '0%';
+
+      FileManagerAPI.uploadFile(file, state.currentFolderId, function(percent) {
+        progressFill.style.width = percent + '%';
+        progressText.textContent = percent + '%';
+      }).then(function() {
+        progressContainer.classList.remove('active');
+        refreshCurrentFolder();
+        showSuccess('File uploaded');
+      }).catch(function(err) {
+        progressContainer.classList.remove('active');
+        showError(err.message || 'Upload failed');
+      });
+    });
+
+    // --- Context Menu (Task 7.1) ---
+    var activeContextMenu = null;
+    function closeContextMenu() {
+      if (activeContextMenu) { activeContextMenu.remove(); activeContextMenu = null; }
+    }
+
+    function openContextMenu(event, btn) {
+      closeContextMenu();
+      var id = btn.getAttribute('data-id');
+      var type = btn.getAttribute('data-type');
+      var name = btn.getAttribute('data-name');
+      var rect = btn.getBoundingClientRect();
+      var menu = document.createElement('div');
+      menu.className = 'context-menu';
+      menu.style.top = rect.bottom + 'px';
+      menu.style.left = (rect.left - 100) + 'px';
+
+      var renameBtn = document.createElement('button');
+      renameBtn.textContent = 'Rename';
+      renameBtn.onclick = function() { closeContextMenu(); startRename(id, type, name); };
+      menu.appendChild(renameBtn);
+
+      if (type === 'file') {
+        var moveBtn = document.createElement('button');
+        moveBtn.textContent = 'Move';
+        moveBtn.onclick = function() { closeContextMenu(); startMove(id, name); };
+        menu.appendChild(moveBtn);
+      }
+
+      var deleteBtn = document.createElement('button');
+      deleteBtn.className = 'danger';
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.onclick = function() { closeContextMenu(); startDelete(id, type, name); };
+      menu.appendChild(deleteBtn);
+
+      document.body.appendChild(menu);
+      activeContextMenu = menu;
+    }
+
+    // --- Rename (Task 7.2) ---
+    function startRename(id, type, currentName) {
+      var row = document.querySelector('tr[data-id="' + id + '"]');
+      if (!row) return;
+      var nameSpan = row.querySelector('.item-name');
+      var input = document.createElement('input');
+      input.className = 'item-name-input';
+      input.value = currentName;
+      input.setAttribute('aria-label', 'Rename item');
+      nameSpan.replaceWith(input);
+      input.focus();
+      input.select();
+
+      var submitted = false;
+      function submit() {
+        if (submitted) return;
+        submitted = true;
+        var newName = input.value.trim();
+        if (!newName || newName === currentName) {
+          var span = document.createElement('span');
+          span.className = 'item-name';
+          span.textContent = currentName;
+          input.replaceWith(span);
+          return;
+        }
+        var apiCall = type === 'folder' ? FileManagerAPI.renameFolder(id, newName) : FileManagerAPI.renameFile(id, newName);
+        apiCall.then(function() {
+          var span = document.createElement('span');
+          span.className = 'item-name';
+          span.textContent = newName;
+          input.replaceWith(span);
+          row.setAttribute('data-name', newName);
+          showSuccess('Renamed successfully');
+        }).catch(function(err) {
+          var span = document.createElement('span');
+          span.className = 'item-name';
+          span.textContent = currentName;
+          input.replaceWith(span);
+          showError(err.message || 'Rename failed');
+        });
+      }
+      input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') submit();
+        if (e.key === 'Escape') { submitted = true; var span = document.createElement('span'); span.className = 'item-name'; span.textContent = currentName; input.replaceWith(span); }
+      });
+      input.addEventListener('blur', submit);
+    }
+
+    // --- Delete (Task 7.3) ---
+    function startDelete(id, type, name) {
+      var overlay = document.getElementById('modalOverlay');
+      var content = document.getElementById('modalContent');
+      content.innerHTML = '<h3>Delete</h3><p>Are you sure you want to delete "' + escapeHtml(name) + '"?</p><div class="modal-actions"><button class="btn-secondary" id="cancelDelete">Cancel</button><button class="btn-primary" id="confirmDelete" style="background:#d32f2f">Delete</button></div>';
+      overlay.classList.add('open');
+
+      document.getElementById('cancelDelete').onclick = function() { overlay.classList.remove('open'); };
+      document.getElementById('confirmDelete').onclick = async function() {
+        overlay.classList.remove('open');
+        try {
+          if (type === 'folder') {
+            await FileManagerAPI.deleteFolder(id);
+          } else {
+            await FileManagerAPI.deleteFile(id);
+          }
+          var row = document.querySelector('tr[data-id="' + id + '"]');
+          if (row) row.remove();
+          // Check if list is now empty
+          var tbody = document.querySelector('.file-list tbody');
+          if (tbody && tbody.children.length === 0) {
+            renderItems([]);
+          }
+          showSuccess('Deleted successfully');
+        } catch (err) {
+          if (err.status === 409) {
+            showError('Folder must be empty before it can be deleted');
+          } else {
+            showError(err.message || 'Delete failed');
+          }
+        }
+      };
+    }
+
+    // --- Move (Task 7.4) ---
+    async function startMove(fileId, fileName) {
+      var overlay = document.getElementById('modalOverlay');
+      var content = document.getElementById('modalContent');
+      content.innerHTML = '<h3>Move "' + escapeHtml(fileName) + '"</h3><p>Select a destination folder:</p><div class="folder-picker-list" id="folderPickerList"><p style="padding:16px;color:#999">Loading folders...</p></div><div class="modal-actions"><button class="btn-secondary" id="cancelMove">Cancel</button><button class="btn-primary" id="confirmMove" disabled>Move</button></div>';
+      overlay.classList.add('open');
+
+      document.getElementById('cancelMove').onclick = function() { overlay.classList.remove('open'); };
+
+      var selectedFolderId = null;
+      try {
+        var rootItems = await FileManagerAPI.listFolder(null);
+        var folders = rootItems.filter(function(item) { return item.type === 'folder'; });
+        var listEl = document.getElementById('folderPickerList');
+
+        var html = '<button class="folder-picker-item" data-folder-id="__root__">📁 My Files (root)</button>';
+        folders.forEach(function(f) {
+          html += '<button class="folder-picker-item" data-folder-id="' + f.id + '">📁 ' + escapeHtml(f.name) + '</button>';
+        });
+        listEl.innerHTML = html;
+
+        listEl.querySelectorAll('.folder-picker-item').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            listEl.querySelectorAll('.folder-picker-item').forEach(function(b) { b.classList.remove('selected'); });
+            btn.classList.add('selected');
+            var fid = btn.getAttribute('data-folder-id');
+            selectedFolderId = fid === '__root__' ? null : fid;
+            document.getElementById('confirmMove').disabled = false;
+          });
+        });
+      } catch (err) {
+        showError('Failed to load folders');
+        overlay.classList.remove('open');
+        return;
+      }
+
+      document.getElementById('confirmMove').onclick = async function() {
+        overlay.classList.remove('open');
+        try {
+          await FileManagerAPI.moveFile(fileId, selectedFolderId);
+          var row = document.querySelector('tr[data-id="' + fileId + '"]');
+          if (row) row.remove();
+          var tbody = document.querySelector('.file-list tbody');
+          if (tbody && tbody.children.length === 0) {
+            renderItems([]);
+          }
+          showSuccess('File moved');
+        } catch (err) {
+          showError(err.message || 'Move failed');
+        }
+      };
+    }
+
+    // --- Close menus on outside click ---
+    document.addEventListener('click', function(e) {
+      var newMenu = document.getElementById('newMenu');
+      var newDropdown = document.getElementById('newDropdown');
+      if (!newDropdown.contains(e.target)) {
+        newMenu.classList.remove('open');
+      }
+      closeContextMenu();
+    });
+
+    // --- Page Load (Task 3.4) ---
+    (function init() {
+      var initialItems = <%- items %>;
+      renderBreadcrumb();
+      renderItems(initialItems);
+    })();
+  </script>
+</body>
+</html>
