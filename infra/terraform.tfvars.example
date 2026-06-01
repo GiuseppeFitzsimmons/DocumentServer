@@ -8,6 +8,12 @@ db_password = "xxx"
 session_secret = "xxx"
 repo_url = "https://github.com/GiuseppeFitzsimmons/DocumentServer.git"
 
+# Hetzner Object Storage credentials (generate in Hetzner Console → Object Storage → Manage credentials)
+s3_access_key_id     = "your-s3-access-key"
+s3_secret_access_key = "your-s3-secret-key"
+
 # Optional overrides:
 # server_type = "cx31"
 # location    = "fsn1"
+# s3_region   = "fsn1"
+# s3_bucket_name = "euro-office-files"
