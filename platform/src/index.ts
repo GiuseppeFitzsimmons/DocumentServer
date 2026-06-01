@@ -18,6 +18,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 
+// Trust proxy (behind Caddy/reverse proxy)
+if (config.TRUST_PROXY === 'true') {
+  app.set('trust proxy', 1);
+}
+
 app.use(helmet({
   hsts: false,
   contentSecurityPolicy: false,
