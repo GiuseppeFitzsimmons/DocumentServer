@@ -30,8 +30,13 @@ export function buildEditorConfig(params: EditorConfigParams): object {
       title: file.name,
       fileType: fileExtension,
       key: documentKey,
+      permissions: {
+        edit: true,
+        download: true,
+      },
     },
     editorConfig: {
+      mode: 'edit',
       callbackUrl: `${platformBaseUrl}/api/ds/callback?fileId=${file.id}`,
       user: {
         id: user.id,
