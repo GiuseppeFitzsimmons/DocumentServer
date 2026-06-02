@@ -24,7 +24,10 @@ export function buildEditorConfig(params: EditorConfigParams): object {
 
   const documentKey = `${file.id}_${file.updatedAt.getTime()}`;
 
+  const documentType = getDocumentType(fileExtension);
+
   const editorConfig = {
+    documentType,
     document: {
       url: `${platformBaseUrl}/api/files/serve/${serveToken}`,
       title: file.name,
@@ -49,4 +52,11 @@ export function buildEditorConfig(params: EditorConfigParams): object {
   const token = jwt.sign(editorConfig, config.DS_JWT_SECRET);
 
   return { ...editorConfig, token };
+}
+
+function getDocumentType(ext: string): string {
+  if ('doc docx docm dot dotx dotm odt fodt ott rtf txt html htm mht xml pdf djvu fb2 epub xps oxps'.includes(ext)) return 'word';
+  if ('xls xlsx xlsm xlsb xlt xltx xltm ods fods ots csv'.includes(ext)) return 'cell';
+  if ('pps ppsx ppsm ppt pptx pptm pot potx potm odp fodp otp'.includes(ext)) return 'slide';
+  return 'word';
 }
