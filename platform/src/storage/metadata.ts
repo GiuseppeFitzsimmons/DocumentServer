@@ -99,6 +99,13 @@ export async function listFolder(
     folders: folderResult.rows.map(mapFolderRow),
   };
 }
+export async function getRecentFiles(userId: string, limit: number): Promise<FileRecord[]> {
+  const { rows } = await pool.query(
+    'SELECT * FROM files WHERE user_id = $1 ORDER BY updated_at DESC LIMIT $2',
+    [userId, limit]
+  );
+  return rows.map(mapFileRow);
+}
 
 // --- Folder operations ---
 

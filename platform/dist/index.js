@@ -14,98 +14,80 @@ import { serveRouter } from './ds/serve.js';
 import { callbackRouter } from './ds/callback.js';
 import { editorRouter } from './pages/editor.js';
 import { landingRouter } from './pages/landing.js';
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
 const app = express();
-
 // Trust proxy (behind Caddy/reverse proxy)
 if (config.TRUST_PROXY === 'true') {
-  app.set('trust proxy', 1);
+    app.set('trust proxy', 1);
 }
-
 app.use(helmet({
-  hsts: false,
-  contentSecurityPolicy: false,
+    hsts: false,
+    contentSecurityPolicy: false,
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(sessionMiddleware);
-
 // View engine
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
-
 // Render with layout
 app.use((req, res, next) => {
-  const originalRender = res.render.bind(res);
-  res.render = (view: string, options: any = {}) => {
-    if (options.layout === false) {
-      originalRender(view, options);
-      return;
-    }
-    originalRender(view, options, (err: Error | null, body: string) => {
-      if (err) return next(err);
-      originalRender('layout', { ...options, body });
-    });
-  };
-  next();
+    const originalRender = res.render.bind(res);
+    res.render = (view, options = {}) => {
+        if (options.layout === false) {
+            originalRender(view, options);
+            return;
+        }
+        originalRender(view, options, (err, body) => {
+            if (err)
+                return next(err);
+            originalRender('layout', { ...options, body });
+        });
+    };
+    next();
 });
-
 // Rate limit auth endpoints
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  message: { error: 'Too many requests, try again later' },
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    message: { error: 'Too many requests, try again later' },
 });
-
 // API auth routes
 app.use('/auth', authLimiter, authRouter);
-
 // Page routes (login, register, logout — public)
 app.use(pageRouter);
-
 // Health check (public)
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok' });
+    res.json({ status: 'ok' });
 });
-
 // --- Everything below requires login ---
-
 // DocumentServer integration (no session auth — JWT-based, must be before fileRouter)
 app.use('/api/files/serve', serveRouter);
 app.use('/api/ds/callback', callbackRouter);
-
 // File storage API
 app.use('/api/files', fileRouter);
 app.use('/api/folders', folderRouter);
-
 // Editor page (authenticated)
 app.use(editorRouter);
-
 // Proxy /example to DocumentServer (authenticated)
 app.use('/example', requireAuth, createProxyMiddleware({
-  target: config.DS_URL,
-  changeOrigin: true,
-  on: {
-    proxyReq: (proxyReq, req) => {
-      proxyReq.path = (req as any).originalUrl;
+    target: config.DS_URL,
+    changeOrigin: true,
+    on: {
+        proxyReq: (proxyReq, req) => {
+            proxyReq.path = req.originalUrl;
+        },
+        proxyRes: (proxyRes) => {
+            const location = proxyRes.headers['location'];
+            if (location && location.includes('documentserver')) {
+                proxyRes.headers['location'] = location.replace(/https?:\/\/documentserver[^/]*/, '');
+            }
+        },
     },
-    proxyRes: (proxyRes) => {
-      const location = proxyRes.headers['location'];
-      if (location && location.includes('documentserver')) {
-        proxyRes.headers['location'] = location.replace(
-          /https?:\/\/documentserver[^/]*/,
-          ''
-        );
-      }
-    },
-  },
 }));
-
 // Landing page (authenticated root)
 app.use('/', landingRouter);
-
 app.listen(config.PORT, () => {
-  console.log(`Portal running on port ${config.PORT}`);
+    console.log(`Portal running on port ${config.PORT}`);
 });
+//# sourceMappingURL=index.js.map

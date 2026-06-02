@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Euro-Office</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f5f5;
+      color: #333;
+      min-height: 100vh;
+    }
+    /* Navigation Bar */
+    .navbar {
+      background: #0082C9;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      height: 56px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .navbar-brand {
+      font-size: 20px;
+      font-weight: 600;
+      color: #fff;
+      text-decoration: none;
+    }
+    .navbar-brand:hover { opacity: 0.9; }
+    .navbar-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .navbar-user { font-size: 14px; }
+    .navbar-logout {
+      background: rgba(255,255,255,0.2);
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-size: 14px;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .navbar-logout:hover { background: rgba(255,255,255,0.3); }
+
+    /* Main Content */
+    .main-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 24px;
+    }
+    .section { margin-bottom: 40px; }
+    .section-heading {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: #333;
+    }
+
+    /* Card Base */
+    .card {
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      transition: box-shadow 0.2s, transform 0.2s;
+    }
+    .card:hover {
+      box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+      transform: translateY(-1px);
+    }
+
+    /* Create Section */
+    .create-grid {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .create-card {
+      width: 160px;
+      padding: 24px 16px;
+      text-align: center;
+      cursor: pointer;
+      border-top: 4px solid transparent;
+    }
+    .create-card-icon { font-size: 36px; margin-bottom: 8px; }
+    .create-card-label { font-size: 14px; font-weight: 500; color: #333; }
+
+    /* Recent Section */
+    .recent-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 16px;
+    }
+    .document-card {
+      padding: 16px;
+      cursor: pointer;
+      text-decoration: none;
+      color: inherit;
+      display: block;
+    }
+    .document-card-icon { font-size: 28px; margin-bottom: 8px; }
+    .document-card-name {
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .document-card-date { font-size: 12px; color: #666; }
+
+    /* Browser Section */
+    .browser-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .browser-heading {
+      font-size: 20px;
+      font-weight: 600;
+      color: #333;
+      flex: 1;
+    }
+    .btn-toolbar {
+      background: #0082C9;
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .btn-toolbar:hover { background: #006ba3; }
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 12px;
+      font-size: 13px;
+      flex-wrap: wrap;
+    }
+    .breadcrumb-segment {
+      color: #0082C9;
+      cursor: pointer;
+      text-decoration: none;
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+    .breadcrumb-segment:hover { background: #e8f4fd; }
+    .breadcrumb-segment.active {
+      color: #333;
+      cursor: default;
+      font-weight: 500;
+    }
+    .breadcrumb-separator { color: #999; }
+    .browser-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+    }
+    .browser-item {
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      position: relative;
+      user-select: none;
+    }
+    .browser-item.drag-over {
+      background: #e8f4fd;
+      border: 2px dashed #0082C9;
+    }
+    .browser-item-icon { font-size: 24px; flex-shrink: 0; }
+    .browser-item-info { flex: 1; min-width: 0; }
+    .browser-item-name {
+      font-size: 14px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .browser-item-meta { font-size: 12px; color: #666; margin-top: 2px; }
+    .browser-item-actions {
+      opacity: 0;
+      transition: opacity 0.2s;
+      padding: 4px 8px;
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 18px;
+      background: none;
+      border: none;
+      color: #666;
+    }
+    .browser-item:hover .browser-item-actions { opacity: 1; }
+    .browser-item-actions:hover { background: #eee; }
+
+    /* Context Menu */
+    .context-menu {
+      position: absolute;
+      top: 100%;
+      right: 8px;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 200;
+      min-width: 140px;
+      padding: 4px 0;
+      display: none;
+    }
+    .context-menu.visible { display: block; }
+    .context-menu-item {
+      display: block;
+      width: 100%;
+      padding: 10px 16px;
+      font-size: 13px;
+      text-align: left;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #333;
+    }
+    .context-menu-item:hover { background: #f0f0f0; }
+    .context-menu-item.danger { color: #d32f2f; }
+    .context-menu-item.danger:hover { background: #ffeaea; }
+
+    /* Placeholder Section */
+    .placeholder-grid {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .placeholder-card {
+      width: 200px;
+      padding: 24px 16px;
+      text-align: center;
+      opacity: 0.6;
+      cursor: not-allowed;
+      position: relative;
+    }
+    .placeholder-card:hover {
+      transform: none;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .placeholder-badge {
+      display: inline-block;
+      background: #e0e0e0;
+      color: #666;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 10px;
+      margin-top: 8px;
+      text-transform: uppercase;
+    }
+    .placeholder-label { font-size: 14px; font-weight: 500; color: #666; }
+
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #888;
+      font-size: 14px;
+    }
+
+    /* Toast Notifications */
+    .toast-container {
+      position: fixed;
+      top: 72px;
+      right: 24px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-width: 360px;
+    }
+    .toast {
+      padding: 12px 16px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      animation: slideIn 0.3s ease;
+      cursor: pointer;
+    }
+    .toast-error { background: #d32f2f; color: #fff; }
+    .toast-success { background: #2e7d32; color: #fff; }
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    /* Folder Picker Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 500;
+    }
+    .modal {
+      background: #fff;
+      border-radius: 12px;
+      padding: 24px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    }
+    .modal-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .modal-folder-list {
+      max-height: 240px;
+      overflow-y: auto;
+      margin-bottom: 16px;
+    }
+    .modal-folder-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .modal-folder-item:hover { background: #f0f0f0; }
+    .modal-folder-item.selected { background: #e8f4fd; border: 1px solid #0082C9; }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .modal-btn {
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-size: 13px;
+      cursor: pointer;
+      border: none;
+    }
+    .modal-btn-cancel { background: #eee; color: #333; }
+    .modal-btn-cancel:hover { background: #ddd; }
+    .modal-btn-confirm { background: #0082C9; color: #fff; }
+    .modal-btn-confirm:hover { background: #006ba3; }
+
+    /* Rename Input */
+    .rename-input {
+      font-size: 14px;
+      padding: 4px 8px;
+      border: 2px solid #0082C9;
+      border-radius: 4px;
+      width: 100%;
+      outline: none;
+    }
+
+    /* Upload Progress */
+    .upload-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 400;
+    }
+    .upload-progress {
+      background: #fff;
+      border-radius: 12px;
+      padding: 32px;
+      text-align: center;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    }
+    .upload-spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid #eee;
+      border-top-color: #0082C9;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .main-content { padding: 16px; }
+      .create-grid { flex-direction: column; }
+      .create-card { width: 100%; }
+      .recent-grid { grid-template-columns: 1fr; }
+      .browser-grid { grid-template-columns: 1fr; }
+      .placeholder-grid { flex-direction: column; }
+      .placeholder-card { width: 100%; }
+      .navbar { padding: 0 12px; }
+      .toast-container { right: 12px; left: 12px; max-width: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <nav class="navbar">
+    <a href="/" class="navbar-brand">Euro-Office</a>
+    <div class="navbar-right">
+      <span class="navbar-user"><%= displayName %></span>
+      <a href="/logout" class="navbar-logout">Logout</a>
+    </div>
+  </nav>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Hidden file input for upload -->
+  <input type="file" id="file-upload-input" style="display:none">
+
+  <div class="main-content">
+    <!-- Create Section -->
+    <section class="section" id="create-section">
+      <h2 class="section-heading">Create a new document</h2>
+      <div class="create-grid">
+        <div class="card create-card" data-type="docx" style="border-top-color: #4285F4" onclick="handleCreateDocument('docx')">
+          <div class="create-card-icon">📄</div>
+          <div class="create-card-label">Blank document</div>
+        </div>
+        <div class="card create-card" data-type="xlsx" style="border-top-color: #34A853" onclick="handleCreateDocument('xlsx')">
+          <div class="create-card-icon">📊</div>
+          <div class="create-card-label">Spreadsheet</div>
+        </div>
+        <div class="card create-card" data-type="pptx" style="border-top-color: #FF6D01" onclick="handleCreateDocument('pptx')">
+          <div class="create-card-icon">📽️</div>
+          <div class="create-card-label">Presentation</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Recent Documents Section -->
+    <section class="section" id="recent-section">
+      <h2 class="section-heading">Recent documents</h2>
+      <div class="recent-grid" id="recent-grid"></div>
+    </section>
+
+    <!-- Browser Section -->
+    <section class="section" id="browser-section">
+      <div class="browser-toolbar">
+        <h2 class="browser-heading">My files</h2>
+        <button class="btn-toolbar" id="btn-upload" onclick="handleUploadClick()">Upload</button>
+        <button class="btn-toolbar" id="btn-new-folder" onclick="handleNewFolder()">New Folder</button>
+      </div>
+      <div class="breadcrumb" id="breadcrumb"></div>
+      <div class="browser-grid" id="browser-grid"></div>
+    </section>
+
+    <!-- Placeholder Section -->
+    <section class="section" id="placeholder-section">
+      <h2 class="section-heading">Coming soon</h2>
+      <div class="placeholder-grid">
+        <div class="card placeholder-card">
+          <div class="placeholder-label">Custom Fonts</div>
+          <span class="placeholder-badge">Coming Soon</span>
+        </div>
+        <div class="card placeholder-card">
+          <div class="placeholder-label">Account Management</div>
+          <span class="placeholder-badge">Coming Soon</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // Embedded data from server
+    var initialItems = <%- initialItems %>;
+    var recentFiles = <%- recentFiles %>;
+    var displayName = "<%= displayName %>";
+
+    // Application state
+    var currentFolderId = null;
+    var breadcrumbSegments = [{ id: null, name: 'My files' }];
+
+    // ========================================
+    // File Manager API Module
+    // ========================================
+    window.FileManagerAPI = {
+      async listFolder(folderId) {
+        const url = folderId ? '/api/files?folderId=' + encodeURIComponent(folderId) : '/api/files';
+        const res = await fetch(url);
+        if (res.status === 401) { window.location.href = '/login'; throw new Error('Unauthorized'); }
+        if (!res.ok) { const err = await res.text(); throw new Error(err || 'Failed to list folder'); }
+        return res.json();
+      },
+
+      async createDocument(type, folderId) {
+        const body = { type };
+        if (folderId) body.folderId = folderId;
+        const res = await fetch('/api/files/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        if (res.status === 401) { window.location.href = '/login'; throw new Error('Unauthorized'); }
+        if (!res.ok) { const err = await res.text(); throw new Error(err || 'Failed to create document'); }
+        return res.json();
+      },
+
+      async createFolder(name, parentId) {
+        const body = { name };
+        if (parentId) body.parentId = parentId;
+        const res = await fetch('/api/folders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        if (res.status === 401) { window.location.href = '/login'; throw new Error('Unauthorized'); }
+        if (!res.ok) { const err = await res.text(); throw new Error(err || 'Failed to create folder'); }
+        return res.json();
+      },
+
+      async uploadFile(file, folderId) {
+        const formData = new FormData();
+        formData.append('file', file);
+        if (folderId) formData.append('folderId', folderId);
+        const res = await fetch('/api/files/upload', {
+          method: 'POST',
+          body: formData
+        });
+        if (res.status === 401) { window.location.href = '/login'; throw new Error('Unauthorized'); }
+        if (!res.ok) { const err = await res.text(); throw new Error(err || 'Failed to upload file'); }
+        return res.json();
+      },
+
+      async renameFile(id, name) {
+        const res = await fetch('/api/files/' + encodeURIComponent(id), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name })
+        });
+        if (res.status === 401) { window.location.href = '/login'; throw new Error('Unauthorized'); }
+        if (!res.ok) { const err = await res.text(); throw new Error(err || 'Failed to rename file'); }
+        return res.json();
+      },
+
+      async renameFolder(id, name) {
+        const res = await fetch('/api/folders/' + encodeURIComponent(id), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name })
+        });
+        if (res.status === 401) { window.location.href = '/login'; throw new Error('Unauthorized'); }
+        if (!res.ok) { const err = await res.text(); throw new Error(err || 'Failed to rename folder'); }
+        return res.json();
+      },
+
+      async deleteFile(id) {
+        const res = await fetch('/api/files/' + encodeURIComponent(id), { method: 'DELETE' });
+        if (res.status === 401) { window.location.href = '/login'; throw new Error('Unauthorized'); }
+        if (!res.ok) { const err = await res.text(); throw new Error(err || 'Failed to delete file'); }
+      },
+
+      async deleteFolder(id) {
+        const res = await fetch('/api/folders/' + encodeURIComponent(id), { method: 'DELETE' });
+        if (res.status === 401) { window.location.href = '/login'; throw new Error('Unauthorized'); }
+        if (res.status === 409) { throw new Error('Folder must be empty before it can be deleted'); }
+        if (!res.ok) { const err = await res.text(); throw new Error(err || 'Failed to delete folder'); }
+      },
+
+      async moveFile(id, targetFolderId) {
+        const res = await fetch('/api/files/' + encodeURIComponent(id), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folderId: targetFolderId })
+        });
+        if (res.status === 401) { window.location.href = '/login'; throw new Error('Unauthorized'); }
+        if (!res.ok) { const err = await res.text(); throw new Error(err || 'Failed to move file'); }
+        return res.json();
+      },
+
+      async moveFolder(id, targetFolderId) {
+        const res = await fetch('/api/folders/' + encodeURIComponent(id), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ parentId: targetFolderId })
+        });
+        if (res.status === 401) { window.location.href = '/login'; throw new Error('Unauthorized'); }
+        if (!res.ok) { const err = await res.text(); throw new Error(err || 'Failed to move folder'); }
+        return res.json();
+      }
+    };
+
+    // ========================================
+    // Toast Notification System
+    // ========================================
+    function showToast(message, type) {
+      var container = document.getElementById('toast-container');
+      var toast = document.createElement('div');
+      toast.className = 'toast toast-' + type;
+      toast.textContent = message;
+      toast.onclick = function() { toast.remove(); };
+      container.appendChild(toast);
+      setTimeout(function() { if (toast.parentNode) toast.remove(); }, 5000);
+    }
+
+    function showError(message) { showToast(message, 'error'); }
+    function showSuccess(message) { showToast(message, 'success'); }
+
+    // ========================================
+    // Utility Functions
+    // ========================================
+    function getFileIcon(mimeType) {
+      if (!mimeType) return '📄';
+      if (mimeType.includes('spreadsheet') || mimeType.includes('xlsx')) return '📊';
+      if (mimeType.includes('presentation') || mimeType.includes('pptx')) return '📽️';
+      return '📄';
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      var d = new Date(dateStr);
+      var now = new Date();
+      var diff = now - d;
+      if (diff < 60000) return 'Just now';
+      if (diff < 3600000) return Math.floor(diff / 60000) + ' min ago';
+      if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+      if (diff < 604800000) return Math.floor(diff / 86400000) + 'd ago';
+      return d.toLocaleDateString();
+    }
+
+    // ========================================
+    // Create Section Handlers
+    // ========================================
+    async function handleCreateDocument(type) {
+      try {
+        var result = await FileManagerAPI.createDocument(type, currentFolderId);
+        window.location.href = '/editor/' + result.id;
+      } catch (err) {
+        showError(err.message || 'Failed to create document');
+      }
+    }
+
+    // ========================================
+    // Recent Documents Section
+    // ========================================
+    function renderRecentSection(files) {
+      var grid = document.getElementById('recent-grid');
+      grid.innerHTML = '';
+      if (!files || files.length === 0) {
+        grid.innerHTML = '<div class="empty-state">No recent documents yet</div>';
+        return;
+      }
+      files.forEach(function(file) {
+        var card = document.createElement('a');
+        card.href = '/editor/' + file.id;
+        card.className = 'card document-card';
+        card.innerHTML =
+          '<div class="document-card-icon">' + getFileIcon(file.mimeType) + '</div>' +
+          '<div class="document-card-name">' + escapeHtml(file.name) + '</div>' +
+          '<div class="document-card-date">' + formatDate(file.updatedAt) + '</div>';
+        grid.appendChild(card);
+      });
+    }
+
+    // ========================================
+    // Browser Section
+    // ========================================
+    function renderBrowserSection(items) {
+      var grid = document.getElementById('browser-grid');
+      grid.innerHTML = '';
+
+      var folders = (items.folders || []).slice().sort(function(a, b) {
+        return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+      });
+      var files = (items.files || []).slice().sort(function(a, b) {
+        return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+      });
+
+      if (folders.length === 0 && files.length === 0) {
+        grid.innerHTML = '<div class="empty-state">This folder is empty</div>';
+        return;
+      }
+
+      folders.forEach(function(folder) {
+        grid.appendChild(createBrowserItem(folder, 'folder'));
+      });
+      files.forEach(function(file) {
+        grid.appendChild(createBrowserItem(file, 'file'));
+      });
+    }
+
+    function createBrowserItem(item, type) {
+      var el = document.createElement('div');
+      el.className = 'card browser-item';
+      el.setAttribute('data-id', item.id);
+      el.setAttribute('data-type', type);
+      el.setAttribute('data-name', item.name);
+      el.setAttribute('draggable', 'true');
+
+      var icon = type === 'folder' ? '📁' : getFileIcon(item.mimeType);
+      var meta = type === 'folder' ? 'Folder' : formatDate(item.updatedAt);
+
+      el.innerHTML =
+        '<div class="browser-item-icon">' + icon + '</div>' +
+        '<div class="browser-item-info">' +
+          '<div class="browser-item-name">' + escapeHtml(item.name) + '</div>' +
+          '<div class="browser-item-meta">' + meta + '</div>' +
+        '</div>' +
+        '<button class="browser-item-actions" onclick="event.stopPropagation(); toggleContextMenu(this)">⋮</button>' +
+        '<div class="context-menu">' +
+          '<button class="context-menu-item" onclick="event.stopPropagation(); handleRename(\'' + item.id + '\', \'' + type + '\', this)">Rename</button>' +
+          '<button class="context-menu-item" onclick="event.stopPropagation(); handleMove(\'' + item.id + '\', \'' + type + '\')">Move</button>' +
+          '<button class="context-menu-item danger" onclick="event.stopPropagation(); handleDelete(\'' + item.id + '\', \'' + type + '\', \'' + escapeHtml(item.name) + '\')">Delete</button>' +
+        '</div>';
+
+      // Click handler for navigation
+      el.onclick = function(e) {
+        if (e.target.closest('.browser-item-actions') || e.target.closest('.context-menu')) return;
+        if (type === 'folder') {
+          navigateToFolder(item.id, item.name);
+        } else {
+          window.location.href = '/editor/' + item.id;
+        }
+      };
+
+      // Drag and drop
+      el.addEventListener('dragstart', function(e) {
+        e.dataTransfer.setData('text/plain', JSON.stringify({ id: item.id, type: type }));
+        e.dataTransfer.effectAllowed = 'move';
+        el.style.opacity = '0.5';
+      });
+      el.addEventListener('dragend', function() { el.style.opacity = '1'; });
+
+      if (type === 'folder') {
+        el.addEventListener('dragover', function(e) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          el.classList.add('drag-over');
+        });
+        el.addEventListener('dragleave', function() { el.classList.remove('drag-over'); });
+        el.addEventListener('drop', function(e) {
+          e.preventDefault();
+          el.classList.remove('drag-over');
+          handleDrop(e, item.id);
+        });
+      }
+
+      return el;
+    }
+
+    // ========================================
+    // Folder Navigation and Breadcrumbs
+    // ========================================
+    async function navigateToFolder(folderId, folderName) {
+      try {
+        var items = await FileManagerAPI.listFolder(folderId);
+        currentFolderId = folderId;
+
+        if (folderId === null) {
+          breadcrumbSegments = [{ id: null, name: 'My files' }];
+        } else {
+          // Find if we're navigating to an existing breadcrumb segment
+          var existingIdx = breadcrumbSegments.findIndex(function(s) { return s.id === folderId; });
+          if (existingIdx >= 0) {
+            breadcrumbSegments = breadcrumbSegments.slice(0, existingIdx + 1);
+          } else {
+            breadcrumbSegments.push({ id: folderId, name: folderName });
+          }
+        }
+
+        renderBreadcrumb();
+        renderBrowserSection(items);
+      } catch (err) {
+        if (err.message && err.message.includes('404')) {
+          // Folder not found - navigate back to root
+          currentFolderId = null;
+          breadcrumbSegments = [{ id: null, name: 'My files' }];
+          showError('Folder not found. Returned to root.');
+          try {
+            var rootItems = await FileManagerAPI.listFolder(null);
+            renderBreadcrumb();
+            renderBrowserSection(rootItems);
+          } catch (e) {
+            showError('Failed to load root folder');
+          }
+        } else {
+          showError(err.message || 'Failed to navigate to folder');
+        }
+      }
+    }
+
+    function renderBreadcrumb() {
+      var container = document.getElementById('breadcrumb');
+      container.innerHTML = '';
+
+      breadcrumbSegments.forEach(function(segment, idx) {
+        if (idx > 0) {
+          var sep = document.createElement('span');
+          sep.className = 'breadcrumb-separator';
+          sep.textContent = '/';
+          container.appendChild(sep);
+        }
+        var link = document.createElement('span');
+        link.className = 'breadcrumb-segment';
+        link.textContent = segment.name;
+
+        if (idx === breadcrumbSegments.length - 1) {
+          link.classList.add('active');
+        } else {
+          (function(seg) {
+            link.onclick = function() { navigateToFolder(seg.id, seg.name); };
+          })(segment);
+        }
+        container.appendChild(link);
+      });
+    }
+
+    // ========================================
+    // Upload and New Folder
+    // ========================================
+    function handleUploadClick() {
+      document.getElementById('file-upload-input').click();
+    }
+
+    document.getElementById('file-upload-input').addEventListener('change', async function(e) {
+      var file = e.target.files[0];
+      if (!file) return;
+      e.target.value = '';
+
+      // Show upload progress
+      var overlay = document.createElement('div');
+      overlay.className = 'upload-overlay';
+      overlay.innerHTML = '<div class="upload-progress"><div class="upload-spinner"></div><div>Uploading...</div></div>';
+      document.body.appendChild(overlay);
+
+      try {
+        await FileManagerAPI.uploadFile(file, currentFolderId);
+        showSuccess('File uploaded successfully');
+        // Refresh browser section
+        var items = await FileManagerAPI.listFolder(currentFolderId);
+        renderBrowserSection(items);
+      } catch (err) {
+        showError(err.message || 'Failed to upload file');
+      } finally {
+        overlay.remove();
+      }
+    });
+
+    async function handleNewFolder() {
+      var name = prompt('Enter folder name:');
+      if (!name || !name.trim()) return;
+      name = name.trim();
+
+      try {
+        await FileManagerAPI.createFolder(name, currentFolderId);
+        showSuccess('Folder created');
+        var items = await FileManagerAPI.listFolder(currentFolderId);
+        renderBrowserSection(items);
+      } catch (err) {
+        showError(err.message || 'Failed to create folder');
+      }
+    }
+
+    // ========================================
+    // Context Menu
+    // ========================================
+    function toggleContextMenu(btn) {
+      // Close all other context menus first
+      document.querySelectorAll('.context-menu.visible').forEach(function(m) { m.classList.remove('visible'); });
+      var menu = btn.nextElementSibling;
+      menu.classList.toggle('visible');
+    }
+
+    // Close context menus when clicking outside
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.browser-item-actions') && !e.target.closest('.context-menu')) {
+        document.querySelectorAll('.context-menu.visible').forEach(function(m) { m.classList.remove('visible'); });
+      }
+    });
+
+    // ========================================
+    // Rename
+    // ========================================
+    function handleRename(id, type, menuBtn) {
+      // Close context menu
+      document.querySelectorAll('.context-menu.visible').forEach(function(m) { m.classList.remove('visible'); });
+
+      var item = document.querySelector('[data-id="' + id + '"]');
+      if (!item) return;
+      var nameEl = item.querySelector('.browser-item-name');
+      var originalName = nameEl.textContent;
+
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'rename-input';
+      input.value = originalName;
+      nameEl.textContent = '';
+      nameEl.appendChild(input);
+      input.focus();
+      input.select();
+
+      var submitted = false;
+      async function submit() {
+        if (submitted) return;
+        submitted = true;
+        var newName = input.value.trim();
+        if (!newName || newName === originalName) {
+          nameEl.textContent = originalName;
+          return;
+        }
+        try {
+          if (type === 'file') {
+            await FileManagerAPI.renameFile(id, newName);
+          } else {
+            await FileManagerAPI.renameFolder(id, newName);
+          }
+          nameEl.textContent = newName;
+          item.setAttribute('data-name', newName);
+          showSuccess('Renamed successfully');
+        } catch (err) {
+          nameEl.textContent = originalName;
+          showError(err.message || 'Failed to rename');
+        }
+      }
+
+      input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); submit(); }
+        if (e.key === 'Escape') { nameEl.textContent = originalName; }
+      });
+      input.addEventListener('blur', submit);
+    }
+
+    // ========================================
+    // Delete
+    // ========================================
+    async function handleDelete(id, type, name) {
+      document.querySelectorAll('.context-menu.visible').forEach(function(m) { m.classList.remove('visible'); });
+
+      if (!confirm('Are you sure you want to delete "' + name + '"?')) return;
+
+      try {
+        if (type === 'file') {
+          await FileManagerAPI.deleteFile(id);
+        } else {
+          await FileManagerAPI.deleteFolder(id);
+        }
+        var item = document.querySelector('[data-id="' + id + '"]');
+        if (item) item.remove();
+        showSuccess('Deleted successfully');
+
+        // Check if browser grid is now empty
+        var grid = document.getElementById('browser-grid');
+        if (grid.querySelectorAll('.browser-item').length === 0) {
+          grid.innerHTML = '<div class="empty-state">This folder is empty</div>';
+        }
+      } catch (err) {
+        showError(err.message || 'Failed to delete');
+      }
+    }
+
+    // ========================================
+    // Move (Folder Picker Modal)
+    // ========================================
+    async function handleMove(id, type) {
+      document.querySelectorAll('.context-menu.visible').forEach(function(m) { m.classList.remove('visible'); });
+
+      try {
+        // Load root folder contents for the picker
+        var rootItems = await FileManagerAPI.listFolder(null);
+        showFolderPicker(rootItems.folders || [], id, type);
+      } catch (err) {
+        showError(err.message || 'Failed to load folders');
+      }
+    }
+
+    function showFolderPicker(folders, itemId, itemType) {
+      var overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+
+      var selectedFolderId = null;
+
+      var folderListHtml = '<div class="modal-folder-item" data-folder-id="__root__">📁 My files (root)</div>';
+      folders.forEach(function(f) {
+        if (f.id === itemId) return; // Don't show the item itself as a target
+        folderListHtml += '<div class="modal-folder-item" data-folder-id="' + f.id + '">📁 ' + escapeHtml(f.name) + '</div>';
+      });
+
+      overlay.innerHTML =
+        '<div class="modal">' +
+          '<div class="modal-title">Move to folder</div>' +
+          '<div class="modal-folder-list">' + folderListHtml + '</div>' +
+          '<div class="modal-actions">' +
+            '<button class="modal-btn modal-btn-cancel" id="modal-cancel">Cancel</button>' +
+            '<button class="modal-btn modal-btn-confirm" id="modal-confirm">Move</button>' +
+          '</div>' +
+        '</div>';
+
+      document.body.appendChild(overlay);
+
+      // Selection handling
+      overlay.querySelectorAll('.modal-folder-item').forEach(function(el) {
+        el.onclick = function() {
+          overlay.querySelectorAll('.modal-folder-item').forEach(function(i) { i.classList.remove('selected'); });
+          el.classList.add('selected');
+          var fid = el.getAttribute('data-folder-id');
+          selectedFolderId = fid === '__root__' ? null : fid;
+        };
+      });
+
+      overlay.querySelector('#modal-cancel').onclick = function() { overlay.remove(); };
+      overlay.querySelector('#modal-confirm').onclick = async function() {
+        if (selectedFolderId === undefined) {
+          showError('Please select a folder');
+          return;
+        }
+        overlay.remove();
+        try {
+          if (itemType === 'file') {
+            await FileManagerAPI.moveFile(itemId, selectedFolderId);
+          } else {
+            await FileManagerAPI.moveFolder(itemId, selectedFolderId);
+          }
+          var item = document.querySelector('[data-id="' + itemId + '"]');
+          if (item) item.remove();
+          showSuccess('Moved successfully');
+
+          // Check empty state
+          var grid = document.getElementById('browser-grid');
+          if (grid.querySelectorAll('.browser-item').length === 0) {
+            grid.innerHTML = '<div class="empty-state">This folder is empty</div>';
+          }
+        } catch (err) {
+          showError(err.message || 'Failed to move');
+        }
+      };
+
+      // Close on overlay click
+      overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+    }
+
+    // ========================================
+    // Drag and Drop
+    // ========================================
+    async function handleDrop(e, targetFolderId) {
+      var data;
+      try {
+        data = JSON.parse(e.dataTransfer.getData('text/plain'));
+      } catch (err) { return; }
+
+      if (data.id === targetFolderId) return; // Can't drop folder on itself
+
+      try {
+        if (data.type === 'file') {
+          await FileManagerAPI.moveFile(data.id, targetFolderId);
+        } else {
+          await FileManagerAPI.moveFolder(data.id, targetFolderId);
+        }
+        var item = document.querySelector('[data-id="' + data.id + '"]');
+        if (item) item.remove();
+        showSuccess('Moved successfully');
+
+        // Check empty state
+        var grid = document.getElementById('browser-grid');
+        if (grid.querySelectorAll('.browser-item').length === 0) {
+          grid.innerHTML = '<div class="empty-state">This folder is empty</div>';
+        }
+      } catch (err) {
+        showError(err.message || 'Failed to move item');
+      }
+    }
+
+    // ========================================
+    // Utility: HTML escaping
+    // ========================================
+    function escapeHtml(str) {
+      if (!str) return '';
+      var div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    // ========================================
+    // Initialize on page load
+    // ========================================
+    (function init() {
+      renderRecentSection(recentFiles);
+      renderBreadcrumb();
+      renderBrowserSection(initialItems);
+    })();
+  </script>
+</body>
+</html>
