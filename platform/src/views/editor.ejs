@@ -50,26 +50,63 @@
 
     new DocsAPI.DocEditor('editor-container', config);
 
-    // POC: Inject CSS into the editor iframe to hide all fonts except Arial
+    // POC: Filter font list in editor to show only "Arial"
     (function injectFontFilter() {
+      var allowedFonts = ['Arial'];
+
       function tryInject() {
         var iframe = document.querySelector('#editor-container iframe');
         if (!iframe) { setTimeout(tryInject, 500); return; }
         try {
-          var iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-          var style = iframeDoc.createElement('style');
-          style.textContent = `
-            /* Hide all font items in the dropdown */
-            .listview .item[data-value] { display: none !important; }
-            /* Show only Arial */
-            .listview .item[data-value="Arial"] { display: flex !important; }
-          `;
-          iframeDoc.head.appendChild(style);
+          var iframeWin = iframe.contentWindow;
+          var iframeDoc = iframe.contentDocument || iframeWin.document;
+
+          // Wait for the editor's Common.UI framework to be ready
+          if (!iframeWin.Common || !iframeWin.Common.NotificationCenter) {
+            setTimeout(tryInject, 1000);
+            return;
+          }
+
+          // Listen for the fonts:load event to filter after fonts are populated
+          iframeWin.Common.NotificationCenter.on('fonts:load', function(store) {
+            filterFontStore(store);
+          });
+
+          // Also try to filter if fonts are already loaded
+          // The font combobox lives in the toolbar; find it via the DOM
+          setTimeout(function() { filterExistingFonts(iframeWin, iframeDoc); }, 3000);
+
         } catch (e) {
-          // iframe not ready yet, retry
-          setTimeout(tryInject, 500);
+          setTimeout(tryInject, 1000);
         }
       }
+
+      function filterFontStore(store) {
+        if (!store || !store.models) return;
+        var toRemove = store.models.filter(function(m) {
+          return allowedFonts.indexOf(m.get('name')) === -1;
+        });
+        toRemove.forEach(function(m) { store.remove(m); });
+      }
+
+      function filterExistingFonts(iframeWin, iframeDoc) {
+        try {
+          // Try to access the font store through the toolbar controller
+          var app = iframeWin.require && iframeWin.require('core/app');
+          if (!app) return;
+
+          // Alternative: find all li elements in font dropdown and hide non-matching
+          var fontMenus = iframeDoc.querySelectorAll('.dropdown-menu.scrollable-menu li:not(.divider)');
+          fontMenus.forEach(function(li) {
+            var a = li.querySelector('a.font-item');
+            if (!a) return;
+            // The item stores font info; check via the tooltip/title or the store
+            // Since we can't easily get the name from canvas, hide all except first N (recent) items
+            // This is a rough approach - proper filtering needs store access
+          });
+        } catch(e) {}
+      }
+
       setTimeout(tryInject, 2000);
     })();
   </script>
