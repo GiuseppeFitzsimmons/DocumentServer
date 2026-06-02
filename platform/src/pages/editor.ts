@@ -38,6 +38,7 @@ editorRouter.get('/editor/:fileId', requireAuth, async (req, res) => {
       title: file.name,
       editorConfig,
       dsUrl: '',
+      fileId: fileId,
       layout: false,
     });
   } catch (err) {

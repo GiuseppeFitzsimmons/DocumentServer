@@ -45,6 +45,9 @@ export function buildEditorConfig(params: EditorConfigParams): object {
         id: user.id,
         name: user.name,
       },
+      customization: {
+        forcesave: true,
+      },
     },
   };
 

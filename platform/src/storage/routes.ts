@@ -125,6 +125,55 @@ fileRouter.post('/create', async (req, res) => {
   }
 });
 
+// POST /api/files/saveas — save a copy of a document from DS URL
+fileRouter.post('/saveas', async (req, res) => {
+  try {
+    const userId = req.session.userId!;
+    const { title, url, fileId } = req.body;
+
+    if (!url || !title) {
+      res.status(400).json({ error: 'Title and URL are required' });
+      return;
+    }
+
+    // Fetch the file from DS
+    const response = await fetch(url);
+    if (!response.ok) {
+      res.status(502).json({ error: 'Failed to fetch document from server' });
+      return;
+    }
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const contentType = response.headers.get('content-type') || 'application/octet-stream';
+
+    // Determine folder from original file
+    let folderId: string | null = null;
+    if (fileId) {
+      const original = await metadata.getFile(fileId);
+      if (original && original.userId === userId) {
+        folderId = original.folderId;
+      }
+    }
+
+    const newFileId = randomUUID();
+    const s3Key = `${userId}/${newFileId}`;
+    await storage.upload(s3Key, buffer, contentType);
+
+    const fileRecord = await metadata.createFile({
+      name: title,
+      mimeType: contentType,
+      sizeBytes: buffer.length,
+      userId,
+      folderId,
+      s3Key,
+    });
+
+    res.status(201).json(fileRecord);
+  } catch (err) {
+    console.error('Save As error:', err);
+    res.status(500).json({ error: 'Storage error' });
+  }
+});
+
 // GET /api/files/:id/download
 fileRouter.get('/:id/download', async (req, res) => {
   try {
