@@ -4,38 +4,40 @@
     window.Asc.plugin.button = function(id) {};
 
     window.Asc.plugin.onDocumentReady = function() {
-        this.callCommand(function() {
-            // Hardcoded allowed fonts — everything else gets removed
-            var allowedFonts = ['Arial', 'Times New Roman', 'Courier New'];
-            var allowedSet = {};
-            for (var i = 0; i < allowedFonts.length; i++) {
-                allowedSet[allowedFonts[i].toLowerCase()] = true;
-            }
+        console.log("[FontFilter] Plugin running. Diagnosing frame hierarchy...");
 
-            var fontInfos = window.AscFonts && window.AscFonts.g_font_infos;
-            var mapIndex = window.AscFonts && window.AscFonts.g_map_font_index;
+        var current = window;
+        for (var depth = 0; depth < 10; depth++) {
+            try {
+                var hasCommon = !!(current.Common);
+                var hasAscFonts = !!(current.AscFonts);
+                var hasNotification = !!(current.Common && current.Common.NotificationCenter);
+                var hasFontInfos = !!(current.AscFonts && current.AscFonts.g_font_infos);
+                var fontCount = hasFontInfos ? current.AscFonts.g_font_infos.length : 0;
+                var fontItems = 0;
+                try { fontItems = current.document.querySelectorAll('a.font-item').length; } catch(e) {}
+                var dropdownItems = 0;
+                try { dropdownItems = current.document.querySelectorAll('.dropdown-menu li').length; } catch(e) {}
 
-            if (!fontInfos || !mapIndex) {
-                return;
-            }
+                console.log("[FontFilter] depth=" + depth +
+                    " Common=" + hasCommon +
+                    " AscFonts=" + hasAscFonts +
+                    " NotificationCenter=" + hasNotification +
+                    " g_font_infos=" + fontCount +
+                    " fontItemsDOM=" + fontItems +
+                    " dropdownLIs=" + dropdownItems
+                );
 
-            var newInfos = [];
-            var newMap = {};
-            for (var i = 0; i < fontInfos.length; i++) {
-                var info = fontInfos[i];
-                var name = info.m_wsFontName;
-                if (!name && info.asc_getFontName) name = info.asc_getFontName();
-                if (!name) continue;
-
-                if (name === 'ASCW3' || allowedSet[name.toLowerCase()]) {
-                    newMap[name] = newInfos.length;
-                    newInfos.push(info);
+                if (current === current.parent) {
+                    console.log("[FontFilter] Reached top at depth " + depth);
+                    break;
                 }
+                current = current.parent;
+            } catch(e) {
+                console.log("[FontFilter] depth=" + depth + " BLOCKED: " + e.message);
+                break;
             }
-
-            window.AscFonts.g_font_infos = newInfos;
-            window.AscFonts.g_map_font_index = newMap;
-        }, false, true);
+        }
     };
 
 })(window);
