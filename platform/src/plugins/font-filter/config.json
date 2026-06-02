@@ -9,11 +9,11 @@
       "icons": [],
       "isViewer": true,
       "EditorsSupport": ["word", "cell", "slide", "pdf"],
-      "type": "system",
+      "type": "background",
       "initDataType": "none",
       "initData": "",
       "buttons": [],
-      "events": ["onDocumentReady"]
+      "events": []
     }
   ],
   "version": "1.0"
