@@ -153,6 +153,35 @@ export async function folderHasChildren(id: string): Promise<boolean> {
   return foldersResult.rows.length > 0;
 }
 
+/**
+ * Walks the ancestor chain from targetId upward to determine if sourceId
+ * is an ancestor of targetId. Used to prevent circular references when
+ * moving folders.
+ */
+export async function isDescendantOf(targetId: string, sourceId: string): Promise<boolean> {
+  let current: string | null = targetId;
+  while (current !== null) {
+    if (current === sourceId) {
+      return true;
+    }
+    const folder = await getFolder(current);
+    if (!folder) {
+      return false;
+    }
+    current = folder.parentId;
+  }
+  return false;
+}
+
+export async function moveFolder(id: string, parentId: string | null): Promise<FolderRecord> {
+  const { rows } = await pool.query(
+    `UPDATE folders SET parent_id = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+    [parentId, id]
+  );
+  return mapFolderRow(rows[0]);
+}
+
+
 // --- Row mappers ---
 
 function mapFileRow(row: Record<string, unknown>): FileRecord {

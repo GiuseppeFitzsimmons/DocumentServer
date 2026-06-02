@@ -315,6 +315,9 @@
       .col-size, .col-date { display: none; }
       .toolbar h1 { font-size: 16px; }
     }
+    /* Drag-and-drop states */
+    .drag-dimmed { opacity: 0.4; }
+    .drop-target-active { background: #e8f4fc; outline: 2px solid #0082C9; outline-offset: -2px; }
   </style>
 </head>
 <body>
@@ -452,6 +455,9 @@
       },
       moveFile: function(id, targetFolderId) {
         return apiRequest('PATCH', '/api/files/' + encodeURIComponent(id), { folderId: targetFolderId });
+      },
+      moveFolder: function(id, targetParentId) {
+        return apiRequest('PATCH', '/api/folders/' + encodeURIComponent(id), { parentId: targetParentId });
       }
     };
 
@@ -528,6 +534,9 @@
           }
         });
       });
+
+      // Attach drag-and-drop listeners to new rows
+      attachDragListeners();
     }
 
     // --- Breadcrumb (Task 4.2) ---
@@ -539,10 +548,11 @@
         if (i === state.breadcrumb.length - 1) {
           html += '<span class="current">' + escapeHtml(seg.name) + '</span>';
         } else {
-          html += '<button onclick="navigateToBreadcrumb(' + i + ')">' + escapeHtml(seg.name) + '</button>';
+          html += '<button data-folder-id="' + (seg.id || '') + '" onclick="navigateToBreadcrumb(' + i + ')">' + escapeHtml(seg.name) + '</button>';
         }
       });
       el.innerHTML = html;
+      attachBreadcrumbDropListeners();
     }
 
     // --- Navigation (Task 4.1) ---
@@ -674,12 +684,10 @@
       renameBtn.onclick = function() { closeContextMenu(); startRename(id, type, name); };
       menu.appendChild(renameBtn);
 
-      if (type === 'file') {
-        var moveBtn = document.createElement('button');
-        moveBtn.textContent = 'Move';
-        moveBtn.onclick = function() { closeContextMenu(); startMove(id, name); };
-        menu.appendChild(moveBtn);
-      }
+      var moveBtn = document.createElement('button');
+      moveBtn.textContent = 'Move';
+      moveBtn.onclick = function() { closeContextMenu(); startMove(id, name, type); };
+      menu.appendChild(moveBtn);
 
       var deleteBtn = document.createElement('button');
       deleteBtn.className = 'danger';
@@ -773,11 +781,11 @@
       };
     }
 
-    // --- Move (Task 7.4) ---
-    async function startMove(fileId, fileName) {
+    // --- Move (Task 7.4, 8.1) ---
+    async function startMove(itemId, itemName, itemType) {
       var overlay = document.getElementById('modalOverlay');
       var content = document.getElementById('modalContent');
-      content.innerHTML = '<h3>Move "' + escapeHtml(fileName) + '"</h3><p>Select a destination folder:</p><div class="folder-picker-list" id="folderPickerList"><p style="padding:16px;color:#999">Loading folders...</p></div><div class="modal-actions"><button class="btn-secondary" id="cancelMove">Cancel</button><button class="btn-primary" id="confirmMove" disabled>Move</button></div>';
+      content.innerHTML = '<h3>Move "' + escapeHtml(itemName) + '"</h3><p>Select a destination folder:</p><div class="folder-picker-list" id="folderPickerList"><p style="padding:16px;color:#999">Loading folders...</p></div><div class="modal-actions"><button class="btn-secondary" id="cancelMove">Cancel</button><button class="btn-primary" id="confirmMove" disabled>Move</button></div>';
       overlay.classList.add('open');
 
       document.getElementById('cancelMove').onclick = function() { overlay.classList.remove('open'); };
@@ -785,7 +793,10 @@
       var selectedFolderId = null;
       try {
         var rootItems = await FileManagerAPI.listFolder(null);
-        var folders = rootItems.filter(function(item) { return item.type === 'folder'; });
+        var folders = rootItems.filter(function(item) {
+          // Exclude the folder itself from the picker to prevent self-move
+          return item.type === 'folder' && item.id !== itemId;
+        });
         var listEl = document.getElementById('folderPickerList');
 
         var html = '<button class="folder-picker-item" data-folder-id="__root__">📁 My Files (root)</button>';
@@ -812,18 +823,209 @@
       document.getElementById('confirmMove').onclick = async function() {
         overlay.classList.remove('open');
         try {
-          await FileManagerAPI.moveFile(fileId, selectedFolderId);
-          var row = document.querySelector('tr[data-id="' + fileId + '"]');
+          if (itemType === 'folder') {
+            await FileManagerAPI.moveFolder(itemId, selectedFolderId);
+          } else {
+            await FileManagerAPI.moveFile(itemId, selectedFolderId);
+          }
+          var row = document.querySelector('tr[data-id="' + itemId + '"]');
           if (row) row.remove();
           var tbody = document.querySelector('.file-list tbody');
           if (tbody && tbody.children.length === 0) {
             renderItems([]);
           }
-          showSuccess('File moved');
+          showSuccess('Moved successfully');
         } catch (err) {
           showError(err.message || 'Move failed');
         }
       };
+    }
+
+    // --- DragManager: Initialization and drag start/end handlers (Task 6.1) ---
+    var dragActive = false;
+    var currentDragId = null;
+
+    function initDragAndDrop() {
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && dragActive) {
+          // Browser handles drag cancel on Escape, but we need to restore row appearance
+          var dimmedRows = document.querySelectorAll('tr.drag-dimmed');
+          dimmedRows.forEach(function(row) {
+            row.classList.remove('drag-dimmed');
+          });
+          dragActive = false;
+          currentDragId = null;
+        }
+      });
+    }
+
+    function attachDragListeners() {
+      var rows = document.querySelectorAll('tr[data-id]');
+      rows.forEach(function(row) {
+        row.setAttribute('draggable', 'true');
+
+        row.addEventListener('dragstart', function(e) {
+          var id = row.getAttribute('data-id');
+          var type = row.getAttribute('data-type');
+          var name = row.getAttribute('data-name');
+
+          // Set dataTransfer data
+          e.dataTransfer.setData('text/plain', id);
+          e.dataTransfer.setData('application/x-item-id', id);
+          e.dataTransfer.setData('application/x-item-type', type);
+          e.dataTransfer.setData('application/x-item-name', name);
+          e.dataTransfer.effectAllowed = 'move';
+
+          // Apply dimmed class to source row
+          row.classList.add('drag-dimmed');
+          dragActive = true;
+          currentDragId = id;
+
+          // Create custom drag preview
+          var preview = document.createElement('div');
+          preview.style.position = 'absolute';
+          preview.style.top = '-1000px';
+          preview.style.left = '-1000px';
+          preview.style.display = 'flex';
+          preview.style.alignItems = 'center';
+          preview.style.gap = '8px';
+          preview.style.padding = '8px 12px';
+          preview.style.background = '#fff';
+          preview.style.border = '1px solid #ddd';
+          preview.style.borderRadius = '4px';
+          preview.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+          preview.style.fontSize = '14px';
+          preview.style.whiteSpace = 'nowrap';
+
+          var iconSpan = document.createElement('span');
+          iconSpan.innerHTML = type === 'folder' ? '📁' : '📄';
+          preview.appendChild(iconSpan);
+
+          var nameSpan = document.createElement('span');
+          nameSpan.textContent = name;
+          preview.appendChild(nameSpan);
+
+          document.body.appendChild(preview);
+          e.dataTransfer.setDragImage(preview, 0, 0);
+
+          // Remove the preview element after browser has captured it
+          setTimeout(function() {
+            if (preview.parentElement) {
+              preview.parentElement.removeChild(preview);
+            }
+          }, 0);
+        });
+
+        row.addEventListener('dragend', function() {
+          // Remove dimmed class and clear drag state
+          row.classList.remove('drag-dimmed');
+          dragActive = false;
+          currentDragId = null;
+        });
+      });
+
+      // --- Drop target handlers for folder rows (Task 6.2) ---
+      var folderRows = document.querySelectorAll('tr[data-type="folder"]');
+      folderRows.forEach(function(folderRow) {
+        var folderId = folderRow.getAttribute('data-id');
+
+        folderRow.addEventListener('dragover', function(e) {
+          e.preventDefault();
+          // Reject drop if target is the dragged item itself
+          if (currentDragId === folderId) return;
+          e.dataTransfer.dropEffect = 'move';
+          folderRow.classList.add('drop-target-active');
+        });
+
+        folderRow.addEventListener('dragleave', function() {
+          folderRow.classList.remove('drop-target-active');
+        });
+
+        folderRow.addEventListener('drop', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          folderRow.classList.remove('drop-target-active');
+
+          var sourceId = e.dataTransfer.getData('application/x-item-id');
+          var sourceType = e.dataTransfer.getData('application/x-item-type');
+
+          // Prevent dropping a folder onto itself
+          if (sourceType === 'folder' && sourceId === folderId) return;
+
+          var movePromise;
+          if (sourceType === 'folder') {
+            movePromise = FileManagerAPI.moveFolder(sourceId, folderId);
+          } else {
+            movePromise = FileManagerAPI.moveFile(sourceId, folderId);
+          }
+
+          movePromise.then(function() {
+            // Remove moved item from DOM
+            var sourceRow = document.querySelector('tr[data-id="' + sourceId + '"]');
+            if (sourceRow) sourceRow.remove();
+            // If table body is empty after removal, render empty state
+            var tbody = document.querySelector('.file-list tbody');
+            if (tbody && tbody.children.length === 0) {
+              renderItems([]);
+            }
+            showSuccess('Moved successfully');
+          }).catch(function(err) {
+            showError(err.message || 'Move failed');
+          });
+        });
+      });
+    }
+
+    // --- Drop target handlers for breadcrumb segments (Task 6.3) ---
+    function attachBreadcrumbDropListeners() {
+      var buttons = document.querySelectorAll('#breadcrumb button[data-folder-id]');
+      buttons.forEach(function(btn) {
+        var targetFolderId = btn.getAttribute('data-folder-id') || null;
+
+        btn.addEventListener('dragover', function(e) {
+          e.preventDefault();
+          // Prevent dropping a folder onto breadcrumb representing itself
+          if (currentDragId === targetFolderId) return;
+          e.dataTransfer.dropEffect = 'move';
+          btn.classList.add('drop-target-active');
+        });
+
+        btn.addEventListener('dragleave', function() {
+          btn.classList.remove('drop-target-active');
+        });
+
+        btn.addEventListener('drop', function(e) {
+          e.preventDefault();
+          btn.classList.remove('drop-target-active');
+
+          var sourceId = e.dataTransfer.getData('application/x-item-id');
+          var sourceType = e.dataTransfer.getData('application/x-item-type');
+
+          // Prevent dropping a folder onto itself
+          if (sourceType === 'folder' && sourceId === targetFolderId) return;
+          // Prevent no-op: dropping onto current parent (which is the folder we're viewing)
+          if (targetFolderId === state.currentFolderId) return;
+
+          var movePromise;
+          if (sourceType === 'folder') {
+            movePromise = FileManagerAPI.moveFolder(sourceId, targetFolderId);
+          } else {
+            movePromise = FileManagerAPI.moveFile(sourceId, targetFolderId);
+          }
+
+          movePromise.then(function() {
+            var sourceRow = document.querySelector('tr[data-id="' + sourceId + '"]');
+            if (sourceRow) sourceRow.remove();
+            var tbody = document.querySelector('.file-list tbody');
+            if (tbody && tbody.children.length === 0) {
+              renderItems([]);
+            }
+            showSuccess('Moved successfully');
+          }).catch(function(err) {
+            showError(err.message || 'Move failed');
+          });
+        });
+      });
     }
 
     // --- Close menus on outside click ---
@@ -839,6 +1041,7 @@
     // --- Page Load (Task 3.4) ---
     (function init() {
       var initialItems = <%- items %>;
+      initDragAndDrop();
       renderBreadcrumb();
       renderItems(initialItems);
     })();

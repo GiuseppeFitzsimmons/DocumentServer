@@ -353,6 +353,28 @@ folderRouter.post('/', async (req, res) => {
   }
 });
 
+// GET /api/folders/:id
+folderRouter.get('/:id', async (req, res) => {
+  try {
+    const userId = req.session.userId!;
+    const folder = await metadata.getFolder(req.params.id);
+
+    if (!folder) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    if (folder.userId !== userId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    res.json(folder);
+  } catch (err) {
+    console.error('Get folder error:', err);
+    res.status(500).json({ error: 'Storage error' });
+  }
+});
+
 // PATCH /api/folders/:id
 folderRouter.patch('/:id', async (req, res) => {
   try {
@@ -368,13 +390,48 @@ folderRouter.patch('/:id', async (req, res) => {
       return;
     }
 
-    if (!req.body.name || typeof req.body.name !== 'string') {
-      res.status(400).json({ error: 'Folder name is required' });
+    // Handle move (parentId provided)
+    if (req.body.parentId !== undefined) {
+      // Reject self-referential move
+      if (req.body.parentId === req.params.id) {
+        res.status(400).json({ error: 'Cannot move folder into itself' });
+        return;
+      }
+
+      // If parentId is not null, verify target folder exists and belongs to user
+      if (req.body.parentId !== null) {
+        const targetFolder = await metadata.getFolder(req.body.parentId);
+        if (!targetFolder) {
+          res.status(404).json({ error: 'Target folder not found' });
+          return;
+        }
+        if (targetFolder.userId !== userId) {
+          res.status(403).json({ error: 'Forbidden' });
+          return;
+        }
+
+        // Check for circular reference
+        const isCircular = await metadata.isDescendantOf(req.body.parentId, folder.id);
+        if (isCircular) {
+          res.status(400).json({ error: 'Cannot move folder into its own descendant' });
+          return;
+        }
+      }
+
+      const updated = await metadata.moveFolder(folder.id, req.body.parentId);
+      res.json(updated);
       return;
     }
 
-    const updated = await metadata.renameFolder(folder.id, req.body.name);
-    res.json(updated);
+    // Handle rename (name provided)
+    if (req.body.name && typeof req.body.name === 'string') {
+      const updated = await metadata.renameFolder(folder.id, req.body.name);
+      res.json(updated);
+      return;
+    }
+
+    // Neither name nor parentId provided
+    res.status(400).json({ error: 'Folder name is required' });
   } catch (err) {
     console.error('Rename folder error:', err);
     res.status(500).json({ error: 'Storage error' });
