@@ -162,32 +162,51 @@
       font-weight: 500;
     }
     .breadcrumb-separator { color: #999; }
-    .browser-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 12px;
-      position: relative;
+    .browser-list {
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
       overflow: visible;
     }
+    .browser-list-header {
+      display: grid;
+      grid-template-columns: 1fr 120px 140px 40px;
+      padding: 10px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid #eee;
+    }
     .browser-item {
-      padding: 12px 16px;
-      display: flex;
+      display: grid;
+      grid-template-columns: 1fr 120px 140px 40px;
       align-items: center;
-      gap: 12px;
+      padding: 10px 16px;
       cursor: pointer;
       position: relative;
       user-select: none;
+      border-bottom: 1px solid #f5f5f5;
       z-index: 1;
     }
+    .browser-item:last-child { border-bottom: none; }
     .browser-item:hover {
+      background: #f8f9fa;
       z-index: 250;
     }
     .browser-item.drag-over {
       background: #e8f4fd;
-      border: 2px dashed #0082C9;
+      outline: 2px dashed #0082C9;
+      outline-offset: -2px;
     }
-    .browser-item-icon { font-size: 24px; flex-shrink: 0; }
-    .browser-item-info { flex: 1; min-width: 0; }
+    .browser-item-name-cell {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .browser-item-icon { font-size: 20px; flex-shrink: 0; }
     .browser-item-name {
       font-size: 14px;
       font-weight: 500;
@@ -195,7 +214,14 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .browser-item-meta { font-size: 12px; color: #666; margin-top: 2px; }
+    .browser-item-size {
+      font-size: 13px;
+      color: #666;
+    }
+    .browser-item-date {
+      font-size: 13px;
+      color: #666;
+    }
     .browser-item-actions {
       opacity: 0;
       transition: opacity 0.2s;
@@ -206,6 +232,7 @@
       background: none;
       border: none;
       color: #666;
+      text-align: center;
     }
     .browser-item:hover .browser-item-actions { opacity: 1; }
     .browser-item-actions:hover { background: #eee; }
@@ -407,7 +434,10 @@
       .create-grid { flex-direction: column; }
       .create-card { width: 100%; }
       .recent-grid { grid-template-columns: 1fr; }
-      .browser-grid { grid-template-columns: 1fr; }
+      .browser-list-header { display: none; }
+      .browser-item { grid-template-columns: 1fr 40px; }
+      .browser-item-size { display: none; }
+      .browser-item-date { display: none; }
       .placeholder-grid { flex-direction: column; }
       .placeholder-card { width: 100%; }
       .navbar { padding: 0 12px; }
@@ -466,7 +496,15 @@
         <button class="btn-toolbar" id="btn-new-folder" onclick="handleNewFolder()">New Folder</button>
       </div>
       <div class="breadcrumb" id="breadcrumb"></div>
-      <div class="browser-grid" id="browser-grid"></div>
+      <div class="browser-list" id="browser-list">
+        <div class="browser-list-header">
+          <span>Name</span>
+          <span>Size</span>
+          <span>Modified</span>
+          <span></span>
+        </div>
+        <div id="browser-grid"></div>
+      </div>
     </section>
 
     <!-- Placeholder Section -->
@@ -653,6 +691,16 @@
       return d.toLocaleDateString();
     }
 
+    function formatSize(bytes) {
+      if (!bytes && bytes !== 0) return '—';
+      if (bytes === 0) return '0 B';
+      var units = ['B', 'KB', 'MB', 'GB'];
+      var i = Math.floor(Math.log(bytes) / Math.log(1024));
+      if (i >= units.length) i = units.length - 1;
+      var val = bytes / Math.pow(1024, i);
+      return (i === 0 ? val : val.toFixed(1)) + ' ' + units[i];
+    }
+
     // ========================================
     // Create Section Handlers
     // ========================================
@@ -716,21 +764,23 @@
 
     function createBrowserItem(item, type) {
       var el = document.createElement('div');
-      el.className = 'card browser-item';
+      el.className = 'browser-item';
       el.setAttribute('data-id', item.id);
       el.setAttribute('data-type', type);
       el.setAttribute('data-name', item.name);
       el.setAttribute('draggable', 'true');
 
       var icon = type === 'folder' ? '📁' : getFileIcon(item.mimeType);
-      var meta = type === 'folder' ? 'Folder' : formatDate(item.updatedAt);
+      var size = type === 'folder' ? '—' : formatSize(item.sizeBytes);
+      var date = formatDate(item.updatedAt);
 
       el.innerHTML =
-        '<div class="browser-item-icon">' + icon + '</div>' +
-        '<div class="browser-item-info">' +
-          '<div class="browser-item-name">' + escapeHtml(item.name) + '</div>' +
-          '<div class="browser-item-meta">' + meta + '</div>' +
+        '<div class="browser-item-name-cell">' +
+          '<span class="browser-item-icon">' + icon + '</span>' +
+          '<span class="browser-item-name">' + escapeHtml(item.name) + '</span>' +
         '</div>' +
+        '<span class="browser-item-size">' + size + '</span>' +
+        '<span class="browser-item-date">' + date + '</span>' +
         '<button class="browser-item-actions" onclick="event.stopPropagation(); toggleContextMenu(this)">⋮</button>' +
         '<div class="context-menu">' +
           '<button class="context-menu-item" onclick="event.stopPropagation(); handleRename(\'' + item.id + '\', \'' + type + '\', this)">Rename</button>' +
