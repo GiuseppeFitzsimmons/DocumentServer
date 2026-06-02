@@ -13,10 +13,16 @@ import { fileRouter, folderRouter } from './storage/routes.js';
 import { serveRouter } from './ds/serve.js';
 import { callbackRouter } from './ds/callback.js';
 import { editorRouter } from './pages/editor.js';
+import { fileManagerRouter } from './pages/fileManager.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
+
+// Trust proxy (behind Caddy/reverse proxy)
+if (config.TRUST_PROXY === 'true') {
+  app.set('trust proxy', 1);
+}
 
 app.use(helmet({
   hsts: false,
@@ -97,10 +103,8 @@ app.use('/example', requireAuth, createProxyMiddleware({
   },
 }));
 
-// Authenticated root
-app.get('/', requireAuth, (_req, res) => {
-  res.redirect('/example');
-});
+// File manager (authenticated root)
+app.use('/', fileManagerRouter);
 
 app.listen(config.PORT, () => {
   console.log(`Portal running on port ${config.PORT}`);

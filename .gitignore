@@ -2,3 +2,6 @@
 build/vagrant/.vagrant
 build/deploy
 develop/richdocuments
+platform/node_modules
+.kiro/
+*/.env

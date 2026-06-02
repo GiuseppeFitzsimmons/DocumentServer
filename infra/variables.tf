@@ -44,3 +44,26 @@ variable "repo_url" {
   type        = string
   default     = "https://github.com/YOUR_USER/DocumentServer.git"
 }
+
+variable "s3_access_key_id" {
+  description = "Hetzner Object Storage access key"
+  type        = string
+  sensitive   = true
+}
+
+variable "s3_secret_access_key" {
+  description = "Hetzner Object Storage secret key"
+  type        = string
+  sensitive   = true
+}
+
+variable "s3_region" {
+  description = "Hetzner Object Storage region"
+  type        = string
+  default     = "fsn1"
+}
+
+variable "s3_bucket_name" {
+  description = "Name for the file storage bucket (must be globally unique across Hetzner)"
+  type        = string
+}

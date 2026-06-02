@@ -59,10 +59,15 @@ resource "hcloud_server" "euro_office" {
   firewall_ids = [hcloud_firewall.euro_office.id]
 
   user_data = templatefile("${path.module}/cloud-init.yaml", {
-    jwt_secret     = var.jwt_secret
-    db_password    = var.db_password
-    session_secret = var.session_secret
-    repo_url       = var.repo_url
+    jwt_secret           = var.jwt_secret
+    db_password          = var.db_password
+    session_secret       = var.session_secret
+    repo_url             = var.repo_url
+    s3_endpoint          = "https://${var.s3_region}.your-objectstorage.com"
+    s3_bucket            = var.s3_bucket_name
+    s3_access_key_id     = var.s3_access_key_id
+    s3_secret_access_key = var.s3_secret_access_key
+    s3_region            = var.s3_region
   })
 
   public_net {

@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { requireAuth } from '../auth/middleware.js';
 import * as storage from './s3.js';
 import * as metadata from './metadata.js';
+import { getTemplate, isValidDocumentType } from './templates.js';
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 
@@ -73,6 +74,102 @@ fileRouter.post('/upload', (req, res, next) => {
     res.status(201).json(fileRecord);
   } catch (err) {
     console.error('Upload error:', err);
+    res.status(500).json({ error: 'Storage error' });
+  }
+});
+
+// POST /api/files/create — create a new blank document
+fileRouter.post('/create', async (req, res) => {
+  try {
+    const userId = req.session.userId!;
+    const { type, name, folderId } = req.body;
+
+    if (!type || !isValidDocumentType(type)) {
+      res.status(400).json({ error: 'Invalid type. Must be docx, xlsx, or pptx' });
+      return;
+    }
+
+    const fileName = name ? `${name}.${type}` : `Untitled.${type}`;
+    const template = getTemplate(type);
+    const fileId = randomUUID();
+    const s3Key = `${userId}/${fileId}`;
+
+    // Verify folder ownership if provided
+    if (folderId) {
+      const folder = await metadata.getFolder(folderId);
+      if (!folder) {
+        res.status(404).json({ error: 'Parent folder not found' });
+        return;
+      }
+      if (folder.userId !== userId) {
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+      }
+    }
+
+    await storage.upload(s3Key, template.buffer, template.mimeType);
+
+    const fileRecord = await metadata.createFile({
+      name: fileName,
+      mimeType: template.mimeType,
+      sizeBytes: template.buffer.length,
+      userId,
+      folderId: folderId || null,
+      s3Key,
+    });
+
+    res.status(201).json(fileRecord);
+  } catch (err) {
+    console.error('Create document error:', err);
+    res.status(500).json({ error: 'Storage error' });
+  }
+});
+
+// POST /api/files/saveas — save a copy of a document from DS URL
+fileRouter.post('/saveas', async (req, res) => {
+  try {
+    const userId = req.session.userId!;
+    const { title, url, fileId } = req.body;
+
+    if (!url || !title) {
+      res.status(400).json({ error: 'Title and URL are required' });
+      return;
+    }
+
+    // Fetch the file from DS
+    const response = await fetch(url);
+    if (!response.ok) {
+      res.status(502).json({ error: 'Failed to fetch document from server' });
+      return;
+    }
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const contentType = response.headers.get('content-type') || 'application/octet-stream';
+
+    // Determine folder from original file
+    let folderId: string | null = null;
+    if (fileId) {
+      const original = await metadata.getFile(fileId);
+      if (original && original.userId === userId) {
+        folderId = original.folderId;
+      }
+    }
+
+    const newFileId = randomUUID();
+    const s3Key = `${userId}/${newFileId}`;
+    await storage.upload(s3Key, buffer, contentType);
+
+    const fileRecord = await metadata.createFile({
+      name: title,
+      mimeType: contentType,
+      sizeBytes: buffer.length,
+      userId,
+      folderId,
+      s3Key,
+    });
+
+    res.status(201).json(fileRecord);
+  } catch (err) {
+    console.error('Save As error:', err);
     res.status(500).json({ error: 'Storage error' });
   }
 });

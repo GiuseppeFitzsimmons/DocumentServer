@@ -14,7 +14,41 @@
   <div id="editor-container"></div>
   <script src="<%= dsUrl %>/web-apps/apps/api/documents/api.js"></script>
   <script>
-    new DocsAPI.DocEditor('editor-container', <%- JSON.stringify(editorConfig) %>);
+    var config = <%- JSON.stringify(editorConfig) %>;
+
+    config.events = {
+      onRequestSaveAs: function(event) {
+        var title = event.data.title || 'Copy of ' + config.document.title;
+        var url = event.data.url;
+        fetch('/api/files/saveas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: title, url: url, fileId: '<%= fileId %>' })
+        }).then(function(res) {
+          if (!res.ok) throw new Error('Save As failed');
+          return res.json();
+        }).then(function(file) {
+          window.location.href = '/editor/' + file.id;
+        }).catch(function(err) {
+          alert(err.message || 'Save As failed');
+        });
+      },
+      onRequestRename: function(event) {
+        var newName = event.data;
+        fetch('/api/files/<%= fileId %>', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newName })
+        }).then(function(res) {
+          if (!res.ok) throw new Error('Rename failed');
+          document.title = newName;
+        }).catch(function(err) {
+          alert(err.message || 'Rename failed');
+        });
+      }
+    };
+
+    new DocsAPI.DocEditor('editor-container', config);
   </script>
 </body>
 </html>

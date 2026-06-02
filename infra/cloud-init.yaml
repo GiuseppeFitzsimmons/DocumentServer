@@ -18,6 +18,11 @@ write_files:
       JWT_SECRET=${jwt_secret}
       DB_PASSWORD=${db_password}
       SESSION_SECRET=${session_secret}
+      S3_ENDPOINT=${s3_endpoint}
+      S3_BUCKET=${s3_bucket}
+      S3_ACCESS_KEY_ID=${s3_access_key_id}
+      S3_SECRET_ACCESS_KEY=${s3_secret_access_key}
+      S3_REGION=${s3_region}
 
 runcmd:
   # Install Docker

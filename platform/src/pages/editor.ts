@@ -37,7 +37,8 @@ editorRouter.get('/editor/:fileId', requireAuth, async (req, res) => {
     res.render('editor', {
       title: file.name,
       editorConfig,
-      dsUrl: config.DS_URL,
+      dsUrl: '',
+      fileId: fileId,
       layout: false,
     });
   } catch (err) {
