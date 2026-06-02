@@ -5,13 +5,11 @@ import type { FileRecord } from '../storage/metadata.js';
 interface EditorConfigParams {
   file: FileRecord;
   user: { id: string; name: string };
-  publicBaseUrl?: string;
 }
 
 export function buildEditorConfig(params: EditorConfigParams): object {
-  const { file, user, publicBaseUrl } = params;
+  const { file, user } = params;
   const platformBaseUrl = config.PLATFORM_BASE_URL;
-  const browserBaseUrl = publicBaseUrl || platformBaseUrl;
 
   // Sign a short-lived token for DS to fetch the file
   const serveToken = jwt.sign(
@@ -49,10 +47,6 @@ export function buildEditorConfig(params: EditorConfigParams): object {
       },
       customization: {
         forcesave: true,
-      },
-      plugins: {
-        autostart: ['asc.{B5E5F0D3-4A71-4E88-9F2A-1C3D5E7F9A0B}'],
-        pluginsData: [`${browserBaseUrl}/plugins/font-filter/config.json`],
       },
     },
   };

@@ -23,7 +23,6 @@ editorRouter.get('/editor/:fileId', requireAuth, async (req, res) => {
         const editorConfig = buildEditorConfig({
             file,
             user: { id: userId, name: displayName },
-            publicBaseUrl: `${req.protocol}://${req.get('host')}`,
         });
         res.render('editor', {
             title: file.name,

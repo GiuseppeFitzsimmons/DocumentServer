@@ -5,7 +5,6 @@ interface EditorConfigParams {
         id: string;
         name: string;
     };
-    publicBaseUrl?: string;
 }
 export declare function buildEditorConfig(params: EditorConfigParams): object;
 export {};

@@ -14,7 +14,6 @@ import { serveRouter } from './ds/serve.js';
 import { callbackRouter } from './ds/callback.js';
 import { editorRouter } from './pages/editor.js';
 import { landingRouter } from './pages/landing.js';
-import { fontsProxyRouter } from './fonts/proxyAllFonts.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -65,12 +64,6 @@ app.use('/auth', authLimiter, authRouter);
 
 // Page routes (login, register, logout — public)
 app.use(pageRouter);
-
-// Font proxy (filters AllFonts.js per-user)
-app.use(fontsProxyRouter);
-
-// Serve plugin static files
-app.use('/plugins', express.static(path.join(__dirname, 'plugins')));
 
 // Health check (public)
 app.get('/health', (_req, res) => {

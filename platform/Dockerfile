@@ -12,7 +12,6 @@ COPY package.json package-lock.json* ./
 RUN npm install --omit=dev
 COPY --from=builder /app/dist ./dist
 COPY src/views ./dist/views
-COPY src/plugins ./dist/plugins
 COPY src/db/migrations ./dist/db/migrations
 ENV NODE_ENV=production
 EXPOSE 3000
