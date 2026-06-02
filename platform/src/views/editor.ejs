@@ -49,6 +49,29 @@
     };
 
     new DocsAPI.DocEditor('editor-container', config);
+
+    // POC: Inject CSS into the editor iframe to hide all fonts except Arial
+    (function injectFontFilter() {
+      function tryInject() {
+        var iframe = document.querySelector('#editor-container iframe');
+        if (!iframe) { setTimeout(tryInject, 500); return; }
+        try {
+          var iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+          var style = iframeDoc.createElement('style');
+          style.textContent = `
+            /* Hide all font items in the dropdown */
+            .listview .item[data-value] { display: none !important; }
+            /* Show only Arial */
+            .listview .item[data-value="Arial"] { display: flex !important; }
+          `;
+          iframeDoc.head.appendChild(style);
+        } catch (e) {
+          // iframe not ready yet, retry
+          setTimeout(tryInject, 500);
+        }
+      }
+      setTimeout(tryInject, 2000);
+    })();
   </script>
 </body>
 </html>
