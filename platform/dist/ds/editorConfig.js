@@ -1,8 +1,9 @@
 import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
 export function buildEditorConfig(params) {
-    const { file, user } = params;
+    const { file, user, publicBaseUrl } = params;
     const platformBaseUrl = config.PLATFORM_BASE_URL;
+    const browserBaseUrl = publicBaseUrl || platformBaseUrl;
     // Sign a short-lived token for DS to fetch the file
     const serveToken = jwt.sign({ fileId: file.id }, config.DS_JWT_SECRET, { expiresIn: '1h' });
     const fileExtension = file.name.includes('.')
@@ -31,6 +32,10 @@ export function buildEditorConfig(params) {
             },
             customization: {
                 forcesave: true,
+            },
+            plugins: {
+                autostart: ['asc.{B5E5F0D3-4A71-4E88-9F2A-1C3D5E7F9A0B}'],
+                pluginsData: [`${browserBaseUrl}/plugins/font-filter/config.json`],
             },
         },
     };

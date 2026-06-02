@@ -1,0 +1,20 @@
+{
+  "name": "Font Filter",
+  "guid": "asc.{B5E5F0D3-4A71-4E88-9F2A-1C3D5E7F9A0B}",
+  "baseUrl": "",
+  "variations": [
+    {
+      "description": "Filters the font list to show only allowed fonts",
+      "url": "index.html",
+      "icons": [],
+      "isViewer": true,
+      "EditorsSupport": ["word", "cell", "slide", "pdf"],
+      "type": "system",
+      "initDataType": "none",
+      "initData": "",
+      "buttons": [],
+      "events": ["onDocumentReady"]
+    }
+  ],
+  "version": "1.0"
+}

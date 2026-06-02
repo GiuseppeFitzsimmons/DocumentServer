@@ -59,6 +59,8 @@ app.use('/auth', authLimiter, authRouter);
 app.use(pageRouter);
 // Font proxy (filters AllFonts.js per-user)
 app.use(fontsProxyRouter);
+// Serve plugin static files
+app.use('/plugins', express.static(path.join(__dirname, 'plugins')));
 // Health check (public)
 app.get('/health', (_req, res) => {
     res.json({ status: 'ok' });
