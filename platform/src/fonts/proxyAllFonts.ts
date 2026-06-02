@@ -19,6 +19,8 @@ let cachedOriginal: string | null = null;
  */
 fontsProxyRouter.get('/sdkjs/common/AllFonts.js', async (req, res) => {
   try {
+    console.log('[FontProxy] Serving filtered AllFonts.js');
+
     // Fetch the original from DS (internal network)
     if (!cachedOriginal) {
       const dsResponse = await fetch(`${config.DS_URL}/sdkjs/common/AllFonts.js`);

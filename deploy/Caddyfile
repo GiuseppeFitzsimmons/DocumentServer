@@ -1,53 +1,51 @@
 :80 {
-	# Intercept AllFonts.js — served by platform with per-user filtering
-	handle /sdkjs/common/AllFonts.js {
-		reverse_proxy portal:3000
-	}
+	# Use route to enforce declaration-order evaluation
+	route {
+		# Intercept AllFonts.js — served by platform with per-user font filtering
+		@allfonts path_regexp allfonts .*/sdkjs/common/AllFonts\.js$
+		handle @allfonts {
+			rewrite * /sdkjs/common/AllFonts.js
+			reverse_proxy portal:3000
+		}
 
-	# DocumentServer assets and API (public, needed by editor iframe)
-	handle /web-apps/* {
-		reverse_proxy documentserver:80
-	}
-	handle /sdkjs/* {
-		reverse_proxy documentserver:80
-	}
-	handle /sdkjs-plugins/* {
-		reverse_proxy documentserver:80
-	}
-	handle /fonts/* {
-		reverse_proxy documentserver:80
-	}
-	handle /cache/* {
-		reverse_proxy documentserver:80
-	}
-	handle /coauthoring/* {
-		reverse_proxy documentserver:80
-	}
-	handle /doc/* {
-		reverse_proxy documentserver:80
-	}
-	handle /healthcheck {
-		reverse_proxy documentserver:80
-	}
-	handle /ConvertService.ashx {
-		reverse_proxy documentserver:80
-	}
+		# DocumentServer assets and API (public, needed by editor iframe)
+		handle /web-apps/* {
+			reverse_proxy documentserver:80
+		}
+		handle /sdkjs/* {
+			reverse_proxy documentserver:80
+		}
+		handle /sdkjs-plugins/* {
+			reverse_proxy documentserver:80
+		}
+		handle /fonts/* {
+			reverse_proxy documentserver:80
+		}
+		handle /cache/* {
+			reverse_proxy documentserver:80
+		}
+		handle /coauthoring/* {
+			reverse_proxy documentserver:80
+		}
+		handle /doc/* {
+			reverse_proxy documentserver:80
+		}
+		handle /healthcheck {
+			reverse_proxy documentserver:80
+		}
+		handle /ConvertService.ashx {
+			reverse_proxy documentserver:80
+		}
 
-	# Versioned DS assets (e.g. /9.3.1-hash/web-apps/...)
-	# Intercept versioned AllFonts.js too
-	@versionedAllFonts path_regexp vfonts ^/[0-9]+\.[0-9]+\.[0-9]+.*/sdkjs/common/AllFonts\.js$
-	handle @versionedAllFonts {
-		uri strip_prefix {re.vfonts.0}
-		reverse_proxy portal:3000
-	}
+		# Versioned DS assets (e.g. /9.3.1-hash/web-apps/...)
+		@versioned path_regexp ^/[0-9]+\.[0-9]+\.[0-9]+
+		handle @versioned {
+			reverse_proxy documentserver:80
+		}
 
-	@versioned path_regexp ^/[0-9]+\.[0-9]+\.[0-9]+
-	handle @versioned {
-		reverse_proxy documentserver:80
-	}
-
-	# Everything else goes to portal (including /example, gated by auth)
-	handle /* {
-		reverse_proxy portal:3000
+		# Everything else goes to portal (including /example, gated by auth)
+		handle {
+			reverse_proxy portal:3000
+		}
 	}
 }
