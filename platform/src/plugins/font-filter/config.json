@@ -9,7 +9,7 @@
       "icons": [],
       "isViewer": true,
       "EditorsSupport": ["word", "cell", "slide", "pdf"],
-      "type": "background",
+      "type": "system",
       "initDataType": "none",
       "initData": "",
       "buttons": [],
