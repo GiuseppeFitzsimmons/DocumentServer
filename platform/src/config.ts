@@ -10,11 +10,7 @@ const envSchema = z.object({
   DS_URL: z.string().url(),
   DS_JWT_SECRET: z.string().min(8),
   TRUST_PROXY: z.string().default('false'),
-  S3_ENDPOINT: z.string().url(),
-  S3_BUCKET: z.string(),
-  S3_ACCESS_KEY_ID: z.string(),
-  S3_SECRET_ACCESS_KEY: z.string(),
-  S3_REGION: z.string().default('fsn1'),
+  FILE_STORAGE_PATH: z.string().default('/data/files'),
   PLATFORM_BASE_URL: z.string().url(),
 });
 

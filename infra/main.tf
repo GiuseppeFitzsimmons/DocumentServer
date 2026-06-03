@@ -47,11 +47,11 @@ resource "hcloud_firewall" "euro_office" {
   }
 }
 
-# --- Persistent Volume for PostgreSQL ---
+# --- Persistent Volume for data (PostgreSQL + file storage) ---
 
-resource "hcloud_volume" "pg_data" {
-  name     = "euro-office-pg-data"
-  size     = 10 # GB
+resource "hcloud_volume" "data" {
+  name     = "euro-office-data"
+  size     = 50 # GB
   location = var.location
   format   = "ext4"
 
@@ -61,7 +61,7 @@ resource "hcloud_volume" "pg_data" {
 
   labels = {
     project = "euro-office"
-    role    = "database"
+    role    = "data"
   }
 }
 
@@ -77,15 +77,10 @@ resource "hcloud_server" "euro_office" {
   firewall_ids = [hcloud_firewall.euro_office.id]
 
   user_data = templatefile("${path.module}/cloud-init.yaml", {
-    jwt_secret           = var.jwt_secret
-    db_password          = var.db_password
-    session_secret       = var.session_secret
-    repo_url             = var.repo_url
-    s3_endpoint          = "https://${var.s3_region}.your-objectstorage.com"
-    s3_bucket            = var.s3_bucket_name
-    s3_access_key_id     = var.s3_access_key_id
-    s3_secret_access_key = var.s3_secret_access_key
-    s3_region            = var.s3_region
+    jwt_secret     = var.jwt_secret
+    db_password    = var.db_password
+    session_secret = var.session_secret
+    repo_url       = var.repo_url
   })
 
   public_net {
@@ -101,8 +96,8 @@ resource "hcloud_server" "euro_office" {
 
 # --- Attach volume to server ---
 
-resource "hcloud_volume_attachment" "pg_data" {
-  volume_id = hcloud_volume.pg_data.id
+resource "hcloud_volume_attachment" "data" {
+  volume_id = hcloud_volume.data.id
   server_id = hcloud_server.euro_office.id
   automount = true
 }

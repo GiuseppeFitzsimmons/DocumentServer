@@ -18,19 +18,15 @@ write_files:
       JWT_SECRET=${jwt_secret}
       DB_PASSWORD=${db_password}
       SESSION_SECRET=${session_secret}
-      S3_ENDPOINT=${s3_endpoint}
-      S3_BUCKET=${s3_bucket}
-      S3_ACCESS_KEY_ID=${s3_access_key_id}
-      S3_SECRET_ACCESS_KEY=${s3_secret_access_key}
-      S3_REGION=${s3_region}
 
 runcmd:
   # Install Docker
   - curl -fsSL https://get.docker.com | sh
 
-  # Wait for the Hetzner volume to be mounted (automount via hcloud agent)
+  # Mount the persistent volume
+  # Hetzner automounts to /mnt/HC_Volume_*, wait for it
   - |
-    echo "Waiting for Hetzner volume mount..."
+    echo "Waiting for Hetzner volume..."
     for i in $(seq 1 30); do
       VOLUME_MOUNT=$(find /mnt -maxdepth 1 -name "HC_Volume_*" -type d 2>/dev/null | head -1)
       if [ -n "$VOLUME_MOUNT" ] && mountpoint -q "$VOLUME_MOUNT"; then
@@ -39,14 +35,15 @@ runcmd:
       sleep 5
     done
     if [ -z "$VOLUME_MOUNT" ]; then
-      echo "ERROR: Hetzner volume not found after 150s, falling back to local storage"
-      mkdir -p /mnt/pg-data/postgresql
+      echo "ERROR: Volume not found, using local storage"
+      mkdir -p /mnt/euro-office-data
     else
       echo "Found volume at $VOLUME_MOUNT"
-      ln -sfn "$VOLUME_MOUNT" /mnt/pg-data
-      mkdir -p /mnt/pg-data/postgresql
+      ln -sfn "$VOLUME_MOUNT" /mnt/euro-office-data
     fi
-    chown -R 999:999 /mnt/pg-data/postgresql
+    mkdir -p /mnt/euro-office-data/postgresql
+    mkdir -p /mnt/euro-office-data/files
+    chown -R 999:999 /mnt/euro-office-data/postgresql
 
   # Clone the repo
   - git clone ${repo_url} /opt/euro-office/repo

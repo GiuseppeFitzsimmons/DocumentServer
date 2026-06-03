@@ -10,7 +10,7 @@ variable "ssh_public_key" {
 }
 
 variable "server_type" {
-  description = "Hetzner server type (CX31 = 4 vCPU / 8 GB recommended)"
+  description = "Hetzner server type (cx23 = 2 vCPU / 4 GB)"
   type        = string
   default     = "cx23"
 }
@@ -42,28 +42,5 @@ variable "session_secret" {
 variable "repo_url" {
   description = "Git repository URL to clone on the server"
   type        = string
-  default     = "https://github.com/YOUR_USER/DocumentServer.git"
-}
-
-variable "s3_access_key_id" {
-  description = "Hetzner Object Storage access key"
-  type        = string
-  sensitive   = true
-}
-
-variable "s3_secret_access_key" {
-  description = "Hetzner Object Storage secret key"
-  type        = string
-  sensitive   = true
-}
-
-variable "s3_region" {
-  description = "Hetzner Object Storage region"
-  type        = string
-  default     = "fsn1"
-}
-
-variable "s3_bucket_name" {
-  description = "Name for the file storage bucket (must be globally unique across Hetzner)"
-  type        = string
+  default     = "https://github.com/GiuseppeFitzsimmons/DocumentServer.git"
 }
