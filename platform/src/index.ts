@@ -10,6 +10,7 @@ import { authRouter } from './auth/routes.js';
 import { pageRouter } from './pages/routes.js';
 import { requireAuth } from './auth/middleware.js';
 import { fileRouter, folderRouter } from './storage/routes.js';
+import { sharingRouter } from './sharing/routes.js';
 import { serveRouter } from './ds/serve.js';
 import { callbackRouter } from './ds/callback.js';
 import { editorRouter } from './pages/editor.js';
@@ -79,6 +80,9 @@ app.use('/api/ds/callback', callbackRouter);
 // File storage API
 app.use('/api/files', fileRouter);
 app.use('/api/folders', folderRouter);
+
+// Sharing API
+app.use('/api/shares', sharingRouter);
 
 // Editor page (authenticated)
 app.use(editorRouter);

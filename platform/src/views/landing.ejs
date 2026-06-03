@@ -266,6 +266,87 @@
     .context-menu-item.danger { color: #d32f2f; }
     .context-menu-item.danger:hover { background: #ffeaea; }
 
+    /* Shared With Me Section */
+    .shared-list {
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    .shared-list-header {
+      display: grid;
+      grid-template-columns: 1fr 150px 140px 120px;
+      padding: 10px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid #eee;
+    }
+    .shared-item {
+      display: grid;
+      grid-template-columns: 1fr 150px 140px 120px;
+      align-items: center;
+      padding: 10px 16px;
+      cursor: pointer;
+      text-decoration: none;
+      color: inherit;
+      border-bottom: 1px solid #f5f5f5;
+      transition: background 0.15s;
+    }
+    .shared-item:last-child { border-bottom: none; }
+    .shared-item:hover { background: #f8f9fa; }
+    .shared-item:focus { outline: 2px solid #0082C9; outline-offset: -2px; }
+    .shared-item-name-cell {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .shared-item-icon { font-size: 20px; flex-shrink: 0; }
+    .shared-item-name {
+      font-size: 14px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .shared-item-owner {
+      font-size: 13px;
+      color: #666;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .shared-item-permissions {
+      font-size: 12px;
+      color: #555;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .perm-badge {
+      background: #e8f4fd;
+      color: #0069a8;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .shared-item-date {
+      font-size: 13px;
+      color: #666;
+    }
+
+    @media (max-width: 768px) {
+      .shared-list-header { display: none; }
+      .shared-item { grid-template-columns: 1fr; gap: 4px; }
+      .shared-item-owner { font-size: 12px; }
+      .shared-item-permissions { font-size: 11px; }
+      .shared-item-date { font-size: 12px; }
+    }
+
     /* Placeholder Section */
     .placeholder-grid {
       display: flex;
@@ -504,6 +585,20 @@
           <span></span>
         </div>
         <div id="browser-grid"></div>
+      </div>
+    </section>
+
+    <!-- Shared With Me Section -->
+    <section class="section" id="shared-section" aria-label="Files shared with me">
+      <h2 class="section-heading">Shared with me</h2>
+      <div class="shared-list" role="list" aria-label="Shared files list">
+        <div class="shared-list-header" aria-hidden="true">
+          <span>Name</span>
+          <span>Owner</span>
+          <span>Shared</span>
+          <span>Permissions</span>
+        </div>
+        <div id="shared-grid" role="group"></div>
       </div>
     </section>
 
@@ -1156,12 +1251,74 @@
     }
 
     // ========================================
+    // Shared With Me Section
+    // ========================================
+    async function loadSharedFiles() {
+      try {
+        var res = await fetch('/api/shares/my-files');
+        if (res.status === 401) { window.location.href = '/login'; return; }
+        if (!res.ok) { throw new Error('Failed to load shared files'); }
+        var files = await res.json();
+        renderSharedFiles(files);
+      } catch (err) {
+        var grid = document.getElementById('shared-grid');
+        grid.innerHTML = '<div class="empty-state">Unable to load shared files</div>';
+      }
+    }
+
+    function renderSharedFiles(files) {
+      var grid = document.getElementById('shared-grid');
+      var section = document.getElementById('shared-section');
+      grid.innerHTML = '';
+
+      if (!files || files.length === 0) {
+        grid.innerHTML = '<div class="empty-state">No files have been shared with you yet</div>';
+        return;
+      }
+
+      files.forEach(function(file) {
+        var link = document.createElement('a');
+        link.href = '/editor/' + file.fileId;
+        link.target = '_blank';
+        link.className = 'shared-item';
+        link.setAttribute('role', 'listitem');
+        link.setAttribute('aria-label', 'Open shared file: ' + escapeHtml(file.fileName) + ', owned by ' + escapeHtml(file.ownerDisplayName));
+
+        var icon = getFileIcon(file.fileType);
+        var permBadges = getPermissionBadges(file.permissions);
+        var sharedDate = formatDate(file.sharedAt);
+
+        link.innerHTML =
+          '<div class="shared-item-name-cell">' +
+            '<span class="shared-item-icon" aria-hidden="true">' + icon + '</span>' +
+            '<span class="shared-item-name">' + escapeHtml(file.fileName) + '</span>' +
+          '</div>' +
+          '<span class="shared-item-owner">' + escapeHtml(file.ownerDisplayName) + '</span>' +
+          '<span class="shared-item-date">' + sharedDate + '</span>' +
+          '<span class="shared-item-permissions">' + permBadges + '</span>';
+
+        grid.appendChild(link);
+      });
+    }
+
+    function getPermissionBadges(permissions) {
+      var badges = [];
+      if (permissions.edit) badges.push('<span class="perm-badge">Edit</span>');
+      if (permissions.comment) badges.push('<span class="perm-badge">Comment</span>');
+      if (permissions.review) badges.push('<span class="perm-badge">Review</span>');
+      if (permissions.download) badges.push('<span class="perm-badge">Download</span>');
+      if (badges.length === 0) badges.push('<span class="perm-badge">View</span>');
+      return badges.join('');
+    }
+
+    // ========================================
     // Initialize on page load
     // ========================================
     (function init() {
       renderRecentSection(recentFiles);
       renderBreadcrumb();
       renderBrowserSection(initialItems);
+      loadSharedFiles();
     })();
   </script>
 </body>

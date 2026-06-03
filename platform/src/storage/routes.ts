@@ -5,6 +5,7 @@ import { requireAuth } from '../auth/middleware.js';
 import * as storage from './s3.js';
 import * as metadata from './metadata.js';
 import { getTemplate, isValidDocumentType } from './templates.js';
+import { getShare, deleteSharesForFile } from '../sharing/service.js';
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 
@@ -184,9 +185,14 @@ fileRouter.get('/:id/download', async (req, res) => {
       res.status(404).json({ error: 'Not found' });
       return;
     }
+
+    // If user is not owner, check share record for download permission
     if (file.userId !== userId) {
-      res.status(403).json({ error: 'Forbidden' });
-      return;
+      const share = await getShare(file.id, userId);
+      if (!share || !share.permissions.download) {
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+      }
     }
 
     const stream = await storage.download(file.s3Key);
@@ -260,6 +266,7 @@ fileRouter.delete('/:id', async (req, res) => {
 
     await metadata.deleteFile(file.id);
     await storage.remove(file.s3Key);
+    await deleteSharesForFile(file.id);
     res.status(204).end();
   } catch (err) {
     console.error('File delete error:', err);

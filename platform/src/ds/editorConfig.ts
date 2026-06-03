@@ -1,14 +1,16 @@
 import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
 import type { FileRecord } from '../storage/metadata.js';
+import type { SharePermissions } from '../sharing/service.js';
 
-interface EditorConfigParams {
+export interface EditorConfigParams {
   file: FileRecord;
   user: { id: string; name: string };
+  sharePermissions?: SharePermissions;
 }
 
 export function buildEditorConfig(params: EditorConfigParams): object {
-  const { file, user } = params;
+  const { file, user, sharePermissions } = params;
   const platformBaseUrl = config.PLATFORM_BASE_URL;
 
   // Sign a short-lived token for DS to fetch the file
@@ -26,6 +28,26 @@ export function buildEditorConfig(params: EditorConfigParams): object {
 
   const documentType = getDocumentType(fileExtension);
 
+  // Determine permissions: use share permissions if present, otherwise default owner permissions
+  const permissions = sharePermissions
+    ? {
+        edit: sharePermissions.edit,
+        download: sharePermissions.download,
+        print: sharePermissions.print,
+        copy: sharePermissions.copy,
+        comment: sharePermissions.comment,
+        review: sharePermissions.review,
+        chat: sharePermissions.chat,
+        fillForms: sharePermissions.fillForms,
+      }
+    : {
+        edit: true,
+        download: true,
+      };
+
+  // Set mode to "view" when share permissions are present and edit is false
+  const mode = sharePermissions && !sharePermissions.edit ? 'view' : 'edit';
+
   const editorConfig = {
     documentType,
     document: {
@@ -33,13 +55,10 @@ export function buildEditorConfig(params: EditorConfigParams): object {
       title: file.name,
       fileType: fileExtension,
       key: documentKey,
-      permissions: {
-        edit: true,
-        download: true,
-      },
+      permissions,
     },
     editorConfig: {
-      mode: 'edit',
+      mode,
       callbackUrl: `${platformBaseUrl}/api/ds/callback?fileId=${file.id}`,
       user: {
         id: user.id,
