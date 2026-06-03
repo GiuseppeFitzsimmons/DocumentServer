@@ -28,6 +28,26 @@ runcmd:
   # Install Docker
   - curl -fsSL https://get.docker.com | sh
 
+  # Wait for the Hetzner volume to be mounted (automount via hcloud agent)
+  - |
+    echo "Waiting for Hetzner volume mount..."
+    for i in $(seq 1 30); do
+      VOLUME_MOUNT=$(find /mnt -maxdepth 1 -name "HC_Volume_*" -type d 2>/dev/null | head -1)
+      if [ -n "$VOLUME_MOUNT" ] && mountpoint -q "$VOLUME_MOUNT"; then
+        break
+      fi
+      sleep 5
+    done
+    if [ -z "$VOLUME_MOUNT" ]; then
+      echo "ERROR: Hetzner volume not found after 150s, falling back to local storage"
+      mkdir -p /mnt/pg-data/postgresql
+    else
+      echo "Found volume at $VOLUME_MOUNT"
+      ln -sfn "$VOLUME_MOUNT" /mnt/pg-data
+      mkdir -p /mnt/pg-data/postgresql
+    fi
+    chown -R 999:999 /mnt/pg-data/postgresql
+
   # Clone the repo
   - git clone ${repo_url} /opt/euro-office/repo
 

@@ -47,7 +47,7 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      - /mnt/pg-data/postgresql:/var/lib/postgresql/data
     environment:
       POSTGRES_DB: portal
       POSTGRES_USER: portal
@@ -62,5 +62,4 @@ services:
 volumes:
   caddy_data:
   caddy_config:
-  pg_data:
   redis_data:

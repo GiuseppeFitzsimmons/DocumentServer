@@ -47,6 +47,24 @@ resource "hcloud_firewall" "euro_office" {
   }
 }
 
+# --- Persistent Volume for PostgreSQL ---
+
+resource "hcloud_volume" "pg_data" {
+  name     = "euro-office-pg-data"
+  size     = 10 # GB
+  location = var.location
+  format   = "ext4"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  labels = {
+    project = "euro-office"
+    role    = "database"
+  }
+}
+
 # --- Server ---
 
 resource "hcloud_server" "euro_office" {
@@ -81,4 +99,10 @@ resource "hcloud_server" "euro_office" {
   }
 }
 
+# --- Attach volume to server ---
 
+resource "hcloud_volume_attachment" "pg_data" {
+  volume_id = hcloud_volume.pg_data.id
+  server_id = hcloud_server.euro_office.id
+  automount = true
+}
