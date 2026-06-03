@@ -27,6 +27,9 @@
 	handle /ConvertService.ashx {
 		reverse_proxy documentserver:80
 	}
+	handle /printfile/* {
+		reverse_proxy documentserver:80
+	}
 
 	# Versioned DS assets (e.g. /9.3.1-hash/web-apps/...)
 	@versioned path_regexp ^/[0-9]+\.[0-9]+\.[0-9]+
