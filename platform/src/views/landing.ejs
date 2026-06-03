@@ -707,7 +707,7 @@
     async function handleCreateDocument(type) {
       try {
         var result = await FileManagerAPI.createDocument(type, currentFolderId);
-        window.location.href = '/editor/' + result.id;
+        window.open('/editor/' + result.id, '_blank');
       } catch (err) {
         showError(err.message || 'Failed to create document');
       }
