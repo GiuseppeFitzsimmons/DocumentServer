@@ -726,6 +726,7 @@
       files.forEach(function(file) {
         var card = document.createElement('a');
         card.href = '/editor/' + file.id;
+        card.target = '_blank';
         card.className = 'card document-card';
         card.innerHTML =
           '<div class="document-card-icon">' + getFileIcon(file.mimeType) + '</div>' +
@@ -794,7 +795,7 @@
         if (type === 'folder') {
           navigateToFolder(item.id, item.name);
         } else {
-          window.location.href = '/editor/' + item.id;
+          window.open('/editor/' + item.id, '_blank');
         }
       };
 
