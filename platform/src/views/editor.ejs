@@ -19,6 +19,11 @@
       max-height: 80vh;
       box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: auto;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
     }
     #sharing-dialog::backdrop {
       background: rgba(0, 0, 0, 0.4);
@@ -540,7 +545,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             fileId: fileId,
-            inviteeId: selectedUser.id,
+            email: selectedUser.email,
             permissions: permissions
           })
         }).then(function(res) {
