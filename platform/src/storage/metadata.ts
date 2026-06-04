@@ -188,6 +188,39 @@ export async function moveFolder(id: string, parentId: string | null): Promise<F
   return mapFolderRow(rows[0]);
 }
 
+/**
+ * Walks parentId links upward from the given folder to build the ancestor chain.
+ * Returns an array ordered from root (topmost ancestor) to the given folder itself.
+ */
+export async function getAncestors(folderId: string): Promise<FolderRecord[]> {
+  const ancestors: FolderRecord[] = [];
+  let current: string | null = folderId;
+
+  while (current !== null) {
+    const folder = await getFolder(current);
+    if (!folder) {
+      break;
+    }
+    ancestors.push(folder);
+    current = folder.parentId;
+  }
+
+  // Reverse so the array goes from root to the given folder
+  return ancestors.reverse();
+}
+
+/**
+ * Fetches all folders belonging to a user. Used by the tree builder to assemble
+ * the full folder hierarchy in memory.
+ */
+export async function getAllUserFolders(userId: string): Promise<FolderRecord[]> {
+  const { rows } = await pool.query(
+    'SELECT * FROM folders WHERE user_id = $1',
+    [userId]
+  );
+  return rows.map(mapFolderRow);
+}
+
 
 // --- Row mappers ---
 

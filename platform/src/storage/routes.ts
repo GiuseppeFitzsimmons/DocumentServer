@@ -360,6 +360,115 @@ folderRouter.post('/', async (req, res) => {
   }
 });
 
+// GET /api/folders/tree
+folderRouter.get('/tree', async (req, res) => {
+  try {
+    const userId = req.session.userId!;
+    const folders = await metadata.getAllUserFolders(userId);
+
+    // Build a nested tree structure in memory
+    interface FolderTreeNode {
+      id: string;
+      name: string;
+      parentId: string | null;
+      children: FolderTreeNode[];
+    }
+
+    const nodeMap = new Map<string, FolderTreeNode>();
+
+    // Create a node for each folder
+    for (const folder of folders) {
+      nodeMap.set(folder.id, {
+        id: folder.id,
+        name: folder.name,
+        parentId: folder.parentId,
+        children: [],
+      });
+    }
+
+    // Assemble the tree by linking children to parents
+    const roots: FolderTreeNode[] = [];
+    for (const node of nodeMap.values()) {
+      if (node.parentId && nodeMap.has(node.parentId)) {
+        nodeMap.get(node.parentId)!.children.push(node);
+      } else {
+        roots.push(node);
+      }
+    }
+
+    res.json(roots);
+  } catch (err) {
+    console.error('Folder tree error:', err);
+    res.status(500).json({ error: 'Storage error' });
+  }
+});
+
+// GET /api/folders/:id/children
+folderRouter.get('/:id/children', async (req, res) => {
+  try {
+    const userId = req.session.userId!;
+    const folderId = req.params.id;
+
+    // If "root", return top-level folders (parentId = null)
+    if (folderId === 'root') {
+      const contents = await metadata.listFolder(userId, null);
+      res.json(contents.folders);
+      return;
+    }
+
+    // Verify folder exists and belongs to user
+    const folder = await metadata.getFolder(folderId);
+    if (!folder) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    if (folder.userId !== userId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    // Get direct child folders
+    const contents = await metadata.listFolder(userId, folderId);
+    res.json(contents.folders);
+  } catch (err) {
+    console.error('Folder children error:', err);
+    res.status(500).json({ error: 'Storage error' });
+  }
+});
+
+// GET /api/folders/:id/ancestors
+folderRouter.get('/:id/ancestors', async (req, res) => {
+  try {
+    const userId = req.session.userId!;
+    const folderId = req.params.id;
+
+    // Verify folder exists and belongs to user
+    const folder = await metadata.getFolder(folderId);
+    if (!folder) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    if (folder.userId !== userId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    // Get the ancestor chain (ordered from root ancestor to the folder itself)
+    const ancestors = await metadata.getAncestors(folderId);
+
+    // Map to { id, name } objects and prepend the root entry
+    const result = [
+      { id: null, name: 'My Files' },
+      ...ancestors.map(a => ({ id: a.id, name: a.name })),
+    ];
+
+    res.json(result);
+  } catch (err) {
+    console.error('Folder ancestors error:', err);
+    res.status(500).json({ error: 'Storage error' });
+  }
+});
+
 // GET /api/folders/:id
 folderRouter.get('/:id', async (req, res) => {
   try {

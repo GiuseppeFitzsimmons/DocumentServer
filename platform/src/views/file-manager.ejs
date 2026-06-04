@@ -102,7 +102,63 @@
     }
     .breadcrumb button:hover { background: #e8f4fc; }
     .breadcrumb .separator { color: #999; margin: 0 2px; }
-    .breadcrumb .current { color: #333; font-weight: 500; }
+    .breadcrumb .current { color: #333; font-weight: bold; }
+    .breadcrumb-ellipsis {
+      position: relative;
+      display: inline-flex;
+    }
+    .breadcrumb-ellipsis-btn {
+      background: none;
+      border: none;
+      color: #0082C9;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .breadcrumb-ellipsis-btn:hover { background: #e8f4fc; }
+    .breadcrumb-dropdown {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      margin-top: 4px;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      min-width: 150px;
+      z-index: 150;
+      overflow: hidden;
+    }
+    .breadcrumb-dropdown.open { display: block; }
+    .breadcrumb-dropdown button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 8px 16px;
+      border: none;
+      background: none;
+      font-size: 14px;
+      cursor: pointer;
+      color: #333;
+    }
+    .breadcrumb-dropdown button:hover { background: #f5f5f5; }
+    .breadcrumb-up-btn {
+      background: none;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      cursor: pointer;
+      padding: 4px 8px;
+      font-size: 14px;
+      color: #333;
+      margin-right: 8px;
+      display: inline-flex;
+      align-items: center;
+    }
+    .breadcrumb-up-btn:hover { background: #f0f0f0; }
+    .breadcrumb-up-btn:disabled { opacity: 0.4; cursor: default; }
+    .breadcrumb-up-btn:disabled:hover { background: none; }
     .file-list-container {
       flex: 1;
       padding: 16px 24px;
@@ -304,9 +360,116 @@
       cursor: pointer;
       border-bottom: 1px solid #f0f0f0;
     }
-    .folder-picker-item:hover { background: #f5f5f5; }
+    .folder-picker-item:hover:not([disabled]) { background: #f5f5f5; }
     .folder-picker-item.selected { background: #e8f4fc; font-weight: 500; }
     .folder-picker-item:last-child { border-bottom: none; }
+    .folder-picker-item.disabled { opacity: 0.4; cursor: not-allowed; }
+    .folder-picker-item.current-location { background: #fff3cd; }
+    /* Tree Sidebar */
+    .content-wrapper {
+      display: flex;
+      flex-direction: row;
+      flex: 1;
+      overflow: hidden;
+    }
+    .tree-sidebar {
+      flex-shrink: 0;
+      width: 240px;
+      overflow-y: auto;
+      border-right: 1px solid #e0e0e0;
+      background: #fafafa;
+      position: relative;
+      transition: width 0.2s ease, padding 0.2s ease;
+    }
+    .tree-sidebar.collapsed {
+      width: 0;
+      overflow: hidden;
+      padding: 0;
+      border: none;
+    }
+    .tree-container {
+      padding: 8px 0;
+    }
+    .tree-node {
+      user-select: none;
+    }
+    .tree-node-content {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      padding: 6px 12px;
+      cursor: pointer;
+      border-radius: 4px;
+      margin: 1px 4px;
+      gap: 6px;
+    }
+    .tree-node-content:hover {
+      background: #f0f0f0;
+    }
+    .tree-node-content.active {
+      background: #e8f4fc;
+      font-weight: 500;
+    }
+    .tree-node-arrow {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      font-size: 10px;
+      flex-shrink: 0;
+      transition: transform 0.15s ease;
+      color: #666;
+    }
+    .tree-node-arrow.expanded {
+      transform: rotate(90deg);
+    }
+    .tree-node-arrow.hidden {
+      visibility: hidden;
+    }
+    .tree-node-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    .tree-node-children {
+      padding-left: 16px;
+    }
+    .tree-node-loading {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 12px 6px 34px;
+      font-size: 12px;
+      color: #999;
+    }
+    .tree-node-loading::before {
+      content: '';
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border: 2px solid #e0e0e0;
+      border-top-color: #0082C9;
+      border-radius: 50%;
+      animation: treeSpinner 0.6s linear infinite;
+      margin-right: 8px;
+    }
+    @keyframes treeSpinner {
+      to { transform: rotate(360deg); }
+    }
+    .tree-sidebar-resize {
+      width: 4px;
+      height: 100%;
+      cursor: col-resize;
+      position: absolute;
+      right: 0;
+      top: 0;
+    }
+    .tree-sidebar-resize:hover {
+      background: rgba(0, 130, 201, 0.3);
+    }
     /* Responsive */
     @media (max-width: 768px) {
       .toolbar { padding: 10px 16px; }
@@ -340,24 +503,134 @@
       <div class="progress-bar"><div class="progress-bar-fill" id="progressFill"></div></div>
       <span class="progress-text" id="progressText">0%</span>
     </div>
+    <button class="btn-secondary" id="sidebarToggleBtn" title="Toggle sidebar" aria-label="Toggle folder tree sidebar">☰</button>
   </div>
 
   <nav class="breadcrumb" id="breadcrumb"></nav>
 
-  <div class="file-list-container" id="fileListContainer"></div>
+  <div class="content-wrapper">
+    <aside class="tree-sidebar" id="treeSidebar" aria-label="Folder tree">
+      <div class="tree-container" role="tree" id="treeContainer" aria-label="Folder hierarchy">
+      </div>
+      <div class="tree-sidebar-resize" id="sidebarResize" aria-hidden="true"></div>
+    </aside>
+    <div class="file-list-container" id="fileListContainer"></div>
+  </div>
 
   <div class="modal-overlay" id="modalOverlay">
     <div class="modal" id="modalContent"></div>
   </div>
 
   <script>
-    // --- State ---
-    var state = {
-      currentFolderId: null,
-      breadcrumb: [{ id: null, name: 'My Files' }],
-      items: [],
-      loading: false
-    };
+    // --- StateManager ---
+    var state = (function() {
+      // Event listener registry
+      var listeners = {};
+
+      // Restore persisted values from localStorage with safe fallbacks
+      var persistedCollapsed = false;
+      var persistedWidth = 240;
+      try {
+        var storedCollapsed = localStorage.getItem('fm-sidebar-collapsed');
+        if (storedCollapsed === 'true') persistedCollapsed = true;
+        var storedWidth = localStorage.getItem('fm-sidebar-width');
+        if (storedWidth !== null) {
+          var parsed = parseInt(storedWidth, 10);
+          if (!isNaN(parsed) && parsed > 0) persistedWidth = parsed;
+        }
+      } catch (e) {
+        // localStorage unavailable — use defaults
+      }
+
+      var mgr = {
+        // State properties (backward-compatible)
+        currentFolderId: null,
+        breadcrumb: [{ id: null, name: 'My Files' }],
+        items: [],
+        loading: false,
+
+        // New state properties
+        expandedNodes: new Set(),
+        sidebarCollapsed: persistedCollapsed,
+        sidebarWidth: persistedWidth,
+        treeData: new Map(),
+
+        // Event system
+        on: function(event, handler) {
+          if (!listeners[event]) listeners[event] = [];
+          listeners[event].push(handler);
+        },
+
+        emit: function(event, data) {
+          var handlers = listeners[event];
+          if (handlers) {
+            handlers.forEach(function(fn) { fn(data); });
+          }
+        },
+
+        // Navigation method
+        navigateTo: function(folderId, folderName) {
+          mgr.currentFolderId = folderId;
+          if (folderId === null) {
+            mgr.breadcrumb = [{ id: null, name: 'My Files' }];
+          } else if (folderName) {
+            // Check if we're navigating to an ancestor already in the breadcrumb
+            var existingIndex = -1;
+            for (var i = 0; i < mgr.breadcrumb.length; i++) {
+              if (mgr.breadcrumb[i].id === folderId) {
+                existingIndex = i;
+                break;
+              }
+            }
+            if (existingIndex >= 0) {
+              // Truncate breadcrumb to that point
+              mgr.breadcrumb = mgr.breadcrumb.slice(0, existingIndex + 1);
+            } else {
+              // Push new segment
+              mgr.breadcrumb.push({ id: folderId, name: folderName });
+            }
+          }
+          mgr.emit('navigate', { folderId: folderId, folderName: folderName });
+        },
+
+        // Tree node toggle method
+        toggleNode: function(folderId) {
+          var expanded;
+          if (mgr.expandedNodes.has(folderId)) {
+            mgr.expandedNodes.delete(folderId);
+            expanded = false;
+          } else {
+            mgr.expandedNodes.add(folderId);
+            expanded = true;
+          }
+          mgr.emit('tree-toggle', { folderId: folderId, expanded: expanded });
+        },
+
+        // Sidebar toggle method
+        toggleSidebar: function() {
+          mgr.sidebarCollapsed = !mgr.sidebarCollapsed;
+          try {
+            localStorage.setItem('fm-sidebar-collapsed', mgr.sidebarCollapsed ? 'true' : 'false');
+          } catch (e) {
+            // localStorage unavailable
+          }
+          mgr.emit('sidebar-toggle', { collapsed: mgr.sidebarCollapsed });
+        },
+
+        // Sidebar width setter
+        setSidebarWidth: function(px) {
+          mgr.sidebarWidth = px;
+          try {
+            localStorage.setItem('fm-sidebar-width', String(px));
+          } catch (e) {
+            // localStorage unavailable
+          }
+          mgr.emit('tree-update', { sidebarWidth: px });
+        }
+      };
+
+      return mgr;
+    })();
 
     // --- Toast Notifications (Task 8.1) ---
     function showToast(message, type) {
@@ -539,20 +812,74 @@
       attachDragListeners();
     }
 
-    // --- Breadcrumb (Task 4.2) ---
+    // --- Breadcrumb (Task 5.1) ---
+    function navigateUp() {
+      if (state.breadcrumb.length < 2) return;
+      navigateToBreadcrumb(state.breadcrumb.length - 2);
+    }
+
     function renderBreadcrumb() {
       var el = document.getElementById('breadcrumb');
       var html = '';
-      state.breadcrumb.forEach(function(seg, i) {
-        if (i > 0) html += '<span class="separator">/</span>';
-        if (i === state.breadcrumb.length - 1) {
-          html += '<span class="current">' + escapeHtml(seg.name) + '</span>';
-        } else {
-          html += '<button data-folder-id="' + (seg.id || '') + '" onclick="navigateToBreadcrumb(' + i + ')">' + escapeHtml(seg.name) + '</button>';
+      var segments = state.breadcrumb;
+
+      // Up button: visible and enabled when not at root, disabled when at root
+      var isAtRoot = state.currentFolderId === null;
+      html += '<button class="breadcrumb-up-btn" id="upBtn" aria-label="Navigate to parent folder"' + (isAtRoot ? ' disabled' : '') + ' onclick="navigateUp()">↑</button>';
+
+      if (segments.length <= 3) {
+        // No truncation needed: render all segments normally
+        segments.forEach(function(seg, i) {
+          if (i > 0) html += '<span class="separator">/</span>';
+          if (i === segments.length - 1) {
+            html += '<span class="current">' + escapeHtml(seg.name) + '</span>';
+          } else {
+            html += '<button data-folder-id="' + (seg.id || '') + '" onclick="navigateToBreadcrumb(' + i + ')">' + escapeHtml(seg.name) + '</button>';
+          }
+        });
+      } else {
+        // Truncation mode: show first, ellipsis with dropdown, last
+        // First segment (My Files) - always clickable
+        html += '<button data-folder-id="' + (segments[0].id || '') + '" onclick="navigateToBreadcrumb(0)">' + escapeHtml(segments[0].name) + '</button>';
+        html += '<span class="separator">/</span>';
+
+        // Ellipsis button with dropdown for intermediate segments
+        html += '<span class="breadcrumb-ellipsis">';
+        html += '<button class="breadcrumb-ellipsis-btn" onclick="toggleBreadcrumbDropdown(event)" aria-label="Show hidden path segments">...</button>';
+        html += '<div class="breadcrumb-dropdown" id="breadcrumbDropdown">';
+        for (var i = 1; i < segments.length - 1; i++) {
+          html += '<button data-folder-id="' + (segments[i].id || '') + '" onclick="navigateToBreadcrumb(' + i + ')">' + escapeHtml(segments[i].name) + '</button>';
         }
-      });
+        html += '</div>';
+        html += '</span>';
+
+        html += '<span class="separator">/</span>';
+
+        // Last segment (current folder) - bold, non-clickable
+        html += '<span class="current">' + escapeHtml(segments[segments.length - 1].name) + '</span>';
+      }
+
       el.innerHTML = html;
       attachBreadcrumbDropListeners();
+
+      // Update page title (Requirement 8.4)
+      var activeName = segments[segments.length - 1].name;
+      document.title = activeName + ' \u2014 File Manager \u2014 Euro-Office';
+    }
+
+    function toggleBreadcrumbDropdown(event) {
+      event.stopPropagation();
+      var dropdown = document.getElementById('breadcrumbDropdown');
+      if (dropdown) {
+        dropdown.classList.toggle('open');
+      }
+    }
+
+    function closeBreadcrumbDropdown() {
+      var dropdown = document.getElementById('breadcrumbDropdown');
+      if (dropdown) {
+        dropdown.classList.remove('open');
+      }
     }
 
     // --- Navigation (Task 4.1) ---
@@ -563,6 +890,7 @@
           state.breadcrumb.push({ id: folderId, name: folderName });
         }
         renderBreadcrumb();
+        state.emit('navigate', { folderId: folderId, folderName: folderName });
         var items = await FileManagerAPI.listFolder(folderId);
         renderItems(items);
       } catch (err) {
@@ -572,6 +900,7 @@
           state.currentFolderId = null;
           state.breadcrumb = [{ id: null, name: 'My Files' }];
           renderBreadcrumb();
+          state.emit('navigate', { folderId: null, folderName: 'My Files' });
           var rootItems = await FileManagerAPI.listFolder(null);
           renderItems(rootItems);
         }
@@ -583,6 +912,7 @@
       state.breadcrumb = state.breadcrumb.slice(0, index + 1);
       state.currentFolderId = seg.id;
       renderBreadcrumb();
+      state.emit('navigate', { folderId: seg.id, folderName: seg.name });
       FileManagerAPI.listFolder(seg.id).then(function(items) {
         renderItems(items);
       }).catch(function(err) {
@@ -625,8 +955,19 @@
       document.getElementById('newMenu').classList.remove('open');
       var name = prompt('Enter folder name:');
       if (!name || !name.trim()) return;
-      FileManagerAPI.createFolder(name.trim(), state.currentFolderId).then(function() {
+      FileManagerAPI.createFolder(name.trim(), state.currentFolderId).then(function(folder) {
         refreshCurrentFolder();
+        // Update tree sidebar cache: add new folder under current parent
+        var parentKey = state.currentFolderId;
+        var cachedChildren = state.treeData.get(parentKey);
+        if (cachedChildren && folder) {
+          cachedChildren.push(folder);
+          state.treeData.set(parentKey, cachedChildren);
+        }
+        // Re-render tree if the parent is expanded or it's root level
+        if (parentKey === null || state.expandedNodes.has(parentKey)) {
+          TreeSidebar.renderTree();
+        }
         showSuccess('Folder created');
       }).catch(function(err) {
         showError(err.message || 'Failed to create folder');
@@ -688,6 +1029,17 @@
       moveBtn.textContent = 'Move';
       moveBtn.onclick = function() { closeContextMenu(); startMove(id, name, type); };
       menu.appendChild(moveBtn);
+
+      // Move to Parent button — only when not at root
+      if (state.currentFolderId !== null) {
+        var moveToParentBtn = document.createElement('button');
+        moveToParentBtn.textContent = 'Move to Parent';
+        moveToParentBtn.onclick = function() {
+          closeContextMenu();
+          moveToParent(id, type);
+        };
+        menu.appendChild(moveToParentBtn);
+      }
 
       var deleteBtn = document.createElement('button');
       deleteBtn.className = 'danger';
@@ -770,6 +1122,18 @@
           if (tbody && tbody.children.length === 0) {
             renderItems([]);
           }
+          // Update tree sidebar cache: remove deleted folder
+          if (type === 'folder') {
+            var parentKey = state.currentFolderId;
+            var cachedChildren = state.treeData.get(parentKey);
+            if (cachedChildren) {
+              state.treeData.set(parentKey, cachedChildren.filter(function(f) { return f.id !== id; }));
+            }
+            // Remove from expandedNodes and treeData cache
+            state.expandedNodes.delete(id);
+            state.treeData.delete(id);
+            TreeSidebar.renderTree();
+          }
           showSuccess('Deleted successfully');
         } catch (err) {
           if (err.status === 409) {
@@ -790,22 +1154,32 @@
 
       document.getElementById('cancelMove').onclick = function() { overlay.classList.remove('open'); };
 
-      var selectedFolderId = null;
+      var selectedFolderId = undefined; // undefined = nothing selected, null = root selected
+
       try {
-        var rootItems = await FileManagerAPI.listFolder(null);
-        var folders = rootItems.filter(function(item) {
-          // Exclude the folder itself from the picker to prevent self-move
-          return item.type === 'folder' && item.id !== itemId;
-        });
+        var tree = await apiRequest('GET', '/api/folders/tree');
         var listEl = document.getElementById('folderPickerList');
 
-        var html = '<button class="folder-picker-item" data-folder-id="__root__">📁 My Files (root)</button>';
-        folders.forEach(function(f) {
-          html += '<button class="folder-picker-item" data-folder-id="' + f.id + '">📁 ' + escapeHtml(f.name) + '</button>';
-        });
+        // Build set of disabled folder IDs
+        var disabledIds = new Set();
+        // Disable current parent (no-op prevention)
+        if (state.currentFolderId) disabledIds.add(state.currentFolderId);
+        // When moving a folder, disable self and all descendants
+        if (itemType === 'folder') {
+          disabledIds.add(itemId);
+          addDescendants(tree, itemId, disabledIds);
+        }
+
+        // Render tree
+        var html = '';
+        // Root option
+        var rootDisabled = state.currentFolderId === null; // disable root if we're already at root
+        html += '<button class="folder-picker-item' + (rootDisabled ? ' disabled' : '') + '" data-folder-id="__root__"' + (rootDisabled ? ' disabled' : '') + '>📁 My Files (root)</button>';
+        html += renderPickerTree(tree, 0, disabledIds, itemId);
         listEl.innerHTML = html;
 
-        listEl.querySelectorAll('.folder-picker-item').forEach(function(btn) {
+        // Wire click handlers
+        listEl.querySelectorAll('.folder-picker-item:not([disabled])').forEach(function(btn) {
           btn.addEventListener('click', function() {
             listEl.querySelectorAll('.folder-picker-item').forEach(function(b) { b.classList.remove('selected'); });
             btn.classList.add('selected');
@@ -821,6 +1195,7 @@
       }
 
       document.getElementById('confirmMove').onclick = async function() {
+        if (selectedFolderId === undefined) return;
         overlay.classList.remove('open');
         try {
           if (itemType === 'folder') {
@@ -839,6 +1214,61 @@
           showError(err.message || 'Move failed');
         }
       };
+    }
+
+    function renderPickerTree(nodes, depth, disabledIds, currentItemId) {
+      var html = '';
+      nodes.forEach(function(node) {
+        var isDisabled = disabledIds.has(node.id);
+        var isCurrent = node.id === currentItemId;
+        var indent = (depth * 20 + 16) + 'px';
+        html += '<button class="folder-picker-item' + (isDisabled ? ' disabled' : '') + (isCurrent ? ' current-location' : '') + '" data-folder-id="' + node.id + '" style="padding-left:' + indent + '"' + (isDisabled ? ' disabled' : '') + '>📁 ' + escapeHtml(node.name) + (isCurrent ? ' <span style="color:#999;font-size:12px">(current)</span>' : '') + '</button>';
+        if (node.children && node.children.length > 0) {
+          html += renderPickerTree(node.children, depth + 1, disabledIds, currentItemId);
+        }
+      });
+      return html;
+    }
+
+    function addDescendants(tree, folderId, set) {
+      tree.forEach(function(node) {
+        if (node.id === folderId) {
+          collectAllIds(node.children, set);
+        } else if (node.children && node.children.length > 0) {
+          addDescendants(node.children, folderId, set);
+        }
+      });
+    }
+
+    function collectAllIds(nodes, set) {
+      nodes.forEach(function(node) {
+        set.add(node.id);
+        if (node.children && node.children.length > 0) {
+          collectAllIds(node.children, set);
+        }
+      });
+    }
+
+    // --- Move to Parent (Task 7.1) ---
+    async function moveToParent(id, type) {
+      if (state.breadcrumb.length < 2) return;
+      var parentFolderId = state.breadcrumb[state.breadcrumb.length - 2].id;
+      try {
+        if (type === 'folder') {
+          await FileManagerAPI.moveFolder(id, parentFolderId);
+        } else {
+          await FileManagerAPI.moveFile(id, parentFolderId);
+        }
+        var row = document.querySelector('tr[data-id="' + id + '"]');
+        if (row) row.remove();
+        var tbody = document.querySelector('.file-list tbody');
+        if (tbody && tbody.children.length === 0) {
+          renderItems([]);
+        }
+        showSuccess('Moved to parent folder');
+      } catch (err) {
+        showError(err.message || 'Move to parent failed');
+      }
     }
 
     // --- DragManager: Initialization and drag start/end handlers (Task 6.1) ---
@@ -1028,6 +1458,454 @@
       });
     }
 
+    // --- TreeSidebar: Rendering and Lazy-Loading (Task 4.2) ---
+    var TreeSidebar = (function() {
+      var treeContainer = document.getElementById('treeContainer');
+
+      function init() {
+        // Fetch top-level folders and render the root tree nodes
+        fetchChildren('root').then(function(children) {
+          state.treeData.set(null, children);
+          renderTree();
+          highlightActive();
+        }).catch(function(err) {
+          treeContainer.innerHTML = '<div class="tree-node-loading" style="color:#d32f2f">Failed to load folders</div>';
+        });
+
+        // Listen for navigation events to auto-expand ancestors and update highlight
+        state.on('navigate', function(data) {
+          if (data.folderId) {
+            // Auto-expand ancestors in the tree
+            expandAncestors(data.folderId).then(function() {
+              highlightActive();
+            });
+          } else {
+            highlightActive();
+          }
+        });
+
+        // Initialize keyboard navigation
+        initKeyboardNav();
+      }
+
+      function fetchChildren(folderId) {
+        var url = '/api/folders/' + (folderId === 'root' ? 'root' : encodeURIComponent(folderId)) + '/children';
+        return apiRequest('GET', url);
+      }
+
+      function renderTree() {
+        treeContainer.innerHTML = '';
+        var rootChildren = state.treeData.get(null) || [];
+        rootChildren.forEach(function(folder) {
+          renderNode(folder, treeContainer);
+        });
+        // Set tabindex="0" on the first root node's content for roving tabindex
+        var firstContent = treeContainer.querySelector('.tree-node-content');
+        if (firstContent) {
+          firstContent.setAttribute('tabindex', '0');
+        }
+      }
+
+      function renderNode(folder, parentEl) {
+        var isExpanded = state.expandedNodes.has(folder.id);
+
+        var node = document.createElement('div');
+        node.className = 'tree-node';
+        node.setAttribute('data-folder-id', folder.id);
+        node.setAttribute('role', 'treeitem');
+        node.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+
+        var content = document.createElement('div');
+        content.className = 'tree-node-content';
+        content.setAttribute('tabindex', '-1');
+        if (folder.id === state.currentFolderId) {
+          content.classList.add('active');
+        }
+
+        var arrow = document.createElement('span');
+        arrow.className = 'tree-node-arrow';
+        if (isExpanded) arrow.classList.add('expanded');
+        arrow.textContent = '\u25B6';
+
+        var name = document.createElement('span');
+        name.className = 'tree-node-name';
+        name.textContent = folder.name;
+
+        content.appendChild(arrow);
+        content.appendChild(name);
+        node.appendChild(content);
+
+        var childrenContainer = document.createElement('div');
+        childrenContainer.className = 'tree-node-children';
+        childrenContainer.setAttribute('role', 'group');
+        childrenContainer.style.display = isExpanded ? '' : 'none';
+        node.appendChild(childrenContainer);
+
+        // If expanded and we have cached children, render them
+        if (isExpanded) {
+          var cachedChildren = state.treeData.get(folder.id);
+          if (cachedChildren) {
+            cachedChildren.forEach(function(child) {
+              renderNode(child, childrenContainer);
+            });
+          }
+        }
+
+        parentEl.appendChild(node);
+
+        // Event: click on arrow to expand/collapse
+        arrow.addEventListener('click', function(e) {
+          e.stopPropagation();
+          if (isExpanded) {
+            collapseNode(folder.id);
+          } else {
+            expandNode(folder.id);
+          }
+        });
+
+        // Event: click on content (not arrow) to navigate
+        content.addEventListener('click', function(e) {
+          if (e.target === arrow) return;
+          navigateToFolder(folder.id, folder.name);
+        });
+      }
+
+      function expandNode(folderId) {
+        var node = treeContainer.querySelector('[data-folder-id="' + folderId + '"]');
+        if (!node) return;
+
+        var childrenContainer = node.querySelector('.tree-node-children');
+        var arrowEl = node.querySelector('.tree-node-arrow');
+
+        // Check if we have cached data
+        var cachedChildren = state.treeData.get(folderId);
+        if (cachedChildren) {
+          // Use cached data
+          state.expandedNodes.add(folderId);
+          node.setAttribute('aria-expanded', 'true');
+          arrowEl.classList.add('expanded');
+          childrenContainer.innerHTML = '';
+          cachedChildren.forEach(function(child) {
+            renderNode(child, childrenContainer);
+          });
+          childrenContainer.style.display = '';
+          highlightActive();
+          return;
+        }
+
+        // Show loading spinner
+        var loadingEl = document.createElement('div');
+        loadingEl.className = 'tree-node-loading';
+        loadingEl.textContent = 'Loading...';
+        childrenContainer.innerHTML = '';
+        childrenContainer.appendChild(loadingEl);
+        childrenContainer.style.display = '';
+        arrowEl.classList.add('expanded');
+
+        // Fetch children
+        fetchChildren(folderId).then(function(children) {
+          state.treeData.set(folderId, children);
+          state.expandedNodes.add(folderId);
+          node.setAttribute('aria-expanded', 'true');
+
+          childrenContainer.innerHTML = '';
+          children.forEach(function(child) {
+            renderNode(child, childrenContainer);
+          });
+          highlightActive();
+        }).catch(function(err) {
+          childrenContainer.innerHTML = '<div class="tree-node-loading" style="color:#d32f2f">Failed to load</div>';
+          arrowEl.classList.remove('expanded');
+        });
+      }
+
+      function collapseNode(folderId) {
+        var node = treeContainer.querySelector('[data-folder-id="' + folderId + '"]');
+        if (!node) return;
+
+        state.expandedNodes.delete(folderId);
+        node.setAttribute('aria-expanded', 'false');
+
+        var arrowEl = node.querySelector('.tree-node-arrow');
+        arrowEl.classList.remove('expanded');
+
+        var childrenContainer = node.querySelector('.tree-node-children');
+        childrenContainer.style.display = 'none';
+      }
+
+      function highlightActive() {
+        // Remove active class from all nodes
+        var allContents = treeContainer.querySelectorAll('.tree-node-content.active');
+        allContents.forEach(function(el) {
+          el.classList.remove('active');
+        });
+
+        // Add active to the matching node
+        if (state.currentFolderId) {
+          var activeNode = treeContainer.querySelector('[data-folder-id="' + state.currentFolderId + '"]');
+          if (activeNode) {
+            var activeContent = activeNode.querySelector(':scope > .tree-node-content');
+            if (activeContent) {
+              activeContent.classList.add('active');
+            }
+          }
+        }
+      }
+
+      // --- Keyboard Navigation (Task 4.3) ---
+      function getVisibleNodes() {
+        var nodes = [];
+        var allTreeNodes = treeContainer.querySelectorAll('.tree-node');
+        allTreeNodes.forEach(function(node) {
+          // A node is visible if none of its ancestor .tree-node-children containers are hidden
+          var parent = node.parentElement;
+          var visible = true;
+          while (parent && parent !== treeContainer) {
+            if (parent.classList.contains('tree-node-children') && parent.style.display === 'none') {
+              visible = false;
+              break;
+            }
+            parent = parent.parentElement;
+          }
+          if (visible) {
+            nodes.push(node);
+          }
+        });
+        return nodes;
+      }
+
+      function setFocusToNode(node) {
+        // Remove tabindex="0" from the currently focused node
+        var current = treeContainer.querySelector('.tree-node-content[tabindex="0"]');
+        if (current) {
+          current.setAttribute('tabindex', '-1');
+        }
+        // Set tabindex="0" on the new node and focus it
+        var content = node.querySelector(':scope > .tree-node-content');
+        if (content) {
+          content.setAttribute('tabindex', '0');
+          content.focus();
+        }
+      }
+
+      function getParentNode(node) {
+        // Walk up to find the parent .tree-node
+        var parentChildren = node.parentElement;
+        if (parentChildren && parentChildren.classList.contains('tree-node-children')) {
+          var parentNode = parentChildren.parentElement;
+          if (parentNode && parentNode.classList.contains('tree-node')) {
+            return parentNode;
+          }
+        }
+        return null;
+      }
+
+      function initKeyboardNav() {
+        treeContainer.addEventListener('keydown', function(e) {
+          var focusedContent = treeContainer.querySelector('.tree-node-content[tabindex="0"]');
+          if (!focusedContent) return;
+
+          var focusedNode = focusedContent.parentElement;
+          if (!focusedNode || !focusedNode.classList.contains('tree-node')) return;
+
+          var folderId = focusedNode.getAttribute('data-folder-id');
+          var visibleNodes = getVisibleNodes();
+          var currentIndex = visibleNodes.indexOf(focusedNode);
+
+          switch (e.key) {
+            case 'ArrowDown':
+              e.preventDefault();
+              if (currentIndex < visibleNodes.length - 1) {
+                setFocusToNode(visibleNodes[currentIndex + 1]);
+              }
+              break;
+
+            case 'ArrowUp':
+              e.preventDefault();
+              if (currentIndex > 0) {
+                setFocusToNode(visibleNodes[currentIndex - 1]);
+              }
+              break;
+
+            case 'ArrowRight':
+              e.preventDefault();
+              var isExpanded = focusedNode.getAttribute('aria-expanded') === 'true';
+              if (!isExpanded) {
+                // Expand the collapsed node
+                expandNode(folderId);
+              } else {
+                // Move to first child if expanded
+                var childrenContainer = focusedNode.querySelector(':scope > .tree-node-children');
+                if (childrenContainer) {
+                  var firstChild = childrenContainer.querySelector('.tree-node');
+                  if (firstChild) {
+                    setFocusToNode(firstChild);
+                  }
+                }
+              }
+              break;
+
+            case 'ArrowLeft':
+              e.preventDefault();
+              var isNodeExpanded = focusedNode.getAttribute('aria-expanded') === 'true';
+              if (isNodeExpanded) {
+                // Collapse the expanded node
+                collapseNode(folderId);
+              } else {
+                // Move to parent node
+                var parentNode = getParentNode(focusedNode);
+                if (parentNode) {
+                  setFocusToNode(parentNode);
+                }
+              }
+              break;
+
+            case 'Enter':
+              e.preventDefault();
+              var folderName = focusedNode.querySelector(':scope > .tree-node-content .tree-node-name');
+              var name = folderName ? folderName.textContent : '';
+              navigateToFolder(folderId, name);
+              break;
+          }
+        });
+      }
+
+      // --- Ancestor expansion for sidebar sync (Task 9.1) ---
+      async function expandAncestors(folderId) {
+        try {
+          var ancestors = await apiRequest('GET', '/api/folders/' + encodeURIComponent(folderId) + '/ancestors');
+          // ancestors is [{id: null, name: "My Files"}, {id: "...", name: "..."}, ...]
+          // We need to expand each ancestor that has a non-null id (skip root)
+          for (var i = 0; i < ancestors.length; i++) {
+            var ancestorId = ancestors[i].id;
+            if (ancestorId && !state.expandedNodes.has(ancestorId)) {
+              await expandNodeAsync(ancestorId);
+            }
+          }
+        } catch (err) {
+          // If ancestors fetch fails, just highlight what we have
+          highlightActive();
+        }
+      }
+
+      function expandNodeAsync(folderId) {
+        return new Promise(function(resolve) {
+          var node = treeContainer.querySelector('[data-folder-id="' + folderId + '"]');
+          if (!node) { resolve(); return; }
+
+          var cachedChildren = state.treeData.get(folderId);
+          if (cachedChildren) {
+            // Already cached — expand synchronously
+            expandNode(folderId);
+            resolve();
+            return;
+          }
+
+          // Need to fetch — expand and resolve when done
+          var childrenContainer = node.querySelector('.tree-node-children');
+          var arrowEl = node.querySelector('.tree-node-arrow');
+
+          var loadingEl = document.createElement('div');
+          loadingEl.className = 'tree-node-loading';
+          loadingEl.textContent = 'Loading...';
+          childrenContainer.innerHTML = '';
+          childrenContainer.appendChild(loadingEl);
+          childrenContainer.style.display = '';
+          arrowEl.classList.add('expanded');
+
+          fetchChildren(folderId).then(function(children) {
+            state.treeData.set(folderId, children);
+            state.expandedNodes.add(folderId);
+            node.setAttribute('aria-expanded', 'true');
+            childrenContainer.innerHTML = '';
+            children.forEach(function(child) {
+              renderNode(child, childrenContainer);
+            });
+            resolve();
+          }).catch(function() {
+            childrenContainer.innerHTML = '';
+            arrowEl.classList.remove('expanded');
+            resolve();
+          });
+        });
+      }
+
+      return {
+        init: init,
+        renderTree: renderTree,
+        renderNode: renderNode,
+        expandNode: expandNode,
+        collapseNode: collapseNode,
+        highlightActive: highlightActive
+      };
+    })();
+
+    // --- Sidebar Toggle & Resize (Task 4.4) ---
+    (function() {
+      var sidebar = document.getElementById('treeSidebar');
+      var resizeHandle = document.getElementById('sidebarResize');
+      var toggleBtn = document.getElementById('sidebarToggleBtn');
+
+      // Toggle button click
+      toggleBtn.addEventListener('click', function() {
+        state.toggleSidebar();
+        if (state.sidebarCollapsed) {
+          sidebar.classList.add('collapsed');
+        } else {
+          sidebar.classList.remove('collapsed');
+          sidebar.style.width = state.sidebarWidth + 'px';
+        }
+      });
+
+      // Resize drag behavior
+      var dragging = false;
+      var startX = 0;
+      var startWidth = 0;
+
+      resizeHandle.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        dragging = true;
+        startX = e.clientX;
+        startWidth = sidebar.offsetWidth;
+        document.body.style.userSelect = 'none';
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+      });
+
+      function onMouseMove(e) {
+        if (!dragging) return;
+        var delta = e.clientX - startX;
+        var newWidth = startWidth + delta;
+        var maxWidth = window.innerWidth * 0.5;
+        newWidth = Math.max(180, Math.min(newWidth, maxWidth));
+        sidebar.style.width = newWidth + 'px';
+        state.setSidebarWidth(newWidth);
+      }
+
+      function onMouseUp() {
+        dragging = false;
+        document.body.style.userSelect = '';
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+      }
+
+      // Listen for state events
+      state.on('sidebar-toggle', function(data) {
+        if (data.collapsed) {
+          sidebar.classList.add('collapsed');
+        } else {
+          sidebar.classList.remove('collapsed');
+          sidebar.style.width = state.sidebarWidth + 'px';
+        }
+      });
+
+      state.on('tree-update', function(data) {
+        if (data.sidebarWidth) {
+          sidebar.style.width = data.sidebarWidth + 'px';
+        }
+      });
+    })();
+
     // --- Close menus on outside click ---
     document.addEventListener('click', function(e) {
       var newMenu = document.getElementById('newMenu');
@@ -1036,6 +1914,7 @@
         newMenu.classList.remove('open');
       }
       closeContextMenu();
+      closeBreadcrumbDropdown();
     });
 
     // --- Page Load (Task 3.4) ---
@@ -1044,6 +1923,14 @@
       initDragAndDrop();
       renderBreadcrumb();
       renderItems(initialItems);
+      TreeSidebar.init();
+
+      // Apply persisted sidebar state
+      var sidebar = document.getElementById('treeSidebar');
+      sidebar.style.width = state.sidebarWidth + 'px';
+      if (state.sidebarCollapsed) {
+        sidebar.classList.add('collapsed');
+      }
     })();
   </script>
 </body>
