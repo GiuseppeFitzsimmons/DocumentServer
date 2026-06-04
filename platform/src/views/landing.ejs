@@ -140,28 +140,6 @@
       cursor: pointer;
     }
     .btn-toolbar:hover { background: #006ba3; }
-    .breadcrumb {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      margin-bottom: 12px;
-      font-size: 13px;
-      flex-wrap: wrap;
-    }
-    .breadcrumb-segment {
-      color: #0082C9;
-      cursor: pointer;
-      text-decoration: none;
-      padding: 2px 4px;
-      border-radius: 3px;
-    }
-    .breadcrumb-segment:hover { background: #e8f4fd; }
-    .breadcrumb-segment.active {
-      color: #333;
-      cursor: default;
-      font-weight: 500;
-    }
-    .breadcrumb-separator { color: #999; }
 
     /* File Tree Browser */
     .file-tree-container {
@@ -604,7 +582,6 @@
         <button class="btn-toolbar" id="btn-upload" onclick="handleUploadClick()">Upload</button>
         <button class="btn-toolbar" id="btn-new-folder" onclick="handleNewFolder()">New Folder</button>
       </div>
-      <div class="breadcrumb" id="breadcrumb"></div>
       <div class="file-tree-container" id="fileTreeContainer">
         <div class="file-tree" id="fileTree" role="tree" aria-label="File browser"></div>
       </div>
@@ -856,15 +833,9 @@
     }
 
     // ========================================
-    // Breadcrumb
+    // Breadcrumb (removed — section title is sufficient)
     // ========================================
     function renderBreadcrumb() {
-      var container = document.getElementById('breadcrumb');
-      container.innerHTML = '';
-      var link = document.createElement('span');
-      link.className = 'breadcrumb-segment active';
-      link.textContent = 'My files';
-      container.appendChild(link);
       document.title = 'My files \u2014 Euro-Office';
     }
 
@@ -1225,16 +1196,32 @@
         }
         removeFromCache(data.id, data.type);
         fileTreeCache.delete(targetFolderId);
-        if (expandedFolders.has(targetFolderId)) {
+        // Refresh the target level
+        if (targetFolderId === null || expandedFolders.has(targetFolderId)) {
           var freshData = await FileManagerAPI.listFolder(targetFolderId);
           fileTreeCache.set(targetFolderId, freshData);
         }
         renderFileTree();
-        showSuccess('Moved successfully');
+        showSuccess('Moved to ' + (targetFolderId === null ? 'root' : 'folder'));
       } catch(err) {
         showError(err.message || 'Failed to move');
       }
     }
+
+    // Drop to root: dropping on the tree container background moves item to root
+    (function initRootDrop() {
+      var treeContainer = document.getElementById('fileTreeContainer');
+      treeContainer.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+      });
+      treeContainer.addEventListener('drop', function(e) {
+        // Only handle if the drop target is the container itself (not a folder item)
+        if (e.target.closest('.file-tree-item')) return;
+        e.preventDefault();
+        handleTreeDrop(e, null);
+      });
+    })();
 
     // ========================================
     // Cache Helpers
