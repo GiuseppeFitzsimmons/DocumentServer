@@ -509,6 +509,112 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* Tree Sidebar */
+    .browser-with-sidebar {
+      display: flex;
+      gap: 0;
+    }
+    .tree-sidebar {
+      flex-shrink: 0;
+      width: 220px;
+      overflow-y: auto;
+      border-right: 1px solid #eee;
+      background: #fafafa;
+      border-radius: 8px 0 0 8px;
+      position: relative;
+      transition: width 0.2s ease;
+      max-height: 500px;
+    }
+    .tree-sidebar.collapsed {
+      width: 0;
+      overflow: hidden;
+      border: none;
+    }
+    .tree-sidebar-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid #eee;
+    }
+    .tree-sidebar-toggle {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      color: #666;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .tree-sidebar-toggle:hover { background: #eee; }
+    .tree-container { padding: 4px 0; }
+    .tree-node { user-select: none; }
+    .tree-node-content {
+      display: flex;
+      align-items: center;
+      padding: 5px 10px;
+      cursor: pointer;
+      border-radius: 4px;
+      margin: 1px 4px;
+      gap: 4px;
+      font-size: 13px;
+    }
+    .tree-node-content:hover { background: #f0f0f0; }
+    .tree-node-content.active { background: #e8f4fd; font-weight: 500; }
+    .tree-node-arrow {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 14px;
+      height: 14px;
+      font-size: 9px;
+      flex-shrink: 0;
+      transition: transform 0.15s ease;
+      color: #666;
+    }
+    .tree-node-arrow.expanded { transform: rotate(90deg); }
+    .tree-node-arrow.hidden { visibility: hidden; }
+    .tree-node-icon { font-size: 14px; flex-shrink: 0; }
+    .tree-node-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tree-node-children { padding-left: 14px; }
+    .tree-node-loading {
+      padding: 5px 10px 5px 28px;
+      font-size: 12px;
+      color: #999;
+    }
+    .browser-list-wrapper {
+      flex: 1;
+      min-width: 0;
+    }
+    /* Up Button */
+    .breadcrumb-up-btn {
+      background: none;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      cursor: pointer;
+      padding: 2px 8px;
+      font-size: 13px;
+      color: #333;
+      margin-right: 8px;
+    }
+    .breadcrumb-up-btn:hover { background: #f0f0f0; }
+    .breadcrumb-up-btn:disabled { opacity: 0.3; cursor: default; }
+    .breadcrumb-up-btn:disabled:hover { background: none; }
+    /* Move to Parent in context menu */
+    .context-menu-item.move-parent { color: #555; }
+    /* Hierarchical picker */
+    .modal-folder-item.disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+    .modal-folder-item.current-location { background: #fff3cd; }
+
     /* Responsive */
     @media (max-width: 768px) {
       .main-content { padding: 16px; }
@@ -573,18 +679,29 @@
     <section class="section" id="browser-section">
       <div class="browser-toolbar">
         <h2 class="browser-heading">My files</h2>
+        <button class="btn-toolbar" id="btn-sidebar-toggle" onclick="toggleSidebar()" title="Toggle folder tree">☰</button>
         <button class="btn-toolbar" id="btn-upload" onclick="handleUploadClick()">Upload</button>
         <button class="btn-toolbar" id="btn-new-folder" onclick="handleNewFolder()">New Folder</button>
       </div>
       <div class="breadcrumb" id="breadcrumb"></div>
-      <div class="browser-list" id="browser-list">
-        <div class="browser-list-header">
-          <span>Name</span>
-          <span>Size</span>
-          <span>Modified</span>
-          <span></span>
+      <div class="browser-with-sidebar">
+        <aside class="tree-sidebar" id="treeSidebar" role="tree" aria-label="Folder tree">
+          <div class="tree-sidebar-header">
+            <span>Folders</span>
+          </div>
+          <div class="tree-container" id="treeContainer"></div>
+        </aside>
+        <div class="browser-list-wrapper">
+          <div class="browser-list" id="browser-list">
+            <div class="browser-list-header">
+              <span>Name</span>
+              <span>Size</span>
+              <span>Modified</span>
+              <span></span>
+            </div>
+            <div id="browser-grid"></div>
+          </div>
         </div>
-        <div id="browser-grid"></div>
       </div>
     </section>
 
@@ -881,6 +998,7 @@
         '<div class="context-menu">' +
           '<button class="context-menu-item" onclick="event.stopPropagation(); handleRename(\'' + item.id + '\', \'' + type + '\', this)">Rename</button>' +
           '<button class="context-menu-item" onclick="event.stopPropagation(); handleMove(\'' + item.id + '\', \'' + type + '\')">Move</button>' +
+          (currentFolderId !== null ? '<button class="context-menu-item move-parent" onclick="event.stopPropagation(); moveToParent(\'' + item.id + '\', \'' + type + '\')">Move to Parent</button>' : '') +
           '<button class="context-menu-item danger" onclick="event.stopPropagation(); handleDelete(\'' + item.id + '\', \'' + type + '\', \'' + escapeHtml(item.name) + '\')">Delete</button>' +
         '</div>';
 
@@ -941,6 +1059,7 @@
 
         renderBreadcrumb();
         renderBrowserSection(items);
+        expandAncestorsInTree(folderId);
       } catch (err) {
         if (err.message && err.message.includes('404')) {
           // Folder not found - navigate back to root
@@ -964,6 +1083,16 @@
       var container = document.getElementById('breadcrumb');
       container.innerHTML = '';
 
+      // Up button
+      var upBtn = document.createElement('button');
+      upBtn.className = 'breadcrumb-up-btn';
+      upBtn.textContent = '↑';
+      upBtn.title = 'Go to parent folder';
+      upBtn.setAttribute('aria-label', 'Navigate to parent folder');
+      upBtn.disabled = currentFolderId === null;
+      upBtn.onclick = navigateUp;
+      container.appendChild(upBtn);
+
       breadcrumbSegments.forEach(function(segment, idx) {
         if (idx > 0) {
           var sep = document.createElement('span');
@@ -984,6 +1113,10 @@
         }
         container.appendChild(link);
       });
+
+      // Update page title
+      var activeName = breadcrumbSegments[breadcrumbSegments.length - 1].name;
+      document.title = activeName + ' \u2014 Euro-Office';
     }
 
     // ========================================
@@ -1027,6 +1160,18 @@
         showSuccess('Folder created');
         var items = await FileManagerAPI.listFolder(currentFolderId);
         renderBrowserSection(items);
+        // Update tree cache
+        var cachedChildren = treeCache.get(currentFolderId);
+        if (cachedChildren) {
+          // Invalidate cache and re-fetch to get the new folder
+          treeCache.delete(currentFolderId);
+        }
+        // Re-render tree
+        try {
+          var newChildren = await fetchTreeChildren(currentFolderId || 'root');
+          treeCache.set(currentFolderId, newChildren);
+          renderTree();
+        } catch(e) {}
       } catch (err) {
         showError(err.message || 'Failed to create folder');
       }
@@ -1117,6 +1262,18 @@
         }
         var item = document.querySelector('[data-id="' + id + '"]');
         if (item) item.remove();
+
+        // Update tree if folder was deleted
+        if (type === 'folder') {
+          var cachedChildren = treeCache.get(currentFolderId);
+          if (cachedChildren) {
+            treeCache.set(currentFolderId, cachedChildren.filter(function(f) { return f.id !== id; }));
+          }
+          expandedNodes.delete(id);
+          treeCache.delete(id);
+          renderTree();
+        }
+
         showSuccess('Deleted successfully');
 
         // Check if browser grid is now empty
@@ -1136,25 +1293,30 @@
       document.querySelectorAll('.context-menu.visible').forEach(function(m) { m.classList.remove('visible'); });
 
       try {
-        // Load root folder contents for the picker
-        var rootItems = await FileManagerAPI.listFolder(null);
-        showFolderPicker(rootItems.folders || [], id, type);
+        var tree = await fetch('/api/folders/tree').then(function(r) { return r.json(); });
+        showFolderPicker(tree, id, type);
       } catch (err) {
         showError(err.message || 'Failed to load folders');
       }
     }
 
-    function showFolderPicker(folders, itemId, itemType) {
+    function showFolderPicker(tree, itemId, itemType) {
       var overlay = document.createElement('div');
       overlay.className = 'modal-overlay';
 
-      var selectedFolderId = null;
+      var selectedFolderId = undefined;
 
-      var folderListHtml = '<div class="modal-folder-item" data-folder-id="__root__">📁 My files (root)</div>';
-      folders.forEach(function(f) {
-        if (f.id === itemId) return; // Don't show the item itself as a target
-        folderListHtml += '<div class="modal-folder-item" data-folder-id="' + f.id + '">📁 ' + escapeHtml(f.name) + '</div>';
-      });
+      // Build disabled set
+      var disabledIds = new Set();
+      if (currentFolderId) disabledIds.add(currentFolderId);
+      if (itemType === 'folder') {
+        disabledIds.add(itemId);
+        addDescendantIds(tree, itemId, disabledIds);
+      }
+
+      var rootDisabled = currentFolderId === null;
+      var folderListHtml = '<div class="modal-folder-item' + (rootDisabled ? ' disabled' : '') + '" data-folder-id="__root__">📁 My files (root)</div>';
+      folderListHtml += renderPickerTreeHtml(tree, 0, disabledIds, itemId);
 
       overlay.innerHTML =
         '<div class="modal">' +
@@ -1168,8 +1330,7 @@
 
       document.body.appendChild(overlay);
 
-      // Selection handling
-      overlay.querySelectorAll('.modal-folder-item').forEach(function(el) {
+      overlay.querySelectorAll('.modal-folder-item:not(.disabled)').forEach(function(el) {
         el.onclick = function() {
           overlay.querySelectorAll('.modal-folder-item').forEach(function(i) { i.classList.remove('selected'); });
           el.classList.add('selected');
@@ -1180,10 +1341,7 @@
 
       overlay.querySelector('#modal-cancel').onclick = function() { overlay.remove(); };
       overlay.querySelector('#modal-confirm').onclick = async function() {
-        if (selectedFolderId === undefined) {
-          showError('Please select a folder');
-          return;
-        }
+        if (selectedFolderId === undefined) { showError('Please select a folder'); return; }
         overlay.remove();
         try {
           if (itemType === 'file') {
@@ -1194,8 +1352,6 @@
           var item = document.querySelector('[data-id="' + itemId + '"]');
           if (item) item.remove();
           showSuccess('Moved successfully');
-
-          // Check empty state
           var grid = document.getElementById('browser-grid');
           if (grid.querySelectorAll('.browser-item').length === 0) {
             grid.innerHTML = '<div class="empty-state">This folder is empty</div>';
@@ -1205,8 +1361,40 @@
         }
       };
 
-      // Close on overlay click
       overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+    }
+
+    function renderPickerTreeHtml(nodes, depth, disabledIds, currentItemId) {
+      var html = '';
+      nodes.forEach(function(node) {
+        var isDisabled = disabledIds.has(node.id);
+        var isCurrent = node.id === currentItemId;
+        var indent = (depth * 16 + 12) + 'px';
+        html += '<div class="modal-folder-item' + (isDisabled ? ' disabled' : '') + (isCurrent ? ' current-location' : '') + '" data-folder-id="' + node.id + '" style="padding-left:' + indent + '">📁 ' + escapeHtml(node.name) + (isCurrent ? ' <span style="color:#999;font-size:11px">(current)</span>' : '') + '</div>';
+        if (node.children && node.children.length > 0) {
+          html += renderPickerTreeHtml(node.children, depth + 1, disabledIds, currentItemId);
+        }
+      });
+      return html;
+    }
+
+    function addDescendantIds(tree, folderId, set) {
+      tree.forEach(function(node) {
+        if (node.id === folderId) {
+          collectIds(node.children || [], set);
+        } else if (node.children && node.children.length > 0) {
+          addDescendantIds(node.children, folderId, set);
+        }
+      });
+    }
+
+    function collectIds(nodes, set) {
+      nodes.forEach(function(node) {
+        set.add(node.id);
+        if (node.children && node.children.length > 0) {
+          collectIds(node.children, set);
+        }
+      });
     }
 
     // ========================================
@@ -1312,6 +1500,260 @@
     }
 
     // ========================================
+    // Tree Sidebar
+    // ========================================
+    var sidebarCollapsed = false;
+    try {
+      sidebarCollapsed = localStorage.getItem('fm-sidebar-collapsed') === 'true';
+    } catch(e) {}
+
+    function toggleSidebar() {
+      sidebarCollapsed = !sidebarCollapsed;
+      var sidebar = document.getElementById('treeSidebar');
+      if (sidebarCollapsed) {
+        sidebar.classList.add('collapsed');
+      } else {
+        sidebar.classList.remove('collapsed');
+      }
+      try { localStorage.setItem('fm-sidebar-collapsed', sidebarCollapsed ? 'true' : 'false'); } catch(e) {}
+    }
+
+    var treeCache = new Map(); // parentId -> children array
+    var expandedNodes = new Set();
+
+    async function initTreeSidebar() {
+      var sidebar = document.getElementById('treeSidebar');
+      if (sidebarCollapsed) sidebar.classList.add('collapsed');
+
+      try {
+        var children = await fetchTreeChildren('root');
+        treeCache.set(null, children);
+        renderTree();
+      } catch(err) {
+        document.getElementById('treeContainer').innerHTML = '<div class="tree-node-loading" style="color:#d32f2f">Failed to load</div>';
+      }
+    }
+
+    async function fetchTreeChildren(folderId) {
+      var url = '/api/folders/' + (folderId === 'root' ? 'root' : encodeURIComponent(folderId)) + '/children';
+      var res = await fetch(url);
+      if (!res.ok) throw new Error('Failed to fetch children');
+      return res.json();
+    }
+
+    function renderTree() {
+      var container = document.getElementById('treeContainer');
+      container.innerHTML = '';
+      var rootChildren = treeCache.get(null) || [];
+      rootChildren.forEach(function(folder) {
+        container.appendChild(createTreeNode(folder));
+      });
+      highlightActiveTreeNode();
+    }
+
+    function createTreeNode(folder) {
+      var isExpanded = expandedNodes.has(folder.id);
+
+      var node = document.createElement('div');
+      node.className = 'tree-node';
+      node.setAttribute('data-folder-id', folder.id);
+      node.setAttribute('role', 'treeitem');
+      node.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+
+      var content = document.createElement('div');
+      content.className = 'tree-node-content';
+      content.setAttribute('tabindex', '-1');
+      if (folder.id === currentFolderId) content.classList.add('active');
+
+      var arrow = document.createElement('span');
+      arrow.className = 'tree-node-arrow';
+      if (isExpanded) arrow.classList.add('expanded');
+      arrow.textContent = '\u25B6';
+
+      var icon = document.createElement('span');
+      icon.className = 'tree-node-icon';
+      icon.textContent = '📁';
+
+      var name = document.createElement('span');
+      name.className = 'tree-node-name';
+      name.textContent = folder.name;
+
+      content.appendChild(arrow);
+      content.appendChild(icon);
+      content.appendChild(name);
+      node.appendChild(content);
+
+      var childrenContainer = document.createElement('div');
+      childrenContainer.className = 'tree-node-children';
+      childrenContainer.setAttribute('role', 'group');
+      childrenContainer.style.display = isExpanded ? '' : 'none';
+      node.appendChild(childrenContainer);
+
+      if (isExpanded) {
+        var cached = treeCache.get(folder.id);
+        if (cached) {
+          cached.forEach(function(child) {
+            childrenContainer.appendChild(createTreeNode(child));
+          });
+        }
+      }
+
+      // Click arrow to expand/collapse
+      arrow.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (expandedNodes.has(folder.id)) {
+          collapseTreeNode(folder.id);
+        } else {
+          expandTreeNode(folder.id);
+        }
+      });
+
+      // Click content to navigate
+      content.addEventListener('click', function(e) {
+        if (e.target === arrow) return;
+        navigateToFolder(folder.id, folder.name);
+      });
+
+      return node;
+    }
+
+    async function expandTreeNode(folderId) {
+      var node = document.querySelector('.tree-node[data-folder-id="' + folderId + '"]');
+      if (!node) return;
+      var childrenContainer = node.querySelector('.tree-node-children');
+      var arrowEl = node.querySelector('.tree-node-arrow');
+
+      var cached = treeCache.get(folderId);
+      if (cached) {
+        expandedNodes.add(folderId);
+        node.setAttribute('aria-expanded', 'true');
+        arrowEl.classList.add('expanded');
+        childrenContainer.innerHTML = '';
+        cached.forEach(function(child) { childrenContainer.appendChild(createTreeNode(child)); });
+        childrenContainer.style.display = '';
+        highlightActiveTreeNode();
+        return;
+      }
+
+      // Show loading
+      childrenContainer.innerHTML = '<div class="tree-node-loading">Loading...</div>';
+      childrenContainer.style.display = '';
+      arrowEl.classList.add('expanded');
+
+      try {
+        var children = await fetchTreeChildren(folderId);
+        treeCache.set(folderId, children);
+        expandedNodes.add(folderId);
+        node.setAttribute('aria-expanded', 'true');
+        childrenContainer.innerHTML = '';
+        children.forEach(function(child) { childrenContainer.appendChild(createTreeNode(child)); });
+        highlightActiveTreeNode();
+      } catch(err) {
+        childrenContainer.innerHTML = '<div class="tree-node-loading" style="color:#d32f2f">Failed</div>';
+        arrowEl.classList.remove('expanded');
+      }
+    }
+
+    function collapseTreeNode(folderId) {
+      var node = document.querySelector('.tree-node[data-folder-id="' + folderId + '"]');
+      if (!node) return;
+      expandedNodes.delete(folderId);
+      node.setAttribute('aria-expanded', 'false');
+      node.querySelector('.tree-node-arrow').classList.remove('expanded');
+      node.querySelector('.tree-node-children').style.display = 'none';
+    }
+
+    function highlightActiveTreeNode() {
+      document.querySelectorAll('#treeContainer .tree-node-content.active').forEach(function(el) {
+        el.classList.remove('active');
+      });
+      if (currentFolderId) {
+        var activeNode = document.querySelector('.tree-node[data-folder-id="' + currentFolderId + '"]');
+        if (activeNode) {
+          var content = activeNode.querySelector(':scope > .tree-node-content');
+          if (content) content.classList.add('active');
+        }
+      }
+    }
+
+    // Auto-expand ancestors when navigating via browser grid
+    async function expandAncestorsInTree(folderId) {
+      if (!folderId) { highlightActiveTreeNode(); return; }
+      try {
+        var res = await fetch('/api/folders/' + encodeURIComponent(folderId) + '/ancestors');
+        if (!res.ok) { highlightActiveTreeNode(); return; }
+        var ancestors = await res.json();
+        for (var i = 0; i < ancestors.length; i++) {
+          var aid = ancestors[i].id;
+          if (aid && !expandedNodes.has(aid)) {
+            await expandTreeNodeAsync(aid);
+          }
+        }
+        highlightActiveTreeNode();
+      } catch(err) {
+        highlightActiveTreeNode();
+      }
+    }
+
+    function expandTreeNodeAsync(folderId) {
+      return new Promise(function(resolve) {
+        var node = document.querySelector('.tree-node[data-folder-id="' + folderId + '"]');
+        if (!node) { resolve(); return; }
+        var cached = treeCache.get(folderId);
+        if (cached) { expandTreeNode(folderId); resolve(); return; }
+        var childrenContainer = node.querySelector('.tree-node-children');
+        var arrowEl = node.querySelector('.tree-node-arrow');
+        childrenContainer.innerHTML = '<div class="tree-node-loading">Loading...</div>';
+        childrenContainer.style.display = '';
+        arrowEl.classList.add('expanded');
+        fetchTreeChildren(folderId).then(function(children) {
+          treeCache.set(folderId, children);
+          expandedNodes.add(folderId);
+          node.setAttribute('aria-expanded', 'true');
+          childrenContainer.innerHTML = '';
+          children.forEach(function(child) { childrenContainer.appendChild(createTreeNode(child)); });
+          resolve();
+        }).catch(function() { childrenContainer.innerHTML = ''; arrowEl.classList.remove('expanded'); resolve(); });
+      });
+    }
+
+    // ========================================
+    // Up Button & Move to Parent
+    // ========================================
+    function navigateUp() {
+      if (breadcrumbSegments.length < 2) return;
+      var parent = breadcrumbSegments[breadcrumbSegments.length - 2];
+      navigateToFolder(parent.id, parent.name);
+    }
+
+    async function moveToParent(id, type) {
+      if (breadcrumbSegments.length < 2) return;
+      var parentFolderId = breadcrumbSegments[breadcrumbSegments.length - 2].id;
+      try {
+        if (type === 'folder') {
+          await FileManagerAPI.moveFolder(id, parentFolderId);
+        } else {
+          await FileManagerAPI.moveFile(id, parentFolderId);
+        }
+        var item = document.querySelector('[data-id="' + id + '"]');
+        if (item) item.remove();
+        var grid = document.getElementById('browser-grid');
+        if (grid.querySelectorAll('.browser-item').length === 0) {
+          grid.innerHTML = '<div class="empty-state">This folder is empty</div>';
+        }
+        // Update tree cache
+        var cachedChildren = treeCache.get(currentFolderId);
+        if (cachedChildren && type === 'folder') {
+          treeCache.set(currentFolderId, cachedChildren.filter(function(f) { return f.id !== id; }));
+          renderTree();
+        }
+        showSuccess('Moved to parent folder');
+      } catch(err) {
+        showError(err.message || 'Move to parent failed');
+      }
+    }
+
+    // ========================================
     // Initialize on page load
     // ========================================
     (function init() {
@@ -1319,6 +1761,7 @@
       renderBreadcrumb();
       renderBrowserSection(initialItems);
       loadSharedFiles();
+      initTreeSidebar();
     })();
   </script>
 </body>
