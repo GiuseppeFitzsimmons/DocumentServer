@@ -8,9 +8,295 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { height: 100%; overflow: hidden; }
     #editor-container { width: 100%; height: 100%; }
+
+    /* Sharing Dialog Styles */
+    #sharing-dialog {
+      border: none;
+      border-radius: 8px;
+      padding: 0;
+      width: 480px;
+      max-width: 90vw;
+      max-height: 80vh;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    #sharing-dialog::backdrop {
+      background: rgba(0, 0, 0, 0.4);
+    }
+    .sharing-dialog-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    .sharing-dialog-header h2 {
+      font-size: 18px;
+      font-weight: 600;
+      margin: 0;
+    }
+    .sharing-dialog-close {
+      background: none;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+      line-height: 1;
+    }
+    .sharing-dialog-close:hover {
+      background: #f0f0f0;
+    }
+    .sharing-dialog-close:focus-visible {
+      outline: 2px solid #0066cc;
+      outline-offset: 2px;
+    }
+    .sharing-dialog-body {
+      padding: 20px;
+      overflow-y: auto;
+      max-height: calc(80vh - 120px);
+    }
+    .sharing-search-section {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      margin-bottom: 20px;
+      position: relative;
+    }
+    .sharing-search-wrapper {
+      flex: 1;
+      position: relative;
+    }
+    .sharing-search-input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .sharing-search-input:focus {
+      outline: none;
+      border-color: #0066cc;
+      box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.2);
+    }
+    .sharing-autocomplete {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      margin-top: 4px;
+      max-height: 200px;
+      overflow-y: auto;
+      z-index: 10;
+      display: none;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    .sharing-autocomplete.visible {
+      display: block;
+    }
+    .sharing-autocomplete-item {
+      padding: 8px 12px;
+      cursor: pointer;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .sharing-autocomplete-item:last-child {
+      border-bottom: none;
+    }
+    .sharing-autocomplete-item:hover,
+    .sharing-autocomplete-item:focus {
+      background: #f5f5f5;
+      outline: none;
+    }
+    .sharing-autocomplete-item .autocomplete-name {
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .sharing-autocomplete-item .autocomplete-email {
+      font-size: 12px;
+      color: #666;
+    }
+    .sharing-permission-select {
+      padding: 8px 12px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+      background: #fff;
+      min-width: 130px;
+    }
+    .sharing-permission-select:focus {
+      outline: none;
+      border-color: #0066cc;
+      box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.2);
+    }
+    .sharing-add-btn {
+      padding: 8px 16px;
+      background: #0066cc;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .sharing-add-btn:hover {
+      background: #0052a3;
+    }
+    .sharing-add-btn:focus-visible {
+      outline: 2px solid #0066cc;
+      outline-offset: 2px;
+    }
+    .sharing-add-btn:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .sharing-list-section h3 {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #333;
+    }
+    .sharing-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .sharing-list-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .sharing-list-item:last-child {
+      border-bottom: none;
+    }
+    .sharing-user-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .sharing-user-name {
+      font-size: 14px;
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .sharing-user-email {
+      font-size: 12px;
+      color: #666;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .sharing-permission-badge {
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      background: #e8f0fe;
+      color: #1a73e8;
+      margin: 0 12px;
+      white-space: nowrap;
+    }
+    .sharing-remove-btn {
+      background: none;
+      border: 1px solid #dc3545;
+      color: #dc3545;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .sharing-remove-btn:hover {
+      background: #dc3545;
+      color: #fff;
+    }
+    .sharing-remove-btn:focus-visible {
+      outline: 2px solid #dc3545;
+      outline-offset: 2px;
+    }
+    .sharing-loading {
+      display: none;
+      text-align: center;
+      padding: 16px;
+    }
+    .sharing-loading.visible {
+      display: block;
+    }
+    .sharing-spinner {
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      border: 3px solid #e0e0e0;
+      border-top-color: #0066cc;
+      border-radius: 50%;
+      animation: sharing-spin 0.8s linear infinite;
+    }
+    @keyframes sharing-spin {
+      to { transform: rotate(360deg); }
+    }
+    .sharing-error {
+      display: none;
+      padding: 10px 14px;
+      margin-bottom: 12px;
+      background: #fdecea;
+      color: #c62828;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    .sharing-error.visible {
+      display: block;
+    }
   </style>
 </head>
 <body>
+<% if (isOwner) { %>
+  <dialog id="sharing-dialog" role="dialog" aria-labelledby="sharing-dialog-title" aria-modal="true">
+    <div class="sharing-dialog-header">
+      <h2 id="sharing-dialog-title">Share Document</h2>
+      <button class="sharing-dialog-close" aria-label="Close sharing dialog" id="sharing-dialog-close-btn">&times;</button>
+    </div>
+    <div class="sharing-dialog-body">
+      <div class="sharing-error" id="sharing-error" role="alert" aria-live="polite"></div>
+
+      <div class="sharing-search-section">
+        <div class="sharing-search-wrapper">
+          <label for="sharing-search-input" class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);">Search users by name or email</label>
+          <input
+            type="text"
+            id="sharing-search-input"
+            class="sharing-search-input"
+            placeholder="Search users by name or email..."
+            autocomplete="off"
+            aria-label="Search users by name or email"
+            aria-autocomplete="list"
+            aria-controls="sharing-autocomplete-list"
+            aria-expanded="false"
+          />
+          <div id="sharing-autocomplete-list" class="sharing-autocomplete" role="listbox" aria-label="User search results"></div>
+        </div>
+        <select id="sharing-permission-select" class="sharing-permission-select" aria-label="Permission level">
+          <option value="full">Full Access</option>
+          <option value="edit">Edit</option>
+          <option value="comment">Comment Only</option>
+          <option value="view">View Only</option>
+        </select>
+        <button id="sharing-add-btn" class="sharing-add-btn" disabled aria-label="Add user to share">Add</button>
+      </div>
+
+      <div class="sharing-loading" id="sharing-loading" aria-live="polite" aria-label="Loading">
+        <div class="sharing-spinner" role="status"><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);">Loading...</span></div>
+      </div>
+
+      <div class="sharing-list-section">
+        <h3 id="sharing-list-heading">Current Shares</h3>
+        <ul class="sharing-list" id="sharing-list" role="list" aria-labelledby="sharing-list-heading"></ul>
+      </div>
+    </div>
+  </dialog>
+<% } %>
   <div id="editor-container"></div>
   <script src="<%= dsUrl %>/web-apps/apps/api/documents/api.js"></script>
   <script>
@@ -45,10 +331,306 @@
         }).catch(function(err) {
           alert(err.message || 'Rename failed');
         });
+      },
+      onRequestUsers: function() {
+        fetch('/api/shares/file/<%= fileId %>').then(function(res) {
+          if (!res.ok) throw new Error('Failed to fetch users');
+          return res.json();
+        }).then(function(data) {
+          var users = data.map(function(share) {
+            return { id: share.userId || share.id, name: share.name || share.displayName, email: share.email };
+          });
+          docEditor.setUsers({ users: users });
+        }).catch(function() {
+          docEditor.setUsers({ users: [] });
+        });
       }
     };
 
-    new DocsAPI.DocEditor('editor-container', config);
+<% if (isOwner) { %>
+    config.events.onRequestSharingSettings = function() {
+      document.getElementById('sharing-dialog').showModal();
+      if (typeof window.sharingDialogLoad === 'function') {
+        window.sharingDialogLoad();
+      }
+    };
+<% } %>
+
+    var docEditor = new DocsAPI.DocEditor('editor-container', config);
   </script>
+<% if (isOwner) { %>
+  <script>
+    (function() {
+      var fileId = '<%= fileId %>';
+      var dialog = document.getElementById('sharing-dialog');
+      var closeBtn = document.getElementById('sharing-dialog-close-btn');
+      var searchInput = document.getElementById('sharing-search-input');
+      var autocompleteList = document.getElementById('sharing-autocomplete-list');
+      var permissionSelect = document.getElementById('sharing-permission-select');
+      var addBtn = document.getElementById('sharing-add-btn');
+      var shareList = document.getElementById('sharing-list');
+      var loadingEl = document.getElementById('sharing-loading');
+      var errorEl = document.getElementById('sharing-error');
+
+      var selectedUser = null;
+      var searchTimeout = null;
+      var currentShares = [];
+
+      // Permission presets mapping
+      var permissionPresets = {
+        full: { edit: true, download: true, print: true, copy: true, comment: true, review: true, chat: true, fillForms: true },
+        edit: { edit: true, download: false, print: false, copy: false, comment: true, review: false, chat: true, fillForms: false },
+        comment: { edit: false, download: false, print: false, copy: false, comment: true, review: false, chat: false, fillForms: false },
+        view: { edit: false, download: true, print: false, copy: false, comment: false, review: false, chat: false, fillForms: false }
+      };
+
+      // Permission summary labels
+      var permissionLabels = {
+        full: 'Full Access',
+        edit: 'Edit',
+        comment: 'Comment Only',
+        view: 'View Only'
+      };
+
+      function summarizePermissions(p) {
+        if (p.edit && p.download && p.print && p.copy && p.comment && p.review && p.chat && p.fillForms) {
+          return 'Full Access';
+        }
+        if (p.edit) return 'Edit';
+        if (p.comment) return 'Comment Only';
+        return 'View Only';
+      }
+
+      function showLoading() {
+        loadingEl.classList.add('visible');
+      }
+
+      function hideLoading() {
+        loadingEl.classList.remove('visible');
+      }
+
+      function showError(message) {
+        errorEl.textContent = message;
+        errorEl.classList.add('visible');
+      }
+
+      function hideError() {
+        errorEl.textContent = '';
+        errorEl.classList.remove('visible');
+      }
+
+      function renderShareList() {
+        shareList.innerHTML = '';
+        currentShares.forEach(function(share) {
+          var li = document.createElement('li');
+          li.className = 'sharing-list-item';
+          li.setAttribute('data-share-id', share.id);
+          var permSummary = summarizePermissions(share.permissions || {});
+          li.innerHTML =
+            '<div class="sharing-user-info">' +
+              '<div class="sharing-user-name">' + escapeHtml(share.name || share.displayName || '') + '</div>' +
+              '<div class="sharing-user-email">' + escapeHtml(share.email || '') + '</div>' +
+            '</div>' +
+            '<span class="sharing-permission-badge">' + escapeHtml(permSummary) + '</span>' +
+            '<button class="sharing-remove-btn" data-share-id="' + share.id + '" aria-label="Remove ' + escapeHtml(share.name || share.displayName || '') + '">Remove</button>';
+          shareList.appendChild(li);
+        });
+      }
+
+      function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.appendChild(document.createTextNode(str));
+        return div.innerHTML;
+      }
+
+      function loadShares() {
+        showLoading();
+        hideError();
+        fetch('/api/shares/file/' + fileId).then(function(res) {
+          if (!res.ok) throw new Error('Failed to load shares');
+          return res.json();
+        }).then(function(data) {
+          currentShares = data;
+          renderShareList();
+        }).catch(function(err) {
+          showError(err.message || 'Failed to load shares');
+        }).finally(function() {
+          hideLoading();
+        });
+      }
+
+      // Expose loadShares globally so the onRequestSharingSettings handler can call it
+      window.sharingDialogLoad = loadShares;
+
+      // Debounced user search
+      searchInput.addEventListener('input', function() {
+        var query = searchInput.value.trim();
+        clearTimeout(searchTimeout);
+
+        if (query.length < 2) {
+          autocompleteList.classList.remove('visible');
+          autocompleteList.innerHTML = '';
+          searchInput.setAttribute('aria-expanded', 'false');
+          return;
+        }
+
+        searchTimeout = setTimeout(function() {
+          fetch('/api/users/search?q=' + encodeURIComponent(query)).then(function(res) {
+            if (!res.ok) throw new Error('Search failed');
+            return res.json();
+          }).then(function(users) {
+            autocompleteList.innerHTML = '';
+            if (users.length === 0) {
+              autocompleteList.classList.remove('visible');
+              searchInput.setAttribute('aria-expanded', 'false');
+              return;
+            }
+            users.forEach(function(user) {
+              var item = document.createElement('div');
+              item.className = 'sharing-autocomplete-item';
+              item.setAttribute('role', 'option');
+              item.setAttribute('tabindex', '0');
+              item.setAttribute('data-user-id', user.id);
+              item.setAttribute('data-user-name', user.name);
+              item.setAttribute('data-user-email', user.email);
+              item.innerHTML =
+                '<div class="autocomplete-name">' + escapeHtml(user.name) + '</div>' +
+                '<div class="autocomplete-email">' + escapeHtml(user.email) + '</div>';
+              item.addEventListener('click', function() {
+                selectUser(user);
+              });
+              item.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  selectUser(user);
+                }
+              });
+              autocompleteList.appendChild(item);
+            });
+            autocompleteList.classList.add('visible');
+            searchInput.setAttribute('aria-expanded', 'true');
+          }).catch(function() {
+            autocompleteList.classList.remove('visible');
+            searchInput.setAttribute('aria-expanded', 'false');
+          });
+        }, 300);
+      });
+
+      function selectUser(user) {
+        selectedUser = user;
+        searchInput.value = user.name + ' (' + user.email + ')';
+        autocompleteList.classList.remove('visible');
+        searchInput.setAttribute('aria-expanded', 'false');
+        addBtn.disabled = false;
+      }
+
+      // Add share
+      addBtn.addEventListener('click', function() {
+        if (!selectedUser) return;
+
+        var preset = permissionSelect.value;
+        var permissions = permissionPresets[preset];
+
+        showLoading();
+        hideError();
+        addBtn.disabled = true;
+
+        fetch('/api/shares', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileId: fileId,
+            inviteeId: selectedUser.id,
+            permissions: permissions
+          })
+        }).then(function(res) {
+          if (!res.ok) return res.json().then(function(data) { throw new Error(data.error || 'Failed to add share'); });
+          return res.json();
+        }).then(function(share) {
+          share.name = share.name || share.displayName || selectedUser.name;
+          share.email = share.email || selectedUser.email;
+          share.permissions = share.permissions || permissions;
+          currentShares.push(share);
+          renderShareList();
+          selectedUser = null;
+          searchInput.value = '';
+          addBtn.disabled = true;
+        }).catch(function(err) {
+          showError(err.message || 'Failed to add share');
+          addBtn.disabled = !selectedUser;
+        }).finally(function() {
+          hideLoading();
+        });
+      });
+
+      // Revoke share (event delegation on share list)
+      shareList.addEventListener('click', function(e) {
+        var removeBtn = e.target.closest('.sharing-remove-btn');
+        if (!removeBtn) return;
+
+        var shareId = removeBtn.getAttribute('data-share-id');
+        if (!shareId) return;
+
+        showLoading();
+        hideError();
+
+        fetch('/api/shares/' + shareId, {
+          method: 'DELETE'
+        }).then(function(res) {
+          if (!res.ok) return res.json().then(function(data) { throw new Error(data.error || 'Failed to revoke share'); });
+          currentShares = currentShares.filter(function(s) { return s.id !== shareId; });
+          renderShareList();
+        }).catch(function(err) {
+          showError(err.message || 'Failed to revoke share');
+        }).finally(function() {
+          hideLoading();
+        });
+      });
+
+      // Close dialog
+      closeBtn.addEventListener('click', function() {
+        closeDialog();
+      });
+
+      // Close on backdrop click
+      dialog.addEventListener('click', function(e) {
+        if (e.target === dialog) {
+          closeDialog();
+        }
+      });
+
+      // Close on Escape key
+      dialog.addEventListener('cancel', function(e) {
+        e.preventDefault();
+        closeDialog();
+      });
+
+      function closeDialog() {
+        dialog.close();
+        hideError();
+        autocompleteList.classList.remove('visible');
+        searchInput.value = '';
+        selectedUser = null;
+        addBtn.disabled = true;
+
+        // Build updated sharing settings array for DocumentServer
+        var sharingSettings = [
+          { user: '<%= typeof ownerName !== "undefined" ? ownerName : "Owner" %>', permissions: 'Full Access', isLink: false }
+        ];
+        currentShares.forEach(function(share) {
+          var permSummary = summarizePermissions(share.permissions || {});
+          sharingSettings.push({
+            user: share.name || share.displayName || '',
+            permissions: permSummary,
+            isLink: false
+          });
+        });
+
+        docEditor.setSharingSettings({ sharingSettings: sharingSettings });
+      }
+
+    })();
+  </script>
+<% } %>
 </body>
 </html>

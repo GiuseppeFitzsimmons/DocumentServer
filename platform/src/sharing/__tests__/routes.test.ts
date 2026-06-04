@@ -224,6 +224,19 @@ describe('Property 10: Unauthorized file access rejected', () => {
       updatedAt: new Date(),
     });
 
+    // Mock: pool.query for current user display name
+    (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      rows: [{ display_name: 'Stranger User' }],
+    });
+
+    // Mock: pool.query for owner display name
+    (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      rows: [{ display_name: 'Owner User' }],
+    });
+
+    // Mock: listSharesForFile returns empty array
+    (sharingService.listSharesForFile as ReturnType<typeof vi.fn>).mockResolvedValueOnce([]);
+
     // Mock: no share record exists
     (sharingService.getShare as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
 
@@ -276,7 +289,28 @@ describe('Property 10: Unauthorized file access rejected', () => {
       updatedAt: new Date(),
     });
 
-    // Mock: share record exists
+    // Mock: pool.query for current user display name
+    (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      rows: [{ display_name: 'Invitee User' }],
+    });
+
+    // Mock: pool.query for owner display name
+    (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      rows: [{ display_name: 'Owner User' }],
+    });
+
+    // Mock: listSharesForFile returns shares
+    (sharingService.listSharesForFile as ReturnType<typeof vi.fn>).mockResolvedValueOnce([{
+      id: 'share-1',
+      fileId,
+      ownerId,
+      inviteeId: userId,
+      inviteeDisplayName: 'Invitee User',
+      permissions: { edit: true, download: true, print: true, copy: true, comment: true, review: true, chat: true, fillForms: true },
+      createdAt: new Date(),
+    }]);
+
+    // Mock: share record exists (for access check)
     (sharingService.getShare as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       id: 'share-1',
       fileId,
@@ -284,11 +318,6 @@ describe('Property 10: Unauthorized file access rejected', () => {
       inviteeId: userId,
       permissions: { edit: true, download: true, print: true, copy: true, comment: true, review: true, chat: true, fillForms: true },
       createdAt: new Date(),
-    });
-
-    // Mock: pool.query for user display name
-    (pool.query as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-      rows: [{ display_name: 'Invitee User' }],
     });
 
     const req = createMockReq({

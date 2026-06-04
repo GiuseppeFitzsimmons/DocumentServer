@@ -3,10 +3,18 @@ import { config } from '../config.js';
 import type { FileRecord } from '../storage/metadata.js';
 import type { SharePermissions } from '../sharing/service.js';
 
+export interface SharingSettingsEntry {
+  user: string;       // display name
+  permissions: string; // human-readable: "Full Access", "Edit", "Comment Only", "View Only"
+  isLink: boolean;
+}
+
 export interface EditorConfigParams {
   file: FileRecord;
   user: { id: string; name: string };
   sharePermissions?: SharePermissions;
+  sharingSettings?: SharingSettingsEntry[];
+  isOwner?: boolean;
 }
 
 export function buildEditorConfig(params: EditorConfigParams): object {
@@ -48,6 +56,23 @@ export function buildEditorConfig(params: EditorConfigParams): object {
   // Set mode to "view" when share permissions are present and edit is false
   const mode = sharePermissions && !sharePermissions.edit ? 'view' : 'edit';
 
+  const { sharingSettings, isOwner } = params;
+
+  // Build document.info object with optional sharing metadata
+  const info: Record<string, unknown> = {};
+  if (sharingSettings) {
+    info.sharingSettings = sharingSettings;
+    if (sharingSettings.length > 0) {
+      info.owner = sharingSettings[0].user;
+    }
+  }
+
+  // Set changeOwner permission: false for non-owners to hide sharing button
+  const documentPermissions: Record<string, unknown> = { ...permissions };
+  if (isOwner === false) {
+    documentPermissions.changeOwner = false;
+  }
+
   const editorConfig = {
     documentType,
     document: {
@@ -55,7 +80,8 @@ export function buildEditorConfig(params: EditorConfigParams): object {
       title: file.name,
       fileType: fileExtension,
       key: documentKey,
-      permissions,
+      permissions: documentPermissions,
+      ...(Object.keys(info).length > 0 ? { info } : {}),
     },
     editorConfig: {
       mode,

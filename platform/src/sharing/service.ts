@@ -255,3 +255,62 @@ export async function revokeShare(shareId: string, ownerId: string): Promise<voi
 export async function deleteSharesForFile(fileId: string): Promise<void> {
   await pool.query('DELETE FROM file_shares WHERE file_id = $1', [fileId]);
 }
+
+export interface ShareUserEntry {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export async function listShareUsersForFile(fileId: string, userId: string): Promise<ShareUserEntry[]> {
+  // Check if user is the file owner
+  const fileResult = await pool.query(
+    'SELECT user_id FROM files WHERE id = $1',
+    [fileId]
+  );
+  if (fileResult.rows.length === 0) {
+    throw createError('Forbidden', 403);
+  }
+
+  const isOwner = fileResult.rows[0].user_id === userId;
+
+  // If not owner, check if user has a share record for this file
+  if (!isOwner) {
+    const shareResult = await pool.query(
+      'SELECT id FROM file_shares WHERE file_id = $1 AND invitee_id = $2',
+      [fileId, userId]
+    );
+    if (shareResult.rows.length === 0) {
+      throw createError('Forbidden', 403);
+    }
+  }
+
+  // Fetch owner info
+  const ownerResult = await pool.query(
+    'SELECT id, display_name AS name, email FROM users WHERE id = $1',
+    [fileResult.rows[0].user_id]
+  );
+
+  // Fetch all invitees for this file
+  const inviteesResult = await pool.query(
+    `SELECT u.id, u.display_name AS name, u.email
+     FROM file_shares fs
+     JOIN users u ON u.id = fs.invitee_id
+     WHERE fs.file_id = $1`,
+    [fileId]
+  );
+
+  // Return owner first, then all invitees
+  const owner = ownerResult.rows[0];
+  const participants: ShareUserEntry[] = [
+    { id: owner.id as string, name: owner.name as string, email: owner.email as string },
+    ...inviteesResult.rows.map((row: Record<string, unknown>) => ({
+      id: row.id as string,
+      name: row.name as string,
+      email: row.email as string,
+    })),
+  ];
+
+  return participants;
+}
+
