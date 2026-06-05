@@ -27,7 +27,6 @@ if (config.TRUST_PROXY === 'true') {
 }
 
 app.use(helmet({
-  hsts: false,
   contentSecurityPolicy: false,
 }));
 app.use(express.json());

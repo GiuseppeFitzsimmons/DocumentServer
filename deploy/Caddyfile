@@ -1,4 +1,4 @@
-:80 {
+eurobureau.eu {
 	# DocumentServer assets and API (public, needed by editor iframe)
 	handle /web-apps/* {
 		reverse_proxy documentserver:80
