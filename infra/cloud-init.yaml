@@ -18,6 +18,8 @@ write_files:
       JWT_SECRET=${jwt_secret}
       DB_PASSWORD=${db_password}
       SESSION_SECRET=${session_secret}
+      MAIL_DOMAIN=${mail_domain}
+      DKIM_PRIVATE_KEY="${dkim_private_key}"
 
 runcmd:
   # Install Docker

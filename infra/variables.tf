@@ -44,3 +44,16 @@ variable "repo_url" {
   type        = string
   default     = "https://github.com/GiuseppeFitzsimmons/DocumentServer.git"
 }
+
+variable "dkim_private_key" {
+  description = "DKIM private key for email signing (PEM format)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "mail_domain" {
+  description = "Domain used for sending email"
+  type        = string
+  default     = "eurobureau.eu"
+}

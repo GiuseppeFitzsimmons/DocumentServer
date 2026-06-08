@@ -13,3 +13,7 @@ repo_url = "https://github.com/GiuseppeFitzsimmons/DocumentServer.git"
 # Optional overrides:
 # server_type = "cx31"
 # location    = "fsn1"
+
+# Email (DKIM key as a single line with \n for line breaks)
+# mail_domain      = "eurobureau.eu"
+# dkim_private_key = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"

@@ -27,6 +27,8 @@ services:
       TRUST_PROXY: "true"
       FILE_STORAGE_PATH: /data/files
       PLATFORM_BASE_URL: http://portal:3000
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-eurobureau.eu}
+      DKIM_PRIVATE_KEY: ${DKIM_PRIVATE_KEY:-}
     volumes:
       - /mnt/euro-office-data/files:/data/files
     depends_on:
