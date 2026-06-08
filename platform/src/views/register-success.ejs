@@ -1,0 +1,10 @@
+<h1>Account created</h1>
+<p style="text-align: center; margin-bottom: 16px; font-size: 14px; line-height: 1.5;">
+  Your account has been created. Check your email for the temporary password, then sign in below.
+</p>
+<% if (warning) { %>
+  <div class="error"><%= warning %></div>
+<% } %>
+<div class="link">
+  <a href="/login">Go to Sign in</a>
+</div>

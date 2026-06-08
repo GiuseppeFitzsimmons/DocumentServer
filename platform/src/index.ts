@@ -9,6 +9,7 @@ import { sessionMiddleware } from './session.js';
 import { authRouter } from './auth/routes.js';
 import { pageRouter } from './pages/routes.js';
 import { requireAuth } from './auth/middleware.js';
+import { requirePermanentPassword } from './auth/require-permanent-password.js';
 import { fileRouter, folderRouter } from './storage/routes.js';
 import { sharingRouter } from './sharing/routes.js';
 import { usersRouter } from './users/routes.js';
@@ -65,6 +66,9 @@ app.use('/auth', authLimiter, authRouter);
 
 // Page routes (login, register, logout — public)
 app.use(pageRouter);
+
+// Force temp-password users to /set-password before accessing protected routes
+app.use(requirePermanentPassword);
 
 // Health check (public)
 app.get('/health', (_req, res) => {
