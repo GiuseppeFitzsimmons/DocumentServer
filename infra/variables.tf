@@ -67,7 +67,7 @@ variable "smtp_host" {
 variable "smtp_port" {
   description = "SMTP relay port (465 for SSL, 587 for STARTTLS)"
   type        = number
-  default     = 465
+  default     = 587
 }
 
 variable "smtp_user" {

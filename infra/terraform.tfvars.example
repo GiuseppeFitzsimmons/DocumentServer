@@ -20,6 +20,6 @@ repo_url = "https://github.com/GiuseppeFitzsimmons/DocumentServer.git"
 
 # SMTP relay (OVH)
 smtp_host = "ssl0.ovh.net"
-smtp_port = 465
+smtp_port = 587
 smtp_user = "noreply@eurobureau.eu"
 smtp_pass = "your-ovh-email-password"
