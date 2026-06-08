@@ -29,6 +29,10 @@ services:
       PLATFORM_BASE_URL: http://portal:3000
       MAIL_DOMAIN: ${MAIL_DOMAIN:-eurobureau.eu}
       DKIM_PRIVATE_KEY: ${DKIM_PRIVATE_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
     volumes:
       - /mnt/euro-office-data/files:/data/files
     depends_on:

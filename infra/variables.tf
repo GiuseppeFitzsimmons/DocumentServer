@@ -57,3 +57,28 @@ variable "mail_domain" {
   type        = string
   default     = "eurobureau.eu"
 }
+
+variable "smtp_host" {
+  description = "SMTP relay hostname (e.g. ssl0.ovh.net)"
+  type        = string
+  default     = ""
+}
+
+variable "smtp_port" {
+  description = "SMTP relay port (465 for SSL, 587 for STARTTLS)"
+  type        = number
+  default     = 465
+}
+
+variable "smtp_user" {
+  description = "SMTP relay username/email"
+  type        = string
+  default     = ""
+}
+
+variable "smtp_pass" {
+  description = "SMTP relay password"
+  type        = string
+  sensitive   = true
+  default     = ""
+}

@@ -14,6 +14,10 @@ const envSchema = z.object({
   PLATFORM_BASE_URL: z.string().url(),
   MAIL_DOMAIN: z.string().default('eurobureau.eu'),
   DKIM_PRIVATE_KEY: z.string().default(''),
+  SMTP_HOST: z.string().default(''),
+  SMTP_PORT: z.coerce.number().default(465),
+  SMTP_USER: z.string().default(''),
+  SMTP_PASS: z.string().default(''),
 });
 
 export const config = envSchema.parse(process.env);

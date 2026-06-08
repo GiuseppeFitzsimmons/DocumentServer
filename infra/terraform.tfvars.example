@@ -17,3 +17,9 @@ repo_url = "https://github.com/GiuseppeFitzsimmons/DocumentServer.git"
 # Email (DKIM key as a single line with \n for line breaks)
 # mail_domain      = "eurobureau.eu"
 # dkim_private_key = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+
+# SMTP relay (OVH)
+smtp_host = "ssl0.ovh.net"
+smtp_port = 465
+smtp_user = "noreply@eurobureau.eu"
+smtp_pass = "your-ovh-email-password"

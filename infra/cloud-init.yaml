@@ -20,6 +20,10 @@ write_files:
       SESSION_SECRET=${session_secret}
       MAIL_DOMAIN=${mail_domain}
       DKIM_PRIVATE_KEY="${dkim_private_key}"
+      SMTP_HOST=${smtp_host}
+      SMTP_PORT=${smtp_port}
+      SMTP_USER=${smtp_user}
+      SMTP_PASS=${smtp_pass}
 
 runcmd:
   # Install Docker
