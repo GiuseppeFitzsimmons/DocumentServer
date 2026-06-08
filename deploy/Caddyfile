@@ -42,3 +42,7 @@ eurobureau.eu {
 		reverse_proxy portal:3000
 	}
 }
+
+www.eurobureau.eu {
+	redir https://eurobureau.eu{uri} permanent
+}
