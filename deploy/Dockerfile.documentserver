@@ -10,8 +10,4 @@ COPY fonts/ /var/www/euro-office/documentserver/core-fonts/custom/
 
 # Fix permissions and regenerate the font index
 RUN chown -R ds:ds /var/www/euro-office/documentserver/core-fonts && \
-    documentserver-generate-allfonts.sh true && \
-    chmod -R a+r /etc/euro-office/documentserver && \
-    chown -R ds:ds /etc/euro-office/documentserver
-
-USER ds
+    documentserver-generate-allfonts.sh true
