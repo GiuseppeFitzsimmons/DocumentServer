@@ -1,13 +1,35 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { randomUUID } from 'crypto';
+import path from 'path';
 import { requireAuth } from '../auth/middleware.js';
 import * as storage from './s3.js';
 import * as metadata from './metadata.js';
 import { getTemplate, isValidDocumentType } from './templates.js';
 import { getShare, deleteSharesForFile } from '../sharing/service.js';
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+// Must match the callback handler's MAX_SAVE_SIZE_BYTES
+const MAX_FILE_SIZE = 1000 * 1024; // 1mb
+
+// Allowed MIME types for upload
+const ALLOWED_MIME_TYPES = new Set([
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',       // .xlsx
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation', // .pptx
+  'application/vnd.oasis.opendocument.text',          // .odt
+  'application/vnd.oasis.opendocument.spreadsheet',   // .ods
+  'application/vnd.oasis.opendocument.presentation',  // .odp
+  'application/pdf',
+  'text/plain',
+  'text/html',
+  'application/rtf',
+]);
+
+// Allowed file extensions
+const ALLOWED_EXTENSIONS = new Set([
+  '.docx', '.xlsx', '.pptx', '.odt', '.ods', '.odp',
+  '.pdf', '.txt', '.html', '.htm', '.rtf',
+]);
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -27,7 +49,7 @@ folderRouter.use(requireAuth);
 fileRouter.post('/upload', (req, res, next) => {
   upload.single('file')(req, res, (err) => {
     if (err && err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
-      res.status(413).json({ error: 'File too large. Maximum size is 50 MB' });
+      res.status(413).json({ error: `File too large. Maximum size is ${Math.round(MAX_FILE_SIZE / 1024)} KB` });
       return;
     }
     if (err) {
@@ -42,6 +64,23 @@ fileRouter.post('/upload', (req, res, next) => {
       res.status(400).json({ error: 'No file provided' });
       return;
     }
+
+    // Validate file extension
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    if (!ALLOWED_EXTENSIONS.has(ext)) {
+      res.status(400).json({ error: `File type '${ext}' is not allowed` });
+      return;
+    }
+
+    // Validate MIME type
+    if (!ALLOWED_MIME_TYPES.has(req.file.mimetype)) {
+      res.status(400).json({ error: 'File type not supported' });
+      return;
+    }
+
+    // Sanitize filename: remove path components, limit length
+    const baseName = path.basename(req.file.originalname).replace(/[^\w\s.\-()]/g, '').trim();
+    const sanitizedName = baseName.length > 200 ? baseName.slice(0, 200) + ext : baseName || `document${ext}`;
 
     const userId = req.session.userId!;
     const fileId = randomUUID();
@@ -64,7 +103,7 @@ fileRouter.post('/upload', (req, res, next) => {
     await storage.upload(s3Key, req.file.buffer, req.file.mimetype);
 
     const fileRecord = await metadata.createFile({
-      name: req.file.originalname,
+      name: sanitizedName,
       mimeType: req.file.mimetype,
       sizeBytes: req.file.size,
       userId,
