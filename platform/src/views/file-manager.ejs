@@ -788,7 +788,7 @@
         html += '<td><div class="item-name-cell"><span class="item-icon">' + icon + '</span><span class="item-name">' + escapeHtml(item.name) + '</span></div></td>';
         html += '<td class="col-size">' + (item.type === 'file' ? formatSize(item.size) : '—') + '</td>';
         html += '<td class="col-date">' + formatDate(item.updatedAt) + '</td>';
-        html += '<td><button class="action-btn" data-action="menu" data-id="' + item.id + '" data-type="' + item.type + '" data-name="' + escapeHtml(item.name) + '" onclick="event.stopPropagation(); openContextMenu(event, this)">⋮</button></td>';
+        html += '<td><button class="action-btn" data-action="menu" data-id="' + item.id + '" data-type="' + item.type + '" data-name="' + escapeHtml(item.name) + '" data-mime="' + escapeHtml(item.mimeType || '') + '"' + (item.permissions ? ' data-permissions="' + escapeHtml(JSON.stringify(item.permissions)) + '"' : '') + ' onclick="event.stopPropagation(); openContextMenu(event, this)">⋮</button></td>';
         html += '</tr>';
       });
       html += '</tbody></table>';
@@ -1009,11 +1009,21 @@
       if (activeContextMenu) { activeContextMenu.remove(); activeContextMenu = null; }
     }
 
+    function isDocxFile(name, mimeType) {
+      var docxMime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      if (mimeType === docxMime) return true;
+      if (name && name.toLowerCase().endsWith('.docx')) return true;
+      return false;
+    }
+
     function openContextMenu(event, btn) {
       closeContextMenu();
       var id = btn.getAttribute('data-id');
       var type = btn.getAttribute('data-type');
       var name = btn.getAttribute('data-name');
+      var mimeType = btn.getAttribute('data-mime') || '';
+      var permissionsAttr = btn.getAttribute('data-permissions');
+      var permissions = permissionsAttr ? JSON.parse(permissionsAttr) : null;
       var rect = btn.getBoundingClientRect();
       var menu = document.createElement('div');
       menu.className = 'context-menu';
@@ -1041,6 +1051,20 @@
         menu.appendChild(moveToParentBtn);
       }
 
+      // Export as EPUB — only for .docx files; for shared files, only if download permission is granted
+      if (type === 'file' && isDocxFile(name, mimeType)) {
+        var showExport = true;
+        if (permissions && !permissions.download) {
+          showExport = false;
+        }
+        if (showExport) {
+          var exportBtn = document.createElement('button');
+          exportBtn.textContent = 'Export as EPUB';
+          exportBtn.onclick = function() { closeContextMenu(); exportAsEpub(id, name); };
+          menu.appendChild(exportBtn);
+        }
+      }
+
       var deleteBtn = document.createElement('button');
       deleteBtn.className = 'danger';
       deleteBtn.textContent = 'Delete';
@@ -1049,6 +1073,43 @@
 
       document.body.appendChild(menu);
       activeContextMenu = menu;
+    }
+
+    // --- Export as EPUB (Task 4.1, 4.2) ---
+    async function exportAsEpub(fileId, fileName) {
+      // Show loading toast
+      var container = document.getElementById('toastContainer');
+      var loadingToast = document.createElement('div');
+      loadingToast.className = 'toast toast-success';
+      loadingToast.innerHTML = '<span>Exporting to EPUB\u2026</span>';
+      container.appendChild(loadingToast);
+
+      try {
+        var res = await fetch('/api/files/' + encodeURIComponent(fileId) + '/export/epub');
+
+        if (!res.ok) {
+          var data = {};
+          try { data = await res.json(); } catch (e) {}
+          throw new Error(data.error || 'Export failed');
+        }
+
+        var blob = await res.blob();
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        // Replace .docx extension with .epub for the download filename
+        var epubName = fileName.replace(/\.docx$/i, '.epub');
+        if (!/\.epub$/i.test(epubName)) epubName += '.epub';
+        a.download = epubName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        showError(err.message || 'Export failed');
+      } finally {
+        if (loadingToast.parentElement) loadingToast.remove();
+      }
     }
 
     // --- Rename (Task 7.2) ---
