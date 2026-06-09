@@ -1,13 +1,17 @@
 FROM ghcr.io/euro-office/documentserver:latest
 
-# Remove the default core-fonts bundle
 USER root
+
+# Remove the default core-fonts bundle
 RUN rm -rf /var/www/euro-office/documentserver/core-fonts/*
 
-# Copy our curated font set (msttcore already present from base image)
-COPY --chown=ds:ds fonts/ /var/www/euro-office/documentserver/core-fonts/custom/
+# Copy our curated font set (msttcore still present at /usr/share/fonts/msttcore/)
+COPY fonts/ /var/www/euro-office/documentserver/core-fonts/custom/
 
-# Regenerate the font index
-RUN documentserver-generate-allfonts.sh true
+# Fix permissions and regenerate the font index
+RUN chown -R ds:ds /var/www/euro-office/documentserver/core-fonts && \
+    documentserver-generate-allfonts.sh true && \
+    chmod -R a+r /etc/euro-office/documentserver && \
+    chown -R ds:ds /etc/euro-office/documentserver
 
 USER ds
