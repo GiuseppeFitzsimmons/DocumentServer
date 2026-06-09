@@ -48,7 +48,7 @@ FROM ubuntu:24.04 AS package
     COPY document-server-package/ /document-server-package/
 
     ### Branding
-    COPY ${BRANDING_DIR}/document-server-package/ /document-server-package/
+    COPY --from=brand-icons /[d]ocument-server-package /document-server-package/
 
     RUN cd document-server-package && \
         mkdir -p ${OUT_BASE} && \

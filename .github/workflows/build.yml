@@ -35,6 +35,11 @@ env:
   PRODUCT_VERSION: 9.3.1
   BUILD_NUMBER: dev.1
   BUILD_ROOT: /package
+  # Branded image names (nextcloud-office)
+  NEXTCLOUD_IMAGE_NAME: nextcloud-office-documentserver
+  NEXTCLOUD_CLUSTER_IMG_DOCS: nextcloud-office-cluster-docs
+  NEXTCLOUD_CLUSTER_IMG_EXAMPLE: nextcloud-office-cluster-example
+  NEXTCLOUD_CLUSTER_IMG_UTILS: nextcloud-office-cluster-utils
 
 jobs:
   clone:
@@ -45,6 +50,13 @@ jobs:
         with:
           path: .
           submodules: recursive
+          token: ${{ secrets.EURO_OFFICE_MIRROR_TOKEN }}
+
+      - name: Checkout nextcloud-office-brand repo
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: Euro-Office/nextcloud-office-brand
+          path: build/brands/nextcloud-office-brand
           token: ${{ secrets.EURO_OFFICE_MIRROR_TOKEN }}
 
       - name: Align submodules to requested branches
@@ -88,14 +100,15 @@ jobs:
   # BUILD
   #
   # Single job that builds the full target graph in one bake
-  # invocation per arch: packages → docker → develop.
-  # Because develop depends on docker which depends on packages,
-  # bake resolves the shared graph and never rebuilds a layer twice.
+  # invocation per arch × brand. Because develop depends on
+  # docker which depends on packages, bake resolves the shared
+  # graph and never rebuilds a layer twice.
   #
   # Pushing per target:
   #   docker   → pushed on default branch (:nightly) and git tags (:latest)
   #   develop  → pushed on default branch only (:latest-dev)
   #   packages → never pushed; exported to local filesystem for release upload
+  #              (euro-office → GitHub Release, nextcloud-office → SSH)
   # ─────────────────────────────────────────────────────────────
   build:
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
@@ -109,6 +122,23 @@ jobs:
         arch:
           - amd64
           - arm64
+        brand:
+          - name: euro-office
+            image_name: documentserver
+            cluster_docs: cluster-docs
+            cluster_example: cluster-example
+            cluster_utils: cluster-utils
+            extra_bake_files: ""
+            extra_targets: ""
+            cache_prefix: ""
+          - name: nextcloud-office
+            image_name: nextcloud-office-documentserver
+            cluster_docs: nextcloud-office-cluster-docs
+            cluster_example: nextcloud-office-cluster-example
+            cluster_utils: nextcloud-office-cluster-utils
+            extra_bake_files: "./brands/nextcloud-office-brand/brand-server.hcl"
+            extra_targets: "brand-icons,"
+            cache_prefix: "nextcloud-office-"
 
     steps:
       - name: Restore cache
@@ -155,6 +185,14 @@ jobs:
             echo "develop_push=false" >> $GITHUB_OUTPUT
           fi
 
+          # nextcloud-office images must not be pushed to ghcr.io/euro-office;
+          # only its .deb/.rpm packages are shipped (via SSH). Override the
+          # flags for that brand (last write to $GITHUB_OUTPUT wins).
+          if [[ "${{ matrix.brand.name }}" == "nextcloud-office" ]]; then
+            echo "images_push=false"  >> $GITHUB_OUTPUT
+            echo "develop_push=false" >> $GITHUB_OUTPUT
+          fi
+
           # Parse PRODUCT_VERSION / BUILD_NUMBER from tag of the form v${PRODUCT_VERSION}-${BUILD_NUMBER}
           # (e.g. v9.3.1-beta.1, v9.3.1-stable.1). Fall back to env defaults otherwise.
           if [[ "$IS_TAG" == "true" && "${{ github.ref_name }}" =~ ^v([^-]+)-(.+)$ ]]; then
@@ -169,58 +207,61 @@ jobs:
         uses: docker/bake-action@4a9a8d494466d37134e2bfca2d3a8de8fb2681ad # v5.13.0
         with:
           workdir: ./build
-          files: ./docker-bake.hcl
-          # Build the full graph; bake deduplicates shared layers automatically.
-          # packages is included so its local filesystem export always runs,
-          # enabling the release upload step below.
-          targets: packages,standalone,develop,cluster-utils,cluster-example,cluster-docs
+          # For nextcloud-office, brand-server.hcl is appended; empty lines are
+          # filtered by bake-action so euro-office sees only the base file.
+          files: |
+            ./docker-bake.hcl
+            ${{ matrix.brand.extra_bake_files }}
+          # extra_targets is either "" (euro-office) or "brand-icons," so the
+          # comma-joined target list resolves correctly for both.
+          targets: ${{ matrix.brand.extra_targets }}packages,standalone,develop,cluster-utils,cluster-example,cluster-docs
           # push=false here; per-target pushing is controlled via tags below.
           # Targets with empty tags= are not pushed regardless of this flag.
           push: false
           set: |
-            core.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-core-buildcache-${{ matrix.arch }}
-            core.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-core-buildcache-${{ matrix.arch }},mode=max
+            core.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}core-buildcache-${{ matrix.arch }}
+            core.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}core-buildcache-${{ matrix.arch }},mode=max
             core.tags=
-            core-wasm.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-core-wasm-buildcache-${{ matrix.arch }}
-            core-wasm.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-core-wasm-buildcache-${{ matrix.arch }},mode=max
+            core-wasm.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}core-wasm-buildcache-${{ matrix.arch }}
+            core-wasm.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}core-wasm-buildcache-${{ matrix.arch }},mode=max
             core-wasm.tags=
-            sdkjs.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-sdkjs-buildcache-${{ matrix.arch }}
-            sdkjs.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-sdkjs-buildcache-${{ matrix.arch }},mode=max
+            sdkjs.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}sdkjs-buildcache-${{ matrix.arch }}
+            sdkjs.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}sdkjs-buildcache-${{ matrix.arch }},mode=max
             sdkjs.tags=
-            web-apps.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-web-apps-buildcache-${{ matrix.arch }}
-            web-apps.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-web-apps-buildcache-${{ matrix.arch }},mode=max
+            web-apps.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}web-apps-buildcache-${{ matrix.arch }}
+            web-apps.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}web-apps-buildcache-${{ matrix.arch }},mode=max
             web-apps.tags=
-            server.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-server-buildcache-${{ matrix.arch }}
-            server.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-server-buildcache-${{ matrix.arch }},mode=max
+            server.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}server-buildcache-${{ matrix.arch }}
+            server.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}server-buildcache-${{ matrix.arch }},mode=max
             server.tags=
-            example.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-example-buildcache-${{ matrix.arch }}
-            example.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-example-buildcache-${{ matrix.arch }},mode=max
+            example.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}example-buildcache-${{ matrix.arch }}
+            example.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}example-buildcache-${{ matrix.arch }},mode=max
             example.tags=
-            bundle.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-bundle-buildcache-${{ matrix.arch }}
-            bundle.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-bundle-buildcache-${{ matrix.arch }},mode=max
+            bundle.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}bundle-buildcache-${{ matrix.arch }}
+            bundle.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}bundle-buildcache-${{ matrix.arch }},mode=max
             bundle.tags=
-            packages.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-packages-buildcache-${{ matrix.arch }}
-            packages.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-packages-buildcache-${{ matrix.arch }},mode=max
+            packages.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}packages-buildcache-${{ matrix.arch }}
+            packages.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}packages-buildcache-${{ matrix.arch }},mode=max
             packages.tags=
-            cluster-docs.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-cluster-docs-buildcache-${{ matrix.arch }}
-            cluster-docs.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-cluster-docs-buildcache-${{ matrix.arch }},mode=max
-            cluster-docs.tags=${{ steps.meta.outputs.images_push == 'true' && format('{0}/{1}:{2}', env.REGISTRY, env.CLUSTER_IMG_DOCS, steps.meta.outputs.images_tag) || '' }}
+            cluster-docs.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}cluster-docs-buildcache-${{ matrix.arch }}
+            cluster-docs.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}cluster-docs-buildcache-${{ matrix.arch }},mode=max
+            cluster-docs.tags=${{ steps.meta.outputs.images_push == 'true' && format('{0}/{1}:{2}', env.REGISTRY, matrix.brand.cluster_docs, steps.meta.outputs.images_tag) || '' }}
             cluster-docs.output=${{ steps.meta.outputs.images_push == 'true' && format('type=registry') || 'type=cacheonly' }}
-            cluster-example.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-cluster-example-buildcache-${{ matrix.arch }}
-            cluster-example.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-cluster-example-buildcache-${{ matrix.arch }},mode=max
-            cluster-example.tags=${{ steps.meta.outputs.images_push == 'true' && format('{0}/{1}:{2}', env.REGISTRY, env.CLUSTER_IMG_EXAMPLE, steps.meta.outputs.images_tag) || '' }}
+            cluster-example.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}cluster-example-buildcache-${{ matrix.arch }}
+            cluster-example.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}cluster-example-buildcache-${{ matrix.arch }},mode=max
+            cluster-example.tags=${{ steps.meta.outputs.images_push == 'true' && format('{0}/{1}:{2}', env.REGISTRY, matrix.brand.cluster_example, steps.meta.outputs.images_tag) || '' }}
             cluster-example.output=${{ steps.meta.outputs.images_push == 'true' && format('type=registry') || 'type=cacheonly' }}
-            cluster-utils.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-cluster-utils-buildcache-${{ matrix.arch }}
-            cluster-utils.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-cluster-utils-buildcache-${{ matrix.arch }},mode=max
-            cluster-utils.tags=${{ steps.meta.outputs.images_push == 'true' && format('{0}/{1}:{2}', env.REGISTRY, env.CLUSTER_IMG_UTILS, steps.meta.outputs.images_tag) || '' }}
+            cluster-utils.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}cluster-utils-buildcache-${{ matrix.arch }}
+            cluster-utils.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}cluster-utils-buildcache-${{ matrix.arch }},mode=max
+            cluster-utils.tags=${{ steps.meta.outputs.images_push == 'true' && format('{0}/{1}:{2}', env.REGISTRY, matrix.brand.cluster_utils, steps.meta.outputs.images_tag) || '' }}
             cluster-utils.output=${{ steps.meta.outputs.images_push == 'true' && format('type=registry') || 'type=cacheonly' }}
-            standalone.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-standalone-buildcache-${{ matrix.arch }}
-            standalone.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-standalone-buildcache-${{ matrix.arch }},mode=max
-            standalone.tags=${{ steps.meta.outputs.images_push == 'true' && format('{0}/{1}:{2}', env.REGISTRY, env.IMAGE_NAME, steps.meta.outputs.images_tag) || '' }}
+            standalone.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}standalone-buildcache-${{ matrix.arch }}
+            standalone.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}standalone-buildcache-${{ matrix.arch }},mode=max
+            standalone.tags=${{ steps.meta.outputs.images_push == 'true' && format('{0}/{1}:{2}', env.REGISTRY, matrix.brand.image_name, steps.meta.outputs.images_tag) || '' }}
             standalone.output=${{ steps.meta.outputs.images_push == 'true' && format('type=registry') || 'type=cacheonly' }}
-            develop.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-develop-buildcache-${{ matrix.arch }}
-            develop.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-develop-buildcache-${{ matrix.arch }},mode=max
-            develop.tags=${{ steps.meta.outputs.develop_push == 'true' && format('{0}/{1}:latest-dev-{2}', env.REGISTRY, env.IMAGE_NAME, matrix.arch) || '' }}
+            develop.cache-from=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}develop-buildcache-${{ matrix.arch }}
+            develop.cache-to=type=registry,ref=${{ env.REGISTRY }}/${{ env.CACHE_IMAGE_NAME }}:${{ steps.meta.outputs.ref_name }}-${{ matrix.brand.cache_prefix }}develop-buildcache-${{ matrix.arch }},mode=max
+            develop.tags=${{ steps.meta.outputs.develop_push == 'true' && format('{0}/{1}:latest-dev-{2}', env.REGISTRY, matrix.brand.image_name, matrix.arch) || '' }}
             develop.output=${{ steps.meta.outputs.develop_push == 'true' && 'type=registry' || 'type=cacheonly' }}
         env:
           REGISTRY: ${{ env.REGISTRY }}
@@ -232,18 +273,41 @@ jobs:
 
       - name: Upload packages to GitHub Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+        if: matrix.brand.name == 'euro-office' && startsWith(github.ref, 'refs/tags/')
         with:
           files: |
             build/deploy/packages/*.deb
             build/deploy/packages/*.rpm
 
+      - name: Upload packages via SSH (nextcloud-office)
+        if: matrix.brand.name == 'nextcloud-office' && startsWith(github.ref, 'refs/tags/')
+        env:
+          SSH_KEY:         ${{ secrets.NEXTCLOUD_SSH_KEY }}
+          SSH_HOST:        ${{ secrets.NEXTCLOUD_SSH_HOST }}
+          SSH_USER:        ${{ secrets.NEXTCLOUD_SSH_USER }}
+          SSH_PORT:        ${{ secrets.NEXTCLOUD_SSH_PORT || 22 }}
+          REMOTE_BASE:     ${{ secrets.NEXTCLOUD_SSH_REMOTE_PATH }}
+          PRODUCT_VERSION: ${{ steps.meta.outputs.product_version }}
+          BUILD_NUMBER:    ${{ steps.meta.outputs.build_number }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -p "$SSH_PORT" "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          TARGET="$REMOTE_BASE/$PRODUCT_VERSION/$BUILD_NUMBER"
+          ssh -i ~/.ssh/id_deploy -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "mkdir -p '$TARGET'"
+          scp -i ~/.ssh/id_deploy -P "$SSH_PORT" \
+            build/deploy/packages/*.deb build/deploy/packages/*.rpm \
+            "$SSH_USER@$SSH_HOST:$TARGET/"
+
   # ─────────────────────────────────────────────────────────────
   # MANIFEST
   #
-  # Merges the arch-specific documentserver images into a single
-  # multi-arch manifest. Runs on default branch (:nightly) and
-  # git tags (:latest + sanitised ref tag).
+  # Merges the arch-specific images into multi-arch manifests for
+  # both brands. Runs on default branch (:nightly) and git tags
+  # (:latest + sanitised ref tag).
   # ─────────────────────────────────────────────────────────────
   manifest:
     runs-on: ubuntu-latest
@@ -285,13 +349,18 @@ jobs:
 
           # Repos that follow the standard tagging scheme
           # (nightly on default branch, latest + ref on git tags).
-          # documentserver additionally gets :latest-dev on the default branch
-          # via the develop target; the cluster images do not.
+          # documentserver and nextcloud-office-documentserver also get
+          # :latest-dev on the default branch via the develop target;
+          # the cluster images do not.
           REPOS=(
             "${REGISTRY}/${{ env.IMAGE_NAME }}"
             "${REGISTRY}/${{ env.CLUSTER_IMG_DOCS }}"
             "${REGISTRY}/${{ env.CLUSTER_IMG_EXAMPLE }}"
             "${REGISTRY}/${{ env.CLUSTER_IMG_UTILS }}"
+            #"${REGISTRY}/${{ env.NEXTCLOUD_IMAGE_NAME }}"
+            #"${REGISTRY}/${{ env.NEXTCLOUD_CLUSTER_IMG_DOCS }}"
+            #"${REGISTRY}/${{ env.NEXTCLOUD_CLUSTER_IMG_EXAMPLE }}"
+            #"${REGISTRY}/${{ env.NEXTCLOUD_CLUSTER_IMG_UTILS }}"
           )
 
           if [[ "${{ github.ref_name }}" == "${{ github.event.repository.default_branch }}" ]]; then
@@ -299,6 +368,7 @@ jobs:
               create_manifest "$repo" "nightly"
             done
             create_manifest "${REGISTRY}/${{ env.IMAGE_NAME }}" "latest-dev"
+            #create_manifest "${REGISTRY}/${{ env.NEXTCLOUD_IMAGE_NAME }}" "latest-dev"
           fi
 
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
