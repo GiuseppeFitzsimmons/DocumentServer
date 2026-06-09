@@ -1,5 +1,7 @@
 import { pool } from '../db/pool.js';
 
+export const MAX_VERSIONS_PER_FILE = 50;
+
 export interface FileVersionRecord {
   id: string;
   fileId: string;
@@ -80,4 +82,26 @@ function mapRow(row: Record<string, unknown>): FileVersionRecord {
     createdBy: row.created_by as string,
     createdAt: new Date(row.created_at as string),
   };
+}
+
+/**
+ * Deletes the oldest versions beyond the cap, returning their storage keys
+ * so the caller can clean up the files from storage.
+ */
+export async function pruneOldVersions(fileId: string, maxVersions: number = MAX_VERSIONS_PER_FILE): Promise<{ s3Key: string; changesS3Key: string | null }[]> {
+  const { rows } = await pool.query(
+    `DELETE FROM file_versions
+     WHERE id IN (
+       SELECT id FROM file_versions
+       WHERE file_id = $1
+       ORDER BY version_number ASC
+       LIMIT GREATEST((SELECT COUNT(*) FROM file_versions WHERE file_id = $1) - $2, 0)
+     )
+     RETURNING s3_key, changes_s3_key`,
+    [fileId, maxVersions]
+  );
+  return rows.map((row: Record<string, unknown>) => ({
+    s3Key: row.s3_key as string,
+    changesS3Key: (row.changes_s3_key as string) || null,
+  }));
 }

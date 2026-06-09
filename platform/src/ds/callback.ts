@@ -9,6 +9,20 @@ import path from 'path';
 
 export const callbackRouter = Router();
 
+// Maximum file size allowed for saves (30 KB — testing threshold, increase later)
+const MAX_SAVE_SIZE_BYTES = 30 * 1024;
+// Warning threshold (20 KB)
+const WARN_SIZE_BYTES = 20 * 1024;
+
+// In-memory store of recent save rejections/warnings (keyed by fileId)
+interface SaveStatus {
+  reason: 'size_limit_exceeded' | 'size_warning';
+  size: number;
+  limit: number;
+  timestamp: number;
+}
+const saveRejections = new Map<string, SaveStatus>();
+
 export interface CallbackPayload {
   status: number;
   url?: string;
@@ -87,6 +101,19 @@ async function archiveCurrentVersion(
     documentKey,
     createdBy: userId,
   });
+
+  // Prune old versions beyond the cap
+  try {
+    const pruned = await versionRepo.pruneOldVersions(file.id);
+    for (const entry of pruned) {
+      await storage.remove(entry.s3Key);
+      if (entry.changesS3Key) {
+        await storage.remove(entry.changesS3Key);
+      }
+    }
+  } catch (err) {
+    console.error('Failed to prune old versions', { fileId: file.id, err });
+  }
 }
 
 // POST /api/ds/callback?fileId=
@@ -168,6 +195,37 @@ callbackRouter.post('/', async (req, res) => {
     }
     const buffer = Buffer.concat(chunks);
 
+    // Reject save if file exceeds size limit
+    if (buffer.length > MAX_SAVE_SIZE_BYTES) {
+      console.warn('Save rejected: file exceeds size limit', {
+        fileId,
+        size: buffer.length,
+        limit: MAX_SAVE_SIZE_BYTES,
+      });
+      // Store rejection reason so client can query it
+      saveRejections.set(fileId, {
+        reason: 'size_limit_exceeded',
+        size: buffer.length,
+        limit: MAX_SAVE_SIZE_BYTES,
+        timestamp: Date.now(),
+      });
+      res.json({ error: 1 });
+      return;
+    }
+
+    // Track warning state if approaching limit
+    if (buffer.length > WARN_SIZE_BYTES) {
+      saveRejections.set(fileId, {
+        reason: 'size_warning',
+        size: buffer.length,
+        limit: MAX_SAVE_SIZE_BYTES,
+        timestamp: Date.now(),
+      });
+    } else {
+      // Clear any previous warning
+      saveRejections.delete(fileId);
+    }
+
     // Upload to storage, replacing previous version
     await storage.upload(file.s3Key, buffer, file.mimeType);
 
@@ -179,4 +237,33 @@ callbackRouter.post('/', async (req, res) => {
     console.error('Callback handler error:', err);
     res.json({ error: 1 });
   }
+});
+
+// GET /api/ds/callback/save-status?fileId=
+// Client polls this after onError to check if the save was rejected due to size
+callbackRouter.get('/save-status', (req, res) => {
+  const { fileId } = req.query as { fileId: string };
+  if (!fileId) {
+    res.json({ status: 'ok' });
+    return;
+  }
+
+  const entry = saveRejections.get(fileId);
+  if (!entry) {
+    res.json({ status: 'ok' });
+    return;
+  }
+
+  // Only return entries from the last 60 seconds
+  if (Date.now() - entry.timestamp > 60_000) {
+    saveRejections.delete(fileId);
+    res.json({ status: 'ok' });
+    return;
+  }
+
+  res.json({
+    status: entry.reason,
+    size: entry.size,
+    limit: entry.limit,
+  });
 });

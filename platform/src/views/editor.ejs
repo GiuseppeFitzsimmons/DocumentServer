@@ -405,6 +405,39 @@
       });
     };
 
+    config.events.onError = function(event) {
+      // Check if this was a size-related save rejection
+      fetch('/api/ds/callback/save-status?fileId=<%= fileId %>', {
+        credentials: 'same-origin'
+      }).then(function(res) {
+        return res.json();
+      }).then(function(data) {
+        if (data.status === 'size_limit_exceeded') {
+          var sizeMB = (data.size / 1024 / 1024).toFixed(1);
+          var limitMB = (data.limit / 1024 / 1024).toFixed(0);
+          alert('Save failed: Your document (' + sizeMB + ' MB) exceeds the ' + limitMB + ' MB size limit. Please reduce the file size (e.g. compress images) and try again.');
+        }
+      }).catch(function() {});
+    };
+
+    config.events.onDocumentStateChange = function(event) {
+      // event.data is true when document has unsaved changes, false when saved
+      if (!event.data) {
+        // Document just saved successfully — check for size warning
+        fetch('/api/ds/callback/save-status?fileId=<%= fileId %>', {
+          credentials: 'same-origin'
+        }).then(function(res) {
+          return res.json();
+        }).then(function(data) {
+          if (data.status === 'size_warning') {
+            var sizeMB = (data.size / 1024 / 1024).toFixed(1);
+            var limitMB = (data.limit / 1024 / 1024).toFixed(0);
+            alert('Warning: Your document is ' + sizeMB + ' MB. The maximum allowed size is ' + limitMB + ' MB. Consider reducing file size to avoid save failures.');
+          }
+        }).catch(function() {});
+      }
+    };
+
     var docEditor = new DocsAPI.DocEditor('editor-container', config);
   </script>
 <% if (isOwner) { %>
