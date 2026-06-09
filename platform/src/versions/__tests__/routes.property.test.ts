@@ -178,15 +178,14 @@ describe('Property 14: Restore overwrites current file with archived content', (
       fc.asyncProperty(
         fc.uuid(),
         fc.uint8Array({ minLength: 1, maxLength: 5000 }),
-        fc.uint8Array({ minLength: 1, maxLength: 5000 }),
-        async (fileId, currentBytes, archivedBytes) => {
+        async (fileId, archivedBytes) => {
           vi.clearAllMocks();
 
           const file = {
             id: fileId,
             name: 'doc.docx',
             mimeType: 'application/octet-stream',
-            sizeBytes: currentBytes.length,
+            sizeBytes: 1000,
             userId: 'user-1',
             folderId: null,
             s3Key: `user-1/${fileId}/doc.docx`,
@@ -197,27 +196,20 @@ describe('Property 14: Restore overwrites current file with archived content', (
           mockGetFile.mockResolvedValue(file);
           mockGetShare.mockResolvedValue(null);
           mockGetVersion.mockResolvedValue({ s3Key: `user-1/${fileId}/versions/1.docx`, versionNumber: 1 });
-          mockGetLatestVersionNumber.mockResolvedValue(1);
-          mockInsertVersion.mockResolvedValue({ id: 'ver-new' });
           mockUpload.mockResolvedValue(undefined);
           mockUpdateFile.mockResolvedValue({});
 
-          const currentContent = Buffer.from(currentBytes);
           const archivedContent = Buffer.from(archivedBytes);
-
-          // First download = current file (for archival), second download = version content (for restore)
-          mockDownload
-            .mockResolvedValueOnce(Readable.from([currentContent]))
-            .mockResolvedValueOnce(Readable.from([archivedContent]));
+          mockDownload.mockResolvedValueOnce(Readable.from([archivedContent]));
 
           const app = createApp();
           const result = await makeRequest(app, 'POST', `/api/files/${fileId}/versions/1/restore`);
 
           expect(result.status).toBe(200);
 
-          // Second upload call should be the restore: writing archivedContent to current key
-          if (mockUpload.mock.calls.length >= 2) {
-            const restoreCall = mockUpload.mock.calls[1];
+          // Upload should write archivedContent to current key
+          if (mockUpload.mock.calls.length >= 1) {
+            const restoreCall = mockUpload.mock.calls[0];
             expect(restoreCall[0]).toBe(file.s3Key);
             expect(Buffer.compare(restoreCall[1], archivedContent)).toBe(0);
           }

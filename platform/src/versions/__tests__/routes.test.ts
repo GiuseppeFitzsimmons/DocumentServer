@@ -196,18 +196,15 @@ describe('POST /api/files/:fileId/versions/:ver/restore', () => {
     mockGetFile.mockResolvedValue(file);
     mockGetShare.mockResolvedValue(null);
     mockGetVersion.mockResolvedValue({ s3Key: 'user-1/file-1/versions/1.docx', versionNumber: 1 });
-    mockGetLatestVersionNumber.mockResolvedValue(1);
-    mockDownload
-      .mockResolvedValueOnce(Readable.from([Buffer.from('current content')]))
-      .mockResolvedValueOnce(Readable.from([Buffer.from('old content')]));
+    mockDownload.mockResolvedValueOnce(Readable.from([Buffer.from('old content')]));
 
     const app = createApp();
     const result = await makeRequest(app, 'POST', '/api/files/file-1/versions/1/restore');
 
     expect(result.status).toBe(200);
     expect(result.body.success).toBe(true);
-    expect(mockInsertVersion).toHaveBeenCalled();
-    expect(mockUpload).toHaveBeenCalledTimes(2);
+    expect(mockUpload).toHaveBeenCalledTimes(1);
+    expect(mockUpload).toHaveBeenCalledWith(file.s3Key, expect.any(Buffer), file.mimeType);
   });
 
   it('returns 403 for shared user without edit permission', async () => {

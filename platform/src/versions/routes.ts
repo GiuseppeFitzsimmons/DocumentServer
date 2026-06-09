@@ -7,7 +7,6 @@ import * as storage from '../storage/s3.js';
 import * as versionRepo from './repository.js';
 import { getShare } from '../sharing/service.js';
 import { pool } from '../db/pool.js';
-import path from 'path';
 
 export const versionRouter = Router();
 
@@ -234,32 +233,7 @@ versionRouter.post('/:fileId/versions/:ver/restore', requireAuth, async (req, re
 
     const file = access.file;
 
-    // Archive current content as a new version before restore
-    const currentStream = await storage.download(file.s3Key);
-    const chunks: Buffer[] = [];
-    for await (const chunk of currentStream) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    }
-    const currentContent = Buffer.concat(chunks);
-
-    const latestVersion = await versionRepo.getLatestVersionNumber(fileId);
-    const newVersionNumber = latestVersion + 1;
-    const ext = path.extname(file.name);
-    const archiveKey = `${file.userId}/${file.id}/versions/${newVersionNumber}${ext}`;
-
-    await storage.upload(archiveKey, currentContent, file.mimeType);
-
-    const documentKey = `${file.id}_${file.updatedAt.getTime()}`;
-    await versionRepo.insertVersion({
-      fileId: file.id,
-      versionNumber: newVersionNumber,
-      s3Key: archiveKey,
-      sizeBytes: currentContent.length,
-      documentKey,
-      createdBy: userId,
-    });
-
-    // Copy archived version content to current file key
+    // Copy archived version content to current file key (no new version created)
     const versionStream = await storage.download(version.s3Key);
     const versionChunks: Buffer[] = [];
     for await (const chunk of versionStream) {
