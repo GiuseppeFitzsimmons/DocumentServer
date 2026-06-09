@@ -56,13 +56,17 @@ versionRouter.get('/:fileId/versions', requireAuth, async (req, res) => {
     // Build current version info from file
     const currentVersion = versions.length > 0 ? versions[0].versionNumber + 1 : 1;
 
-    const history = versions.map((v) => ({
-      version: v.versionNumber,
-      key: v.documentKey,
-      created: v.createdAt.toISOString(),
-      user: { id: v.createdBy, name: userNames[v.createdBy] || 'Unknown' },
-      changes: v.changesJson,
-    }));
+    const history = versions.map((v) => {
+      const entry: Record<string, unknown> = {
+        version: v.versionNumber,
+        key: v.documentKey,
+        created: v.createdAt.toISOString(),
+        user: { id: v.createdBy, name: userNames[v.createdBy] || 'Unknown' },
+        changes: v.changesJson,
+      };
+      entry.token = jwt.sign(entry, config.DS_JWT_SECRET);
+      return entry;
+    });
 
     res.json({ currentVersion, history });
   } catch (err) {
@@ -194,7 +198,10 @@ versionRouter.get('/:fileId/versions/:ver/data', requireAuth, async (req, res) =
       data.changesUrl = `${platformBaseUrl}/api/files/${fileId}/versions/${versionNumber}/diff?token=${diffToken}`;
     }
 
-    res.json(data);
+    // Sign the entire data payload as a token for DS verification
+    const token = jwt.sign(data, config.DS_JWT_SECRET);
+
+    res.json({ ...data, token });
   } catch (err) {
     console.error('Version data error:', err);
     res.status(500).json({ error: 'Internal server error' });
