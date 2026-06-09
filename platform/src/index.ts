@@ -83,8 +83,8 @@ app.use('/api/files/serve', serveRouter);
 app.use('/api/ds/callback', callbackRouter);
 
 // File storage API
-app.use('/api/files', fileRouter);
 app.use('/api/files', versionRouter);
+app.use('/api/files', fileRouter);
 app.use('/api/folders', folderRouter);
 
 // Sharing API
