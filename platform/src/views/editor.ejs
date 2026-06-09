@@ -413,9 +413,9 @@
         return res.json();
       }).then(function(data) {
         if (data.status === 'size_limit_exceeded') {
-          var sizeMB = (data.size / 1024 / 1024).toFixed(1);
-          var limitMB = (data.limit / 1024 / 1024).toFixed(0);
-          alert('Save failed: Your document (' + sizeMB + ' MB) exceeds the ' + limitMB + ' MB size limit. Please reduce the file size (e.g. compress images) and try again.');
+          var sizeStr = formatBytes(data.size);
+          var limitStr = formatBytes(data.limit);
+          alert('Save failed: Your document (' + sizeStr + ') exceeds the ' + limitStr + ' size limit. Please reduce the file size and try again.');
         }
       }).catch(function() {});
     };
@@ -430,13 +430,19 @@
           return res.json();
         }).then(function(data) {
           if (data.status === 'size_warning') {
-            var sizeMB = (data.size / 1024 / 1024).toFixed(1);
-            var limitMB = (data.limit / 1024 / 1024).toFixed(0);
-            alert('Warning: Your document is ' + sizeMB + ' MB. The maximum allowed size is ' + limitMB + ' MB. Consider reducing file size to avoid save failures.');
+            var sizeStr = formatBytes(data.size);
+            var limitStr = formatBytes(data.limit);
+            alert('Warning: Your document is ' + sizeStr + '. The maximum allowed size is ' + limitStr + '. Consider reducing file size to avoid save failures.');
           }
         }).catch(function() {});
       }
     };
+
+    function formatBytes(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
 
     var docEditor = new DocsAPI.DocEditor('editor-container', config);
   </script>
