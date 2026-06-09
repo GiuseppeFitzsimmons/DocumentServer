@@ -81,6 +81,10 @@ FROM ds-base AS ds-service
     #COPY --chown=ds:ds \
     #    fonts/ \
     #    /var/www/$COMPANY_NAME_LOW/documentserver/core-fonts/custom/
+    # Custom fonts: replace core-fonts entirely with our curated set + msttcore
+    COPY --chown=ds:ds \
+        fonts/ \
+        /var/www/$COMPANY_NAME_LOW/documentserver/core-fonts/custom/
     #COPY --chown=ds:ds \
     #    plugins/ \
     #    /var/www/$COMPANY_NAME_LOW/documentserver/sdkjs-plugins/
@@ -151,8 +155,11 @@ FROM ds-base AS docs
         /var/www/$COMPANY_NAME_LOW/documentserver/sdkjs-plugins \
         /var/www/$COMPANY_NAME_LOW/documentserver/sdkjs-plugins
     COPY --from=ds-service \
-        /var/www/$COMPANY_NAME_LOW/documentserver/core-fonts \
-        /var/www/$COMPANY_NAME_LOW/documentserver/core-fonts
+        /var/www/$COMPANY_NAME_LOW/documentserver/core-fonts/msttcore \
+        /var/www/$COMPANY_NAME_LOW/documentserver/core-fonts/msttcore
+    COPY --from=ds-service \
+        /var/www/$COMPANY_NAME_LOW/documentserver/core-fonts/custom \
+        /var/www/$COMPANY_NAME_LOW/documentserver/core-fonts/custom
     COPY --chown=ds:ds --from=ds-service \
         /var/www/$COMPANY_NAME_LOW/documentserver/fonts \
         /var/www/$COMPANY_NAME_LOW/documentserver/fonts

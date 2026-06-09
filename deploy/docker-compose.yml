@@ -40,7 +40,9 @@ services:
       - redis
 
   documentserver:
-    image: ghcr.io/euro-office/documentserver:latest
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.documentserver
     restart: unless-stopped
     environment:
       JWT_SECRET: ${JWT_SECRET}
