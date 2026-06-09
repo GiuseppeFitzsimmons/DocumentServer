@@ -15,6 +15,7 @@ import { sharingRouter } from './sharing/routes.js';
 import { usersRouter } from './users/routes.js';
 import { serveRouter } from './ds/serve.js';
 import { callbackRouter } from './ds/callback.js';
+import { versionRouter } from './versions/routes.js';
 import { editorRouter } from './pages/editor.js';
 import { landingRouter } from './pages/landing.js';
 
@@ -83,6 +84,7 @@ app.use('/api/ds/callback', callbackRouter);
 
 // File storage API
 app.use('/api/files', fileRouter);
+app.use('/api/files', versionRouter);
 app.use('/api/folders', folderRouter);
 
 // Sharing API

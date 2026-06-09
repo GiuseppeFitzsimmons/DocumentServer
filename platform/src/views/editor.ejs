@@ -358,6 +358,53 @@
     };
 <% } %>
 
+    // Version history event handlers
+    config.events.onRequestHistory = function() {
+      fetch('/api/files/<%= fileId %>/versions', {
+        credentials: 'same-origin'
+      }).then(function(res) {
+        if (!res.ok) throw new Error('Failed to load history');
+        return res.json();
+      }).then(function(data) {
+        docEditor.refreshHistory(data);
+      }).catch(function(err) {
+        console.error('onRequestHistory error:', err);
+      });
+    };
+
+    config.events.onRequestHistoryData = function(event) {
+      var version = event.data;
+      fetch('/api/files/<%= fileId %>/versions/' + version + '/data', {
+        credentials: 'same-origin'
+      }).then(function(res) {
+        if (!res.ok) throw new Error('Failed to load history data');
+        return res.json();
+      }).then(function(data) {
+        docEditor.setHistoryData(data);
+      }).catch(function(err) {
+        console.error('onRequestHistoryData error:', err);
+      });
+    };
+
+    config.events.onRequestHistoryClose = function() {
+      document.location.reload();
+    };
+
+    config.events.onRequestRestore = function(event) {
+      var version = event.data.version;
+      fetch('/api/files/<%= fileId %>/versions/' + version + '/restore', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' }
+      }).then(function(res) {
+        if (!res.ok) throw new Error('Restore failed');
+        document.location.reload();
+      }).catch(function(err) {
+        console.error('onRequestRestore error:', err);
+        alert('Failed to restore version');
+      });
+    };
+
     var docEditor = new DocsAPI.DocEditor('editor-container', config);
   </script>
 <% if (isOwner) { %>

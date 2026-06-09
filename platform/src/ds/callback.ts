@@ -4,13 +4,89 @@ import { Readable } from 'stream';
 import { config } from '../config.js';
 import * as storage from '../storage/s3.js';
 import * as metadata from '../storage/metadata.js';
+import * as versionRepo from '../versions/repository.js';
+import path from 'path';
 
 export const callbackRouter = Router();
 
-interface CallbackPayload {
+export interface CallbackPayload {
   status: number;
   url?: string;
   key?: string;
+  changesurl?: string;
+  history?: { changes: object[]; serverVersion: string };
+  users?: string[];
+  actions?: Array<{ type: number; userid: string }>;
+}
+
+async function archiveCurrentVersion(
+  file: metadata.FileRecord,
+  payload: CallbackPayload
+): Promise<void> {
+  // Determine which user triggered the save
+  const userId = payload.actions?.[0]?.userid ?? file.userId;
+
+  // Download current file content from storage
+  const currentStream = await storage.download(file.s3Key);
+  const chunks: Buffer[] = [];
+  for await (const chunk of currentStream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  const currentContent = Buffer.concat(chunks);
+
+  // Compute next version number
+  const latestVersion = await versionRepo.getLatestVersionNumber(file.id);
+  const nextVersion = latestVersion + 1;
+
+  // Build versioned storage key
+  const ext = path.extname(file.name);
+  const versionS3Key = `${file.userId}/${file.id}/versions/${nextVersion}${ext}`;
+
+  // Upload current content to versioned key
+  await storage.upload(versionS3Key, currentContent, file.mimeType);
+
+  // Document key for this version
+  const documentKey = `${file.id}_${file.updatedAt.getTime()}`;
+
+  // Handle diff/changes
+  let changesS3Key: string | null = null;
+  let changesJson: object | null = null;
+
+  if (payload.changesurl) {
+    try {
+      const diffResponse = await fetch(payload.changesurl);
+      if (diffResponse.ok && diffResponse.body) {
+        const diffStream = Readable.fromWeb(diffResponse.body as any);
+        const diffChunks: Buffer[] = [];
+        for await (const chunk of diffStream) {
+          diffChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        const diffBuffer = Buffer.concat(diffChunks);
+        const diffKey = `${file.userId}/${file.id}/versions/${nextVersion}/diff.zip`;
+        await storage.upload(diffKey, diffBuffer, 'application/zip');
+        changesS3Key = diffKey;
+      }
+    } catch (err) {
+      console.error('Failed to download diff zip from changesurl', { fileId: file.id, err });
+      changesS3Key = null;
+    }
+  }
+
+  if (payload.history) {
+    changesJson = payload.history;
+  }
+
+  // Insert version record
+  await versionRepo.insertVersion({
+    fileId: file.id,
+    versionNumber: nextVersion,
+    s3Key: versionS3Key,
+    sizeBytes: currentContent.length,
+    changesS3Key,
+    changesJson,
+    documentKey,
+    createdBy: userId,
+  });
 }
 
 // POST /api/ds/callback?fileId=
@@ -44,14 +120,14 @@ callbackRouter.post('/', async (req, res) => {
 
     const payload = req.body as CallbackPayload;
 
-    // Only process status 2 (document ready for saving)
-    if (payload.status !== 2) {
+    // Only process status 2 (document ready for saving) and status 6 (force save)
+    if (payload.status !== 2 && payload.status !== 6) {
       res.json({ error: 0 });
       return;
     }
 
     if (!payload.url) {
-      console.warn('Callback status 2 but no URL provided', { fileId });
+      console.warn('Callback status 2/6 but no URL provided', { fileId });
       res.json({ error: 1 });
       return;
     }
@@ -61,6 +137,13 @@ callbackRouter.post('/', async (req, res) => {
       console.error('Callback for non-existent file', { fileId });
       res.json({ error: 1 });
       return;
+    }
+
+    // Archive current version before overwrite
+    try {
+      await archiveCurrentVersion(file, payload);
+    } catch (err) {
+      console.error('Failed to archive version, continuing with save', { fileId, err });
     }
 
     // Download the updated document from DS-provided URL
@@ -85,7 +168,7 @@ callbackRouter.post('/', async (req, res) => {
     }
     const buffer = Buffer.concat(chunks);
 
-    // Upload to S3, replacing previous version
+    // Upload to storage, replacing previous version
     await storage.upload(file.s3Key, buffer, file.mimeType);
 
     // Update metadata

@@ -15,6 +15,7 @@ export interface EditorConfigParams {
   sharePermissions?: SharePermissions;
   sharingSettings?: SharingSettingsEntry[];
   isOwner?: boolean;
+  hasVersions?: boolean;
 }
 
 export function buildEditorConfig(params: EditorConfigParams): object {
@@ -93,6 +94,14 @@ export function buildEditorConfig(params: EditorConfigParams): object {
       customization: {
         forcesave: true,
       },
+      ...(params.hasVersions ? {
+        events: {
+          onRequestHistory: true,
+          onRequestHistoryData: true,
+          onRequestHistoryClose: true,
+          onRequestRestore: true,
+        },
+      } : {}),
     },
   };
 

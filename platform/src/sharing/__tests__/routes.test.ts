@@ -42,6 +42,11 @@ vi.mock('../../auth/middleware.js', () => ({
   },
 }));
 
+// Mock the versions repository (used by editor route)
+vi.mock('../../versions/repository.js', () => ({
+  getLatestVersionNumber: vi.fn(() => Promise.resolve(0)),
+}));
+
 import * as sharingService from '../service.js';
 import { getFile } from '../../storage/metadata.js';
 import { download } from '../../storage/s3.js';
