@@ -25,8 +25,8 @@ smtp_user = "noreply@eurobureau.eu"
 smtp_pass = "your-ovh-email-password"
 
 # OVH Object Storage (off-site replication)
-ovh_s3_endpoint   = "https://s3.par.io.cloud.ovh.net"
+ovh_s3_endpoint   = "https://s3.eu-west-par.io.cloud.ovh.net"
 ovh_s3_bucket     = "euro-office-replica"
 ovh_s3_access_key = "your-ovh-s3-access-key"
 ovh_s3_secret_key = "your-ovh-s3-secret-key"
-ovh_s3_region     = "par"
+ovh_s3_region     = "eu-west-par"

@@ -88,7 +88,7 @@ variable "smtp_pass" {
 variable "ovh_s3_endpoint" {
   description = "OVH S3-compatible endpoint URL"
   type        = string
-  default     = "https://s3.par.io.cloud.ovh.net"
+  default     = "https://s3.eu-west-par.io.cloud.ovh.net"
 }
 
 variable "ovh_s3_bucket" {
@@ -112,7 +112,7 @@ variable "ovh_s3_secret_key" {
 }
 
 variable "ovh_s3_region" {
-  description = "OVH S3 region (e.g. par)"
+  description = "OVH S3 region (e.g. eu-west-par)"
   type        = string
-  default     = "par"
+  default     = "eu-west-par"
 }

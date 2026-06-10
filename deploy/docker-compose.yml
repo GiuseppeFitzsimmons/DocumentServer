@@ -37,7 +37,7 @@ services:
       OVH_S3_BUCKET: ${OVH_S3_BUCKET:-}
       OVH_S3_ACCESS_KEY: ${OVH_S3_ACCESS_KEY:-}
       OVH_S3_SECRET_KEY: ${OVH_S3_SECRET_KEY:-}
-      OVH_S3_REGION: ${OVH_S3_REGION:-par}
+      OVH_S3_REGION: ${OVH_S3_REGION:-eu-west-par}
     volumes:
       - /mnt/euro-office-data/files:/data/files
     depends_on:
