@@ -7,6 +7,7 @@ import * as storage from './s3.js';
 import * as metadata from './metadata.js';
 import { getTemplate, isValidDocumentType } from './templates.js';
 import { getShare, deleteSharesForFile } from '../sharing/service.js';
+import * as versionRepo from '../versions/repository.js';
 
 // Must match the callback handler's MAX_SAVE_SIZE_BYTES
 const MAX_FILE_SIZE = 1000 * 1024; // 1mb
@@ -303,9 +304,20 @@ fileRouter.delete('/:id', async (req, res) => {
       return;
     }
 
+    // Fetch version keys before DB cascade deletes them
+    const versions = await versionRepo.listVersions(file.id);
+
     await metadata.deleteFile(file.id);
     await storage.remove(file.s3Key);
     await deleteSharesForFile(file.id);
+
+    // Clean up version blobs from storage
+    for (const v of versions) {
+      await storage.remove(v.s3Key);
+      if (v.changesS3Key) {
+        await storage.remove(v.changesS3Key);
+      }
+    }
     res.status(204).end();
   } catch (err) {
     console.error('File delete error:', err);
