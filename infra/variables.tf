@@ -82,3 +82,37 @@ variable "smtp_pass" {
   sensitive   = true
   default     = ""
 }
+
+# --- OVH Object Storage (replication target) ---
+
+variable "ovh_s3_endpoint" {
+  description = "OVH S3-compatible endpoint URL"
+  type        = string
+  default     = "https://s3.par.io.cloud.ovh.net"
+}
+
+variable "ovh_s3_bucket" {
+  description = "OVH Object Storage bucket name for replication"
+  type        = string
+  default     = "euro-office-replica"
+}
+
+variable "ovh_s3_access_key" {
+  description = "OVH S3 access key"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "ovh_s3_secret_key" {
+  description = "OVH S3 secret key"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "ovh_s3_region" {
+  description = "OVH S3 region (e.g. par)"
+  type        = string
+  default     = "par"
+}

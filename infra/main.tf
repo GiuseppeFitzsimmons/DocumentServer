@@ -77,10 +77,21 @@ resource "hcloud_server" "euro_office" {
   firewall_ids = [hcloud_firewall.euro_office.id]
 
   user_data = templatefile("${path.module}/cloud-init.yaml", {
-    jwt_secret     = var.jwt_secret
-    db_password    = var.db_password
-    session_secret = var.session_secret
-    repo_url       = var.repo_url
+    jwt_secret       = var.jwt_secret
+    db_password      = var.db_password
+    session_secret   = var.session_secret
+    repo_url         = var.repo_url
+    mail_domain      = var.mail_domain
+    dkim_private_key = var.dkim_private_key
+    smtp_host        = var.smtp_host
+    smtp_port        = var.smtp_port
+    smtp_user        = var.smtp_user
+    smtp_pass        = var.smtp_pass
+    ovh_s3_endpoint  = var.ovh_s3_endpoint
+    ovh_s3_bucket    = var.ovh_s3_bucket
+    ovh_s3_access_key = var.ovh_s3_access_key
+    ovh_s3_secret_key = var.ovh_s3_secret_key
+    ovh_s3_region    = var.ovh_s3_region
   })
 
   public_net {

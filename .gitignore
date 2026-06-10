@@ -5,3 +5,4 @@ develop/richdocuments
 platform/node_modules
 .kiro/
 */.env
+.env
