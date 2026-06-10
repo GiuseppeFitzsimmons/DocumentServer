@@ -1,9 +1,10 @@
 import { Readable } from 'stream';
 import { createReadStream, createWriteStream } from 'fs';
-import { mkdir, unlink } from 'fs/promises';
+import { mkdir, unlink, readFile } from 'fs/promises';
 import path from 'path';
 import { config } from '../config.js';
 import { pipeline } from 'stream/promises';
+import { replicateUpload, replicateDelete } from './replicate.js';
 
 const STORAGE_DIR = config.FILE_STORAGE_PATH;
 
@@ -20,7 +21,7 @@ function resolvePath(key: string): string {
 export async function upload(
   key: string,
   body: Buffer | Readable,
-  _contentType: string
+  contentType: string
 ): Promise<void> {
   const filePath = resolvePath(key);
   await ensureDir(filePath);
@@ -28,9 +29,13 @@ export async function upload(
   if (Buffer.isBuffer(body)) {
     const { writeFile } = await import('fs/promises');
     await writeFile(filePath, body);
+    replicateUpload(key, body, contentType);
   } else {
     const writeStream = createWriteStream(filePath);
     await pipeline(body, writeStream);
+    // Read back the written file for replication
+    const written = await readFile(filePath);
+    replicateUpload(key, written, contentType);
   }
 }
 
@@ -46,4 +51,5 @@ export async function remove(key: string): Promise<void> {
   } catch (err: any) {
     if (err.code !== 'ENOENT') throw err;
   }
+  replicateDelete(key);
 }

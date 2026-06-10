@@ -33,6 +33,11 @@ services:
       SMTP_PORT: ${SMTP_PORT:-465}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
+      OVH_S3_ENDPOINT: ${OVH_S3_ENDPOINT:-}
+      OVH_S3_BUCKET: ${OVH_S3_BUCKET:-}
+      OVH_S3_ACCESS_KEY: ${OVH_S3_ACCESS_KEY:-}
+      OVH_S3_SECRET_KEY: ${OVH_S3_SECRET_KEY:-}
+      OVH_S3_REGION: ${OVH_S3_REGION:-par}
     volumes:
       - /mnt/euro-office-data/files:/data/files
     depends_on:
