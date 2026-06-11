@@ -1,9 +1,12 @@
 /**
  * Epub Font Injector - post-processes a pandoc-generated epub to embed fonts.
  *
- * Opens the epub as a zip archive, copies resolved font files into OEBPS/fonts/,
- * appends @font-face CSS declarations to the existing stylesheet, and updates
- * the OPF manifest with font file entries.
+ * Opens the epub as a zip archive, copies resolved font files into a fonts/
+ * subdirectory alongside the content, appends @font-face CSS declarations to
+ * the existing stylesheet, and updates the OPF manifest with font file entries.
+ *
+ * Dynamically detects the epub's content directory (EPUB/, OEBPS/, or other)
+ * by locating the OPF manifest file.
  */
 
 import AdmZip from 'adm-zip';
@@ -23,9 +26,10 @@ export interface EpubFontInjectorInput {
  * Injects resolved font files into a pandoc-generated epub archive.
  *
  * Operations performed:
- * 1. Copies each resolved font file into OEBPS/fonts/ within the archive
- * 2. Appends @font-face CSS declarations to the existing stylesheet
- * 3. Updates the OPF manifest with <item> entries for each font
+ * 1. Detects the content directory by locating the OPF file
+ * 2. Copies each resolved font file into {contentDir}/fonts/ within the archive
+ * 3. Appends @font-face CSS declarations to the existing stylesheet
+ * 4. Updates the OPF manifest with <item> entries for each font
  *
  * If no resolved fonts are present, the epub is left unmodified.
  * If the epub cannot be opened or modified, throws a descriptive error.
@@ -55,36 +59,43 @@ export async function injectFontsIntoEpub(input: EpubFontInjectorInput): Promise
     );
   }
 
-  // Add each font file into OEBPS/fonts/
-  for (const font of fontsToEmbed) {
-    const filename = path.basename(font.filePath);
-    const fontData = readFontFile(font.filePath);
-    zip.addFile(`OEBPS/fonts/${filename}`, fontData);
-  }
-
-  // Find and update the CSS stylesheet
-  const cssEntry = findStylesheet(zip);
-  if (cssEntry === null) {
-    throw new Error(
-      'Failed to inject fonts: no CSS stylesheet found in epub archive (expected .css file under OEBPS/)'
-    );
-  }
-
-  const existingCss = zip.getEntry(cssEntry)!.getData().toString('utf-8');
-  const fontFaceDeclarations = generateFontFaceCSS(fontsToEmbed);
-  const updatedCss = existingCss + '\n' + fontFaceDeclarations;
-  zip.updateFile(cssEntry, Buffer.from(updatedCss, 'utf-8'));
-
-  // Find and update the OPF manifest
+  // Find the OPF manifest to determine the content directory
   const opfEntry = findOpfFile(zip);
   if (opfEntry === null) {
     throw new Error(
       'Failed to inject fonts: no OPF manifest found in epub archive (expected .opf file)'
     );
   }
+  const contentDir = path.posix.dirname(opfEntry);
+  const fontsDir = contentDir ? `${contentDir}/fonts` : 'fonts';
 
+  // Add each font file into {contentDir}/fonts/
+  for (const font of fontsToEmbed) {
+    const filename = path.basename(font.filePath);
+    const fontData = readFontFile(font.filePath);
+    zip.addFile(`${fontsDir}/${filename}`, fontData);
+  }
+
+  // Find and update the CSS stylesheet
+  const cssEntry = findStylesheet(zip, contentDir);
+  if (cssEntry === null) {
+    throw new Error(
+      `Failed to inject fonts: no CSS stylesheet found in epub archive (looked under "${contentDir}/")`
+    );
+  }
+
+  // Compute the relative path from the CSS file to the fonts directory
+  const cssDir = path.posix.dirname(cssEntry);
+  const fontsRelativeToCSS = path.posix.relative(cssDir, fontsDir);
+
+  const existingCss = zip.getEntry(cssEntry)!.getData().toString('utf-8');
+  const fontFaceDeclarations = generateFontFaceCSS(fontsToEmbed, fontsRelativeToCSS);
+  const updatedCss = existingCss + '\n' + fontFaceDeclarations;
+  zip.updateFile(cssEntry, Buffer.from(updatedCss, 'utf-8'));
+
+  // Update OPF manifest
   const existingOpf = zip.getEntry(opfEntry)!.getData().toString('utf-8');
-  const updatedOpf = insertManifestEntries(existingOpf, fontsToEmbed, opfEntry);
+  const updatedOpf = insertManifestEntries(existingOpf, fontsToEmbed, opfEntry, fontsDir);
   zip.updateFile(opfEntry, Buffer.from(updatedOpf, 'utf-8'));
 
   // Write the modified zip back to disk
@@ -112,14 +123,15 @@ function readFontFile(filePath: string): Buffer {
 
 /**
  * Finds the CSS stylesheet within the epub archive.
- * Looks for .css files under OEBPS/ (pandoc typically generates OEBPS/stylesheet.css).
+ * Looks for .css files under the content directory (detected dynamically).
  * Returns the entry path or null if not found.
  */
-function findStylesheet(zip: AdmZip): string | null {
+function findStylesheet(zip: AdmZip, contentDir: string): string | null {
+  const prefix = contentDir ? `${contentDir}/` : '';
   const entries = zip.getEntries();
   for (const entry of entries) {
     const name = entry.entryName;
-    if (name.startsWith('OEBPS/') && name.endsWith('.css') && !entry.isDirectory) {
+    if (name.startsWith(prefix) && name.endsWith('.css') && !entry.isDirectory) {
       return name;
     }
   }
@@ -144,18 +156,21 @@ function findOpfFile(zip: AdmZip): string | null {
 
 /**
  * Generates @font-face CSS declarations for all fonts to be embedded.
+ * Uses the relative path from the CSS file location to the fonts directory.
  */
 function generateFontFaceCSS(
-  fonts: Array<FontResolutionResult & { filePath: string }>
+  fonts: Array<FontResolutionResult & { filePath: string }>,
+  fontsRelativePath: string
 ): string {
   return fonts
     .map((font) => {
       const filename = path.basename(font.filePath);
+      const urlPath = fontsRelativePath ? `${fontsRelativePath}/${filename}` : filename;
       return `@font-face {
   font-family: "${font.record.family}";
   font-weight: ${font.record.weight};
   font-style: ${font.record.style};
-  src: url("fonts/${filename}");
+  src: url("${urlPath}");
 }`;
     })
     .join('\n\n');
@@ -168,7 +183,8 @@ function generateFontFaceCSS(
 function insertManifestEntries(
   opfContent: string,
   fonts: Array<FontResolutionResult & { filePath: string }>,
-  opfEntryPath: string
+  opfEntryPath: string,
+  fontsDir: string
 ): string {
   const manifestCloseTag = '</manifest>';
   const insertIndex = opfContent.indexOf(manifestCloseTag);
@@ -181,7 +197,7 @@ function insertManifestEntries(
 
   // Determine the relative path from the OPF file to the fonts directory
   const opfDir = path.posix.dirname(opfEntryPath);
-  const fontsRelativeDir = path.posix.relative(opfDir, 'OEBPS/fonts');
+  const fontsRelativeDir = path.posix.relative(opfDir, fontsDir);
 
   const itemEntries = fonts
     .map((font) => {
