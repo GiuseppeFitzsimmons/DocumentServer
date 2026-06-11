@@ -13,7 +13,7 @@ BASE_URL="https://www.ipdeny.com/ipblocks/data/aggregated"
 # EU 27 country codes
 EU_CODES=(at be bg hr cy cz dk ee fi fr de gr hu ie it lv lt lu mt nl pl pt ro sk si es se)
 # Additional allowed countries: GB, NO, CH, IS, AU, NZ, CA, US, MX
-EXTRA_CODES=(gb no ch is au nz ca us mx)
+EXTRA_CODES=(gb no ch is au nz ca us mx li ad mc sm va)
 
 COUNTRY_CODES=("${EU_CODES[@]}" "${EXTRA_CODES[@]}")
 
