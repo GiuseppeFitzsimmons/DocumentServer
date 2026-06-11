@@ -105,6 +105,32 @@ export async function moveFolder(id, parentId) {
     const { rows } = await pool.query(`UPDATE folders SET parent_id = $1, updated_at = NOW() WHERE id = $2 RETURNING *`, [parentId, id]);
     return mapFolderRow(rows[0]);
 }
+/**
+ * Walks parentId links upward from the given folder to build the ancestor chain.
+ * Returns an array ordered from root (topmost ancestor) to the given folder itself.
+ */
+export async function getAncestors(folderId) {
+    const ancestors = [];
+    let current = folderId;
+    while (current !== null) {
+        const folder = await getFolder(current);
+        if (!folder) {
+            break;
+        }
+        ancestors.push(folder);
+        current = folder.parentId;
+    }
+    // Reverse so the array goes from root to the given folder
+    return ancestors.reverse();
+}
+/**
+ * Fetches all folders belonging to a user. Used by the tree builder to assemble
+ * the full folder hierarchy in memory.
+ */
+export async function getAllUserFolders(userId) {
+    const { rows } = await pool.query('SELECT * FROM folders WHERE user_id = $1', [userId]);
+    return rows.map(mapFolderRow);
+}
 // --- Row mappers ---
 function mapFileRow(row) {
     return {

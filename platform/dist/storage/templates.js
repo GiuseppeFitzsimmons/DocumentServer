@@ -6,7 +6,6 @@ export const BLANK_PPTX = Buffer.from("UEsDBBQAAAAAAM5ZwVx8zmOhNAIAADQCAAATAAAAW
 const TEMPLATES = {
     docx: { buffer: BLANK_DOCX, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
     xlsx: { buffer: BLANK_XLSX, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
-    pptx: { buffer: BLANK_PPTX, mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
 };
 export function getTemplate(type) {
     return TEMPLATES[type];

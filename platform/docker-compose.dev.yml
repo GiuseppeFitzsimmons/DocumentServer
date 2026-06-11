@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: portal
+      POSTGRES_USER: portal
+      POSTGRES_PASSWORD: portal
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  documentserver:
+    image: ghcr.io/euro-office/documentserver:latest
+    ports:
+      - "8080:80"
+    environment:
+      JWT_SECRET: euro-office-dev-jwt-secret-key-2026
+      ALLOW_PRIVATE_IP_ADDRESS: "true"
+      EXAMPLE_ENABLED: "true"
+      GENERATE_FONTS: "true"
+    volumes:
+      - ../fonts:/var/www/euro-office/documentserver/core-fonts/custom
+
+volumes:
+  pg_data:

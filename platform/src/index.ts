@@ -19,6 +19,7 @@ import { versionRouter } from './versions/routes.js';
 import { exportRouter } from './export/routes.js';
 import { editorRouter } from './pages/editor.js';
 import { landingRouter } from './pages/landing.js';
+import { homeRouter } from './pages/home.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -39,6 +40,10 @@ app.use(sessionMiddleware);
 // View engine
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
+
+// Static assets (fonts, images)
+app.use('/fonts', express.static(path.join(__dirname, '..', '..', 'fonts')));
+app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Render with layout
 app.use((req, res, next) => {
@@ -62,6 +67,9 @@ const authLimiter = rateLimit({
   max: 20,
   message: { error: 'Too many requests, try again later' },
 });
+
+// Public homepage (unauthenticated visitors)
+app.use(homeRouter);
 
 // API auth routes
 app.use('/auth', authLimiter, authRouter);

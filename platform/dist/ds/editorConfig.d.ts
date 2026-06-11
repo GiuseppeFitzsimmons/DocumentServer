@@ -14,6 +14,7 @@ export interface EditorConfigParams {
     sharePermissions?: SharePermissions;
     sharingSettings?: SharingSettingsEntry[];
     isOwner?: boolean;
+    hasVersions?: boolean;
 }
 export declare function buildEditorConfig(params: EditorConfigParams): object;
 //# sourceMappingURL=editorConfig.d.ts.map

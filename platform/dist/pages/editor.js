@@ -4,6 +4,8 @@ import { getFile } from '../storage/metadata.js';
 import { buildEditorConfig } from '../ds/editorConfig.js';
 import { getShare, listSharesForFile } from '../sharing/service.js';
 import { pool } from '../db/pool.js';
+import { getLatestVersionNumber } from '../versions/repository.js';
+import { config } from '../config.js';
 export function summarizePermissions(p) {
     if (p.edit && p.download && p.print && p.copy && p.comment && p.review && p.chat && p.fillForms) {
         return 'Full Access';
@@ -54,36 +56,42 @@ editorRouter.get('/editor/:fileId', requireAuth, async (req, res) => {
                 res.status(403).json({ error: 'Forbidden' });
                 return;
             }
+            const hasVersions = (await getLatestVersionNumber(fileId)) > 0;
             const editorConfig = buildEditorConfig({
                 file,
                 user: { id: userId, name: displayName },
                 sharePermissions: share.permissions,
                 sharingSettings,
                 isOwner,
+                hasVersions,
             });
             res.render('editor', {
                 title: file.name,
                 editorConfig,
-                dsUrl: '',
+                dsUrl: config.NODE_ENV === 'development' ? config.DS_URL : '',
                 fileId: fileId,
                 isOwner,
+                ownerName: ownerDisplayName,
                 layout: false,
             });
             return;
         }
         // Owner path: full permissions
+        const hasVersions = (await getLatestVersionNumber(fileId)) > 0;
         const editorConfig = buildEditorConfig({
             file,
             user: { id: userId, name: displayName },
             sharingSettings,
             isOwner,
+            hasVersions,
         });
         res.render('editor', {
             title: file.name,
             editorConfig,
-            dsUrl: '',
+            dsUrl: config.NODE_ENV === 'development' ? config.DS_URL : '',
             fileId: fileId,
             isOwner,
+            ownerName: ownerDisplayName,
             layout: false,
         });
     }

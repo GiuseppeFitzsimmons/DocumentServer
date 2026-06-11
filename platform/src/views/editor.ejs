@@ -12,12 +12,12 @@
     /* Size Limit Modal Styles */
     #size-limit-dialog {
       border: none;
-      border-radius: 8px;
+      border-radius: 4px;
       padding: 0;
       width: 420px;
       max-width: 90vw;
-      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+      font-family: 'Caslon OS', 'Libre Baskerville', Georgia, serif;
       margin: auto;
       inset: 0;
     }
@@ -29,49 +29,51 @@
       margin-bottom: 12px;
     }
     .size-dialog-body {
-      padding: 28px 24px;
+      padding: 32px 24px;
       text-align: center;
     }
     .size-dialog-title {
       font-size: 16px;
-      font-weight: 600;
+      font-weight: normal;
       margin: 0 0 8px;
     }
     .size-dialog-message {
       font-size: 14px;
-      color: #555;
-      margin: 0 0 20px;
-      line-height: 1.5;
+      color: #444;
+      margin: 0 0 24px;
+      line-height: 1.6;
     }
     .size-dialog-btn {
-      padding: 8px 24px;
+      padding: 10px 24px;
       border: none;
-      border-radius: 4px;
+      border-radius: 3px;
+      font-family: inherit;
       font-size: 14px;
       cursor: pointer;
-      background: #0066cc;
+      background: #111;
       color: #fff;
+      transition: background 0.15s ease;
     }
     .size-dialog-btn:hover {
-      background: #0052a3;
+      background: #333;
     }
     .size-dialog-btn:focus-visible {
-      outline: 2px solid #0066cc;
+      outline: 2px solid #111;
       outline-offset: 2px;
     }
-    .size-dialog-error .size-dialog-icon { color: #c62828; }
-    .size-dialog-warning .size-dialog-icon { color: #e65100; }
+    .size-dialog-error .size-dialog-icon { color: #900; }
+    .size-dialog-warning .size-dialog-icon { color: #a85000; }
 
     /* Sharing Dialog Styles */
     #sharing-dialog {
       border: none;
-      border-radius: 8px;
+      border-radius: 4px;
       padding: 0;
       width: 480px;
       max-width: 90vw;
       max-height: 80vh;
-      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+      font-family: 'Caslon OS', 'Libre Baskerville', Georgia, serif;
       margin: auto;
       inset: 0;
     }
@@ -82,12 +84,12 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 16px 20px;
-      border-bottom: 1px solid #e0e0e0;
+      padding: 20px 24px;
+      border-bottom: 1px solid #eee;
     }
     .sharing-dialog-header h2 {
       font-size: 18px;
-      font-weight: 600;
+      font-weight: normal;
       margin: 0;
     }
     .sharing-dialog-close {
@@ -96,18 +98,19 @@
       font-size: 20px;
       cursor: pointer;
       padding: 4px 8px;
-      border-radius: 4px;
+      border-radius: 3px;
       line-height: 1;
+      color: #111;
     }
     .sharing-dialog-close:hover {
-      background: #f0f0f0;
+      background: #f5f5f5;
     }
     .sharing-dialog-close:focus-visible {
-      outline: 2px solid #0066cc;
+      outline: 2px solid #111;
       outline-offset: 2px;
     }
     .sharing-dialog-body {
-      padding: 20px;
+      padding: 24px;
       overflow-y: auto;
       max-height: calc(80vh - 120px);
     }
@@ -115,7 +118,7 @@
       display: flex;
       gap: 8px;
       align-items: flex-start;
-      margin-bottom: 20px;
+      margin-bottom: 24px;
       position: relative;
     }
     .sharing-search-wrapper {
@@ -124,15 +127,15 @@
     }
     .sharing-search-input {
       width: 100%;
-      padding: 8px 12px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      font-family: inherit;
       font-size: 14px;
     }
     .sharing-search-input:focus {
       outline: none;
-      border-color: #0066cc;
-      box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.2);
+      border-color: #111;
     }
     .sharing-autocomplete {
       position: absolute;
@@ -140,67 +143,68 @@
       left: 0;
       right: 0;
       background: #fff;
-      border: 1px solid #ccc;
-      border-radius: 4px;
+      border: 1px solid #ddd;
+      border-radius: 3px;
       margin-top: 4px;
       max-height: 200px;
       overflow-y: auto;
       z-index: 10;
       display: none;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
     }
     .sharing-autocomplete.visible {
       display: block;
     }
     .sharing-autocomplete-item {
-      padding: 8px 12px;
+      padding: 10px 12px;
       cursor: pointer;
-      border-bottom: 1px solid #f0f0f0;
+      border-bottom: 1px solid #f5f5f5;
     }
     .sharing-autocomplete-item:last-child {
       border-bottom: none;
     }
     .sharing-autocomplete-item:hover,
     .sharing-autocomplete-item:focus {
-      background: #f5f5f5;
+      background: #fafafa;
       outline: none;
     }
     .sharing-autocomplete-item .autocomplete-name {
       font-size: 14px;
-      font-weight: 500;
     }
     .sharing-autocomplete-item .autocomplete-email {
       font-size: 12px;
-      color: #666;
+      color: #888;
     }
     .sharing-permission-select {
-      padding: 8px 12px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      font-family: inherit;
       font-size: 14px;
       background: #fff;
       min-width: 130px;
     }
     .sharing-permission-select:focus {
       outline: none;
-      border-color: #0066cc;
-      box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.2);
+      border-color: #111;
     }
     .sharing-add-btn {
-      padding: 8px 16px;
-      background: #0066cc;
+      padding: 10px 16px;
+      background: #111;
       color: #fff;
       border: none;
-      border-radius: 4px;
+      border-radius: 3px;
+      font-family: inherit;
       font-size: 14px;
       cursor: pointer;
       white-space: nowrap;
+      transition: background 0.15s ease;
     }
     .sharing-add-btn:hover {
-      background: #0052a3;
+      background: #333;
     }
     .sharing-add-btn:focus-visible {
-      outline: 2px solid #0066cc;
+      outline: 2px solid #111;
       outline-offset: 2px;
     }
     .sharing-add-btn:disabled {
@@ -209,9 +213,8 @@
     }
     .sharing-list-section h3 {
       font-size: 14px;
-      font-weight: 600;
       margin-bottom: 12px;
-      color: #333;
+      color: #444;
     }
     .sharing-list {
       list-style: none;
@@ -222,7 +225,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 10px 0;
+      padding: 12px 0;
       border-bottom: 1px solid #f0f0f0;
     }
     .sharing-list-item:last-child {
@@ -234,42 +237,43 @@
     }
     .sharing-user-name {
       font-size: 14px;
-      font-weight: 500;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     .sharing-user-email {
       font-size: 12px;
-      color: #666;
+      color: #888;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     .sharing-permission-badge {
       font-size: 12px;
-      padding: 2px 8px;
-      border-radius: 12px;
-      background: #e8f0fe;
-      color: #1a73e8;
+      padding: 3px 10px;
+      border-radius: 3px;
+      background: #f0f0f0;
+      color: #333;
       margin: 0 12px;
       white-space: nowrap;
     }
     .sharing-remove-btn {
       background: none;
-      border: 1px solid #dc3545;
-      color: #dc3545;
+      border: 1px solid #900;
+      color: #900;
       padding: 4px 10px;
-      border-radius: 4px;
+      border-radius: 3px;
+      font-family: inherit;
       font-size: 12px;
       cursor: pointer;
+      transition: all 0.15s ease;
     }
     .sharing-remove-btn:hover {
-      background: #dc3545;
+      background: #900;
       color: #fff;
     }
     .sharing-remove-btn:focus-visible {
-      outline: 2px solid #dc3545;
+      outline: 2px solid #900;
       outline-offset: 2px;
     }
     .sharing-loading {
@@ -284,8 +288,8 @@
       display: inline-block;
       width: 24px;
       height: 24px;
-      border: 3px solid #e0e0e0;
-      border-top-color: #0066cc;
+      border: 3px solid #eee;
+      border-top-color: #111;
       border-radius: 50%;
       animation: sharing-spin 0.8s linear infinite;
     }
@@ -294,11 +298,12 @@
     }
     .sharing-error {
       display: none;
-      padding: 10px 14px;
-      margin-bottom: 12px;
-      background: #fdecea;
-      color: #c62828;
-      border-radius: 4px;
+      padding: 12px 14px;
+      margin-bottom: 16px;
+      background: #fff5f5;
+      color: #900;
+      border: 1px solid #fdd;
+      border-radius: 3px;
       font-size: 13px;
     }
     .sharing-error.visible {

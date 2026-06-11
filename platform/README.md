@@ -35,17 +35,7 @@ docker run -d --name portal-redis -p 6379:6379 redis:7-alpine
 
 #### Migration
 ```
-npm run db:migrate
+npm run db:setup
 npm run dev
 ```
-#### Test
-```
-curl -X POST http://localhost:3000/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"password123","displayName":"Test User"}'
-```
-```
-curl -X POST http://localhost:3000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"password123"}'
-```
+This will seed the database with a user whose credentials are `dev@eurobureau.eu` / `password123`

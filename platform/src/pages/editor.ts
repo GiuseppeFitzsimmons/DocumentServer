@@ -6,6 +6,7 @@ import type { SharingSettingsEntry } from '../ds/editorConfig.js';
 import { getShare, listSharesForFile, type SharePermissions } from '../sharing/service.js';
 import { pool } from '../db/pool.js';
 import { getLatestVersionNumber } from '../versions/repository.js';
+import { config } from '../config.js';
 
 export function summarizePermissions(p: SharePermissions): string {
   if (p.edit && p.download && p.print && p.copy && p.comment && p.review && p.chat && p.fillForms) {
@@ -83,7 +84,7 @@ editorRouter.get('/editor/:fileId', requireAuth, async (req, res) => {
       res.render('editor', {
         title: file.name,
         editorConfig,
-        dsUrl: '',
+        dsUrl: config.NODE_ENV === 'development' ? config.DS_URL : '',
         fileId: fileId,
         isOwner,
         ownerName: ownerDisplayName,
@@ -106,7 +107,7 @@ editorRouter.get('/editor/:fileId', requireAuth, async (req, res) => {
     res.render('editor', {
       title: file.name,
       editorConfig,
-      dsUrl: '',
+      dsUrl: config.NODE_ENV === 'development' ? config.DS_URL : '',
       fileId: fileId,
       isOwner,
       ownerName: ownerDisplayName,

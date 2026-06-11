@@ -5,8 +5,8 @@ export function requireAuth(req, res, next) {
             res.status(401).json({ error: 'Unauthorized' });
             return;
         }
-        // Otherwise redirect to login
-        res.redirect('/login');
+        // Otherwise redirect to home
+        res.redirect('/home');
         return;
     }
     next();

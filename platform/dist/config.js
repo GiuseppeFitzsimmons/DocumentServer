@@ -11,6 +11,17 @@ const envSchema = z.object({
     TRUST_PROXY: z.string().default('false'),
     FILE_STORAGE_PATH: z.string().default('/data/files'),
     PLATFORM_BASE_URL: z.string().url(),
+    MAIL_DOMAIN: z.string().default('eurobureau.eu'),
+    DKIM_PRIVATE_KEY: z.string().default(''),
+    SMTP_HOST: z.string().default(''),
+    SMTP_PORT: z.coerce.number().default(465),
+    SMTP_USER: z.string().default(''),
+    SMTP_PASS: z.string().default(''),
+    OVH_S3_ENDPOINT: z.string().default(''),
+    OVH_S3_BUCKET: z.string().default(''),
+    OVH_S3_ACCESS_KEY: z.string().default(''),
+    OVH_S3_SECRET_KEY: z.string().default(''),
+    OVH_S3_REGION: z.string().default('par'),
 });
 export const config = envSchema.parse(process.env);
 //# sourceMappingURL=config.js.map

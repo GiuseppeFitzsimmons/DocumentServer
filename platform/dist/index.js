@@ -9,13 +9,17 @@ import { sessionMiddleware } from './session.js';
 import { authRouter } from './auth/routes.js';
 import { pageRouter } from './pages/routes.js';
 import { requireAuth } from './auth/middleware.js';
+import { requirePermanentPassword } from './auth/require-permanent-password.js';
 import { fileRouter, folderRouter } from './storage/routes.js';
 import { sharingRouter } from './sharing/routes.js';
 import { usersRouter } from './users/routes.js';
 import { serveRouter } from './ds/serve.js';
 import { callbackRouter } from './ds/callback.js';
+import { versionRouter } from './versions/routes.js';
+import { exportRouter } from './export/routes.js';
 import { editorRouter } from './pages/editor.js';
 import { landingRouter } from './pages/landing.js';
+import { homeRouter } from './pages/home.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 // Trust proxy (behind Caddy/reverse proxy)
@@ -23,7 +27,6 @@ if (config.TRUST_PROXY === 'true') {
     app.set('trust proxy', 1);
 }
 app.use(helmet({
-    hsts: false,
     contentSecurityPolicy: false,
 }));
 app.use(express.json());
@@ -32,6 +35,9 @@ app.use(sessionMiddleware);
 // View engine
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
+// Static assets (fonts, images)
+app.use('/fonts', express.static(path.join(__dirname, '..', '..', 'fonts')));
+app.use(express.static(path.join(__dirname, '..', 'public')));
 // Render with layout
 app.use((req, res, next) => {
     const originalRender = res.render.bind(res);
@@ -54,10 +60,14 @@ const authLimiter = rateLimit({
     max: 20,
     message: { error: 'Too many requests, try again later' },
 });
+// Public homepage (unauthenticated visitors)
+app.use(homeRouter);
 // API auth routes
 app.use('/auth', authLimiter, authRouter);
 // Page routes (login, register, logout — public)
 app.use(pageRouter);
+// Force temp-password users to /set-password before accessing protected routes
+app.use(requirePermanentPassword);
 // Health check (public)
 app.get('/health', (_req, res) => {
     res.json({ status: 'ok' });
@@ -67,6 +77,8 @@ app.get('/health', (_req, res) => {
 app.use('/api/files/serve', serveRouter);
 app.use('/api/ds/callback', callbackRouter);
 // File storage API
+app.use('/api/files', versionRouter);
+app.use('/api/files', exportRouter);
 app.use('/api/files', fileRouter);
 app.use('/api/folders', folderRouter);
 // Sharing API

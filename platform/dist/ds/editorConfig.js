@@ -62,6 +62,14 @@ export function buildEditorConfig(params) {
             customization: {
                 forcesave: true,
             },
+            ...(params.hasVersions ? {
+                events: {
+                    onRequestHistory: true,
+                    onRequestHistoryData: true,
+                    onRequestHistoryClose: true,
+                    onRequestRestore: true,
+                },
+            } : {}),
         },
     };
     // Sign the full config as a token for DS verification

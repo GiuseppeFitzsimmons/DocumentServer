@@ -49,4 +49,14 @@ export declare function folderHasChildren(id: string): Promise<boolean>;
  */
 export declare function isDescendantOf(targetId: string, sourceId: string): Promise<boolean>;
 export declare function moveFolder(id: string, parentId: string | null): Promise<FolderRecord>;
+/**
+ * Walks parentId links upward from the given folder to build the ancestor chain.
+ * Returns an array ordered from root (topmost ancestor) to the given folder itself.
+ */
+export declare function getAncestors(folderId: string): Promise<FolderRecord[]>;
+/**
+ * Fetches all folders belonging to a user. Used by the tree builder to assemble
+ * the full folder hierarchy in memory.
+ */
+export declare function getAllUserFolders(userId: string): Promise<FolderRecord[]>;
 //# sourceMappingURL=metadata.d.ts.map

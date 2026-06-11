@@ -12,7 +12,6 @@ export type DocumentType = 'docx' | 'xlsx' | 'pptx';
 const TEMPLATES: Record<DocumentType, { buffer: Buffer; mimeType: string }> = {
   docx: { buffer: BLANK_DOCX, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
   xlsx: { buffer: BLANK_XLSX, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
-  pptx: { buffer: BLANK_PPTX, mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
 };
 
 export function getTemplate(type: DocumentType) {
