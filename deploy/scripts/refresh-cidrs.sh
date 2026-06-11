@@ -50,7 +50,7 @@ success_count=0
 fail_count=0
 
 for cc in "${COUNTRY_CODES[@]}"; do
-  url="${BASE_URL}/${cc}-aggregated-zone"
+  url="${BASE_URL}/${cc}-aggregated.zone"
   outfile="${TEMP_DIR}/${cc}.zone"
 
   if curl -sSf --max-time 30 -o "$outfile" "$url"; then
