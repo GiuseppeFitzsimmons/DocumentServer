@@ -10,8 +10,9 @@
  */
 
 import AdmZip from 'adm-zip';
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import path from 'path';
+import { deflateRawSync } from 'zlib';
 import type { FontResolutionResult } from './font-types.js';
 
 /**
@@ -90,7 +91,8 @@ export async function injectFontsIntoEpub(input: EpubFontInjectorInput): Promise
 
   const existingCss = zip.getEntry(cssEntry)!.getData().toString('utf-8');
   const fontFaceDeclarations = generateFontFaceCSS(fontsToEmbed, fontsRelativeToCSS);
-  const updatedCss = existingCss + '\n' + fontFaceDeclarations;
+  const bodyFontRule = generateBodyFontRule(fontsToEmbed);
+  const updatedCss = existingCss + '\n' + fontFaceDeclarations + '\n' + bodyFontRule;
   zip.updateFile(cssEntry, Buffer.from(updatedCss, 'utf-8'));
 
   // Update OPF manifest
@@ -98,9 +100,9 @@ export async function injectFontsIntoEpub(input: EpubFontInjectorInput): Promise
   const updatedOpf = insertManifestEntries(existingOpf, fontsToEmbed, opfEntry, fontsDir);
   zip.updateFile(opfEntry, Buffer.from(updatedOpf, 'utf-8'));
 
-  // Write the modified zip back to disk
+  // Write the modified zip back to disk, ensuring mimetype is first and uncompressed
   try {
-    zip.writeZip(epubPath);
+    writeEpub(zip, epubPath);
   } catch (err) {
     throw new Error(
       `Failed to write modified epub to ${epubPath}: ${err instanceof Error ? err.message : String(err)}`
@@ -119,6 +121,166 @@ function readFontFile(filePath: string): Buffer {
       `Failed to read font file at ${filePath}: ${err instanceof Error ? err.message : String(err)}`
     );
   }
+}
+
+/**
+ * Writes the modified epub zip back to disk, ensuring the mimetype entry
+ * is first in the archive and stored uncompressed (EPUB spec requirement).
+ *
+ * adm-zip's toBuffer() does not guarantee entry order, so we read all entries
+ * from the modified zip and reconstruct it using a fresh AdmZip where we
+ * manipulate the internal entries array to force mimetype first.
+ */
+function writeEpub(zip: AdmZip, outputPath: string): void {
+  const entries = zip.getEntries();
+  const mimetypeEntry = entries.find(e => e.entryName === 'mimetype');
+
+  if (!mimetypeEntry) {
+    writeFileSync(outputPath, zip.toBuffer());
+    return;
+  }
+
+  // Collect all entry data
+  const entryData: Array<{ name: string; data: Buffer; comment: string }> = [];
+
+  // Mimetype first
+  entryData.push({
+    name: 'mimetype',
+    data: mimetypeEntry.getData(),
+    comment: '',
+  });
+
+  // All other entries in their original order
+  for (const entry of entries) {
+    if (entry.entryName === 'mimetype' || entry.isDirectory) continue;
+    entryData.push({
+      name: entry.entryName,
+      data: entry.getData(),
+      comment: entry.comment,
+    });
+  }
+
+  // Build the zip from scratch with guaranteed order
+  const outputBuffer = buildZipBuffer(entryData);
+  writeFileSync(outputPath, outputBuffer);
+}
+
+/**
+ * Builds a complete zip file buffer with entries in the exact order specified.
+ * The first entry ('mimetype') is stored uncompressed per EPUB spec.
+ */
+function buildZipBuffer(
+  entries: Array<{ name: string; data: Buffer; comment: string }>
+): Buffer {
+  const localHeaders: Buffer[] = [];
+  const centralEntries: Buffer[] = [];
+  let offset = 0;
+
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    const isFirst = i === 0; // mimetype — must be STORED with no extra
+    const nameBuffer = Buffer.from(entry.name, 'utf-8');
+    const data = entry.data;
+    const commentBuffer = entry.comment ? Buffer.from(entry.comment, 'utf-8') : Buffer.alloc(0);
+
+    let compressedData: Buffer;
+    let method: number;
+
+    if (isFirst) {
+      // STORED — no compression
+      method = 0;
+      compressedData = data;
+    } else {
+      // DEFLATED
+      method = 8;
+      compressedData = deflateRawData(data);
+    }
+
+    const crc = crc32(data);
+
+    // Local file header (30 bytes + filename)
+    const local = Buffer.alloc(30 + nameBuffer.length);
+    local.writeUInt32LE(0x04034b50, 0);       // signature
+    local.writeUInt16LE(20, 4);                // version needed to extract
+    local.writeUInt16LE(0, 6);                 // general purpose bit flag
+    local.writeUInt16LE(method, 8);            // compression method
+    local.writeUInt16LE(0, 10);                // last mod file time
+    local.writeUInt16LE(0, 12);                // last mod file date
+    local.writeUInt32LE(crc, 14);              // crc-32
+    local.writeUInt32LE(compressedData.length, 18); // compressed size
+    local.writeUInt32LE(data.length, 22);      // uncompressed size
+    local.writeUInt16LE(nameBuffer.length, 26); // file name length
+    local.writeUInt16LE(0, 28);                // extra field length
+    nameBuffer.copy(local, 30);
+
+    localHeaders.push(Buffer.concat([local, compressedData]));
+
+    // Central directory entry (46 bytes + filename + comment)
+    const central = Buffer.alloc(46 + nameBuffer.length + commentBuffer.length);
+    central.writeUInt32LE(0x02014b50, 0);      // signature
+    central.writeUInt16LE(20, 4);              // version made by
+    central.writeUInt16LE(20, 6);              // version needed
+    central.writeUInt16LE(0, 8);               // flags
+    central.writeUInt16LE(method, 10);         // compression method
+    central.writeUInt16LE(0, 12);              // mod time
+    central.writeUInt16LE(0, 14);              // mod date
+    central.writeUInt32LE(crc, 16);            // crc-32
+    central.writeUInt32LE(compressedData.length, 20); // compressed size
+    central.writeUInt32LE(data.length, 24);    // uncompressed size
+    central.writeUInt16LE(nameBuffer.length, 28); // file name length
+    central.writeUInt16LE(0, 30);              // extra field length
+    central.writeUInt16LE(commentBuffer.length, 32); // comment length
+    central.writeUInt16LE(0, 34);              // disk number start
+    central.writeUInt16LE(0, 36);              // internal file attrs
+    central.writeUInt32LE(0, 38);              // external file attrs
+    central.writeUInt32LE(offset, 42);         // relative offset of local header
+    nameBuffer.copy(central, 46);
+    if (commentBuffer.length > 0) {
+      commentBuffer.copy(central, 46 + nameBuffer.length);
+    }
+
+    centralEntries.push(central);
+    offset += local.length + compressedData.length;
+  }
+
+  const localSection = Buffer.concat(localHeaders);
+  const centralSection = Buffer.concat(centralEntries);
+  const centralOffset = localSection.length;
+  const centralSize = centralSection.length;
+
+  // End of central directory record (22 bytes)
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);           // signature
+  eocd.writeUInt16LE(0, 4);                    // disk number
+  eocd.writeUInt16LE(0, 6);                    // disk with central dir
+  eocd.writeUInt16LE(entries.length, 8);       // entries on this disk
+  eocd.writeUInt16LE(entries.length, 10);      // total entries
+  eocd.writeUInt32LE(centralSize, 12);         // size of central directory
+  eocd.writeUInt32LE(centralOffset, 16);       // offset of central directory
+  eocd.writeUInt16LE(0, 20);                   // comment length
+
+  return Buffer.concat([localSection, centralSection, eocd]);
+}
+
+/**
+ * Deflates data using raw deflate (no zlib header).
+ */
+function deflateRawData(data: Buffer): Buffer {
+  return deflateRawSync(data);
+}
+
+/**
+ * Simple CRC-32 implementation.
+ */
+function crc32(data: Buffer): number {
+  let crc = 0xffffffff;
+  for (let i = 0; i < data.length; i++) {
+    crc ^= data[i];
+    for (let j = 0; j < 8; j++) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
 }
 
 /**
@@ -174,6 +336,30 @@ function generateFontFaceCSS(
 }`;
     })
     .join('\n\n');
+}
+
+/**
+ * Generates a body CSS rule that assigns the document's embedded fonts.
+ * Uses the first resolved "normal" weight+style font as the primary body font,
+ * with remaining fonts as fallbacks in the font stack.
+ */
+function generateBodyFontRule(
+  fonts: Array<FontResolutionResult & { filePath: string }>
+): string {
+  // Deduplicate font families (keep order, first occurrence wins)
+  const seen = new Set<string>();
+  const families: string[] = [];
+  for (const font of fonts) {
+    if (!seen.has(font.record.family)) {
+      seen.add(font.record.family);
+      families.push(font.record.family);
+    }
+  }
+
+  if (families.length === 0) return '';
+
+  const fontStack = families.map(f => `"${f}"`).join(', ') + ', serif';
+  return `body {\n  font-family: ${fontStack};\n}\n`;
 }
 
 /**

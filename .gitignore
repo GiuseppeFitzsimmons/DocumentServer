@@ -6,3 +6,4 @@ platform/node_modules
 .kiro/
 */.env
 .env
+/scripts/dev/

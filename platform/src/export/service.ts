@@ -42,15 +42,23 @@ export interface ConvertResult {
   cleanup: () => Promise<void>;
 }
 
+export interface ConvertOptions {
+  title?: string;
+}
+
 /**
  * Runs pandoc to convert a docx file to epub format.
  * Extracted as a helper to keep the main function clean with async/await.
  */
-function runPandoc(inputPath: string, outputPath: string): Promise<void> {
+function runPandoc(inputPath: string, outputPath: string, options?: ConvertOptions): Promise<void> {
+  const args = [inputPath, '--toc', '--toc-depth=3', '-o', outputPath];
+  if (options?.title) {
+    args.push('--metadata', `title=${options.title}`);
+  }
   return new Promise<void>((resolve, reject) => {
     execFile(
       'pandoc',
-      [inputPath, '--toc', '--toc-depth=3', '-o', outputPath],
+      args,
       { timeout: PANDOC_TIMEOUT_MS },
       (error, _stdout, stderr) => {
         if (error) {
@@ -70,7 +78,7 @@ function runPandoc(inputPath: string, outputPath: string): Promise<void> {
   });
 }
 
-export async function convertDocxToEpub(inputStream: Readable): Promise<ConvertResult> {
+export async function convertDocxToEpub(inputStream: Readable, options?: ConvertOptions): Promise<ConvertResult> {
   const id = randomUUID();
   const tempDir = path.join(tmpdir(), `epub-export-${id}`);
   const inputPath = path.join(tempDir, 'input.docx');
@@ -95,7 +103,7 @@ export async function convertDocxToEpub(inputStream: Readable): Promise<ConvertR
   }
 
   // Invoke Pandoc
-  await runPandoc(inputPath, outputPath);
+  await runPandoc(inputPath, outputPath, options);
 
   // Inject fonts into epub (best-effort)
   try {
