@@ -4,6 +4,7 @@ import { pool } from '../db/pool.js';
 import { hashPassword, verifyPassword } from '../auth/password.js';
 import { generateTempPassword } from '../auth/temp-password.js';
 import { sendEmail } from '../email.js';
+import { rejectDisposableEmail, isDisposableEmail } from '../auth/disposable-email.js';
 
 export const pageRouter = Router();
 
@@ -91,6 +92,12 @@ pageRouter.post('/register', async (req, res) => {
   }
 
   const { email, displayName } = parsed.data;
+
+  if (isDisposableEmail(email)) {
+    console.info(`Registration rejected: disposable email domain "${email.substring(email.lastIndexOf('@') + 1).toLowerCase()}"`);
+    res.render('register', { title: 'Create account', error: 'Email domain not accepted.' });
+    return;
+  }
 
   try {
     const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);

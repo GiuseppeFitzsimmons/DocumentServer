@@ -57,3 +57,10 @@ export function rejectDisposableEmail(req: Request, res: Response, next: NextFun
 
   next();
 }
+
+export function isDisposableEmail(email: string): boolean {
+  const atIndex = email.lastIndexOf('@');
+  if (atIndex === -1) return false;
+  const domain = email.substring(atIndex + 1).toLowerCase();
+  return disposableDomains.has(domain);
+}
