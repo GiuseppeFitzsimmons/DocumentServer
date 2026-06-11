@@ -19,7 +19,6 @@ import { versionRouter } from './versions/routes.js';
 import { exportRouter } from './export/routes.js';
 import { editorRouter } from './pages/editor.js';
 import { landingRouter } from './pages/landing.js';
-import { fileManagerRouter } from './pages/fileManager.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -120,7 +119,6 @@ app.use('/example', requireAuth, createProxyMiddleware({
 }));
 
 // Landing page (authenticated root)
-app.use('/files', fileManagerRouter);
 app.use('/', landingRouter);
 
 app.listen(config.PORT, () => {

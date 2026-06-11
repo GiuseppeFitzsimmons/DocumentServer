@@ -797,6 +797,46 @@
       return div.innerHTML;
     }
 
+    function isDocxFile(name, mimeType) {
+      var docxMime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      if (mimeType === docxMime) return true;
+      if (name && name.toLowerCase().endsWith('.docx')) return true;
+      return false;
+    }
+
+    async function exportAsEpub(fileId, fileName) {
+      var container = document.getElementById('toastContainer') || document.body;
+      var loadingToast = document.createElement('div');
+      loadingToast.className = 'toast';
+      loadingToast.textContent = 'Exporting to EPUB\u2026';
+      container.appendChild(loadingToast);
+      setTimeout(function() { loadingToast.classList.add('visible'); }, 10);
+
+      try {
+        var res = await fetch('/api/files/' + encodeURIComponent(fileId) + '/export/epub');
+        loadingToast.remove();
+
+        if (!res.ok) {
+          var err = await res.json().catch(function() { return { error: 'Export failed' }; });
+          alert(err.error || 'Export failed');
+          return;
+        }
+
+        var blob = await res.blob();
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = fileName.replace(/\.docx$/i, '.epub');
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        loadingToast.remove();
+        alert('Export failed: ' + (e.message || 'Unknown error'));
+      }
+    }
+
     // ========================================
     // Create Section Handlers
     // ========================================
@@ -1005,7 +1045,7 @@
         var actions = document.createElement('button');
         actions.className = 'file-tree-actions';
         actions.textContent = '\u22EE';
-        actions.onclick = function(e) { e.stopPropagation(); showTreeContextMenu(e, file.id, 'file', file.name); };
+        actions.onclick = function(e) { e.stopPropagation(); showTreeContextMenu(e, file.id, 'file', file.name, file.mimeType); };
 
         item.appendChild(arrow);
         item.appendChild(icon);
@@ -1054,7 +1094,7 @@
     // ========================================
     // Tree Context Menu
     // ========================================
-    function showTreeContextMenu(e, id, type, name) {
+    function showTreeContextMenu(e, id, type, name, mimeType) {
       closeTreeContextMenu();
       var menu = document.createElement('div');
       menu.className = 'context-menu visible';
@@ -1062,6 +1102,14 @@
       menu.style.top = e.clientY + 'px';
       menu.style.left = e.clientX + 'px';
       menu.style.zIndex = '1000';
+
+      if (type === 'file' && isDocxFile(name, mimeType)) {
+        var exportBtn = document.createElement('button');
+        exportBtn.className = 'context-menu-item';
+        exportBtn.textContent = 'Export as EPUB';
+        exportBtn.onclick = function() { closeTreeContextMenu(); exportAsEpub(id, name); };
+        menu.appendChild(exportBtn);
+      }
 
       var renameBtn = document.createElement('button');
       renameBtn.className = 'context-menu-item';
