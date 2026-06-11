@@ -14,9 +14,13 @@ import type { FontResolutionResult } from './font-types.js';
 
 const PANDOC_TIMEOUT_MS = 30_000;
 
-const FONT_DIR = path.resolve(process.cwd(), 'fonts');
-const CORE_FONT_DIR = path.resolve(process.cwd(), 'core-fonts');
-const FONT_MAPPINGS_PATH = path.resolve(process.cwd(), 'platform/config/font-mappings.json');
+const FONT_DIR = process.env.NODE_ENV === 'production'
+  ? '/data/fonts'
+  : path.resolve(process.cwd(), 'fonts');
+const CORE_FONT_DIR = process.env.NODE_ENV === 'production'
+  ? '/data/core-fonts'
+  : path.resolve(process.cwd(), 'core-fonts');
+const FONT_MAPPINGS_PATH = path.resolve(process.cwd(), 'config/font-mappings.json');
 
 export class PandocError extends Error {
   public readonly stderr: string;

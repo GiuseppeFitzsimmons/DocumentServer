@@ -42,6 +42,8 @@ services:
     volumes:
       - /mnt/euro-office-data/files:/data/files
       - ./data/disposable-domains.txt:/app/data/disposable-domains.txt:ro
+      - ../fonts:/data/fonts:ro
+      - ../core-fonts:/data/core-fonts:ro
     depends_on:
       - postgres
       - redis
