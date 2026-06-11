@@ -1,4 +1,16 @@
+(geo-block) {
+	@blocked not remote_ip /etc/caddy/geo-whitelist.txt
+	handle @blocked {
+		header Content-Type text/html
+		respond 403 {
+			body /etc/caddy/blocked.html
+		}
+	}
+}
+
 eurobureau.eu {
+	import geo-block
+
 	# DocumentServer assets and API (public, needed by editor iframe)
 	handle /web-apps/* {
 		reverse_proxy documentserver:80
@@ -44,5 +56,7 @@ eurobureau.eu {
 }
 
 www.eurobureau.eu {
+	import geo-block
+
 	redir https://eurobureau.eu{uri} permanent
 }

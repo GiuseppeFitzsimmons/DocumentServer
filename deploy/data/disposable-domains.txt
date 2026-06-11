@@ -1,0 +1,3 @@
+# Disposable email domain blacklist
+# This file is refreshed weekly by deploy/scripts/refresh-disposable-emails.sh
+# One domain per line, lowercase

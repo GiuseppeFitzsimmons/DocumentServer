@@ -75,3 +75,15 @@ runcmd:
   - |
     echo '0 3 * * * root /opt/euro-office/repo/deploy/replicate.sh >> /var/log/euro-office-replication.log 2>&1' > /etc/cron.d/euro-office-replication
     chmod 644 /etc/cron.d/euro-office-replication
+
+  # Set up weekly DoS protection cron jobs (runs Sunday early morning UTC)
+  - |
+    printf '%s\n' \
+      '0 4 * * 0 root /opt/euro-office/repo/deploy/scripts/refresh-cidrs.sh >> /var/log/euro-office-dos-protection.log 2>&1' \
+      '30 4 * * 0 root /opt/euro-office/repo/deploy/scripts/refresh-disposable-emails.sh >> /var/log/euro-office-dos-protection.log 2>&1' \
+      > /etc/cron.d/euro-office-dos-protection
+    chmod 644 /etc/cron.d/euro-office-dos-protection
+
+  # Run initial DoS protection data fetch during provisioning
+  - /opt/euro-office/repo/deploy/scripts/refresh-cidrs.sh >> /var/log/euro-office-dos-protection.log 2>&1
+  - /opt/euro-office/repo/deploy/scripts/refresh-disposable-emails.sh >> /var/log/euro-office-dos-protection.log 2>&1

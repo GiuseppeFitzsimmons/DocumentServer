@@ -1,0 +1,7 @@
+# This file is automatically replaced by deploy/scripts/refresh-cidrs.sh
+# on a weekly schedule. Do not edit manually — changes will be overwritten.
+#
+# Contains aggregated CIDR ranges for all allowed countries.
+# Seed entry below ensures Caddy can start before the first refresh runs.
+
+0.0.0.0/0

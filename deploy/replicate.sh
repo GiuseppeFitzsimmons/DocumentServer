@@ -15,7 +15,6 @@ set +a
 BACKUP_DIR="/tmp/euro-office-backup"
 TIMESTAMP=$(date +%Y-%m-%d_%H%M%S)
 PG_DUMP_FILE="$BACKUP_DIR/pg_dump_${TIMESTAMP}.sql.gz"
-DATA_DIR="/mnt/euro-office-data/files"
 
 # S3 target
 S3_ENDPOINT="${OVH_S3_ENDPOINT}"
@@ -45,12 +44,7 @@ log "Uploading pg_dump to s3://${S3_BUCKET}/db-backups/"
 aws s3 cp "$PG_DUMP_FILE" "s3://${S3_BUCKET}/db-backups/$(basename "$PG_DUMP_FILE")" $S3_FLAGS
 log "pg_dump uploaded"
 
-# --- 2. File sync ---
-log "Syncing files to s3://${S3_BUCKET}/files/"
-aws s3 sync "$DATA_DIR" "s3://${S3_BUCKET}/files/" $S3_FLAGS --size-only
-log "File sync complete"
-
-# --- 3. Prune old DB backups (keep last 30) ---
+# --- 2. Prune old DB backups (keep last 30) ---
 log "Pruning old backups (keeping last 30)..."
 aws s3 ls "s3://${S3_BUCKET}/db-backups/" $S3_FLAGS \
   | sort -r \

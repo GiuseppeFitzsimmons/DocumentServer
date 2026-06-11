@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import { hashPassword, verifyPassword } from './password.js';
 import { requireAuth } from './middleware.js';
+import { rejectDisposableEmail } from './disposable-email.js';
 
 export const authRouter = Router();
 
@@ -17,7 +18,7 @@ const loginSchema = z.object({
   password: z.string(),
 });
 
-authRouter.post('/register', async (req, res) => {
+authRouter.post('/register', rejectDisposableEmail, async (req, res) => {
   try {
     const parsed = registerSchema.safeParse(req.body);
     if (!parsed.success) {

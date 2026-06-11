@@ -225,6 +225,31 @@
       line-height: 1;
     }
     .action-btn:hover { background: #e0e0e0; }
+    .export-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px 6px;
+      border-radius: 4px;
+      color: #666;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      vertical-align: middle;
+    }
+    .export-btn:hover { background: #e8f4fc; color: #0082C9; }
+    .export-btn svg { width: 16px; height: 16px; }
+    .export-btn .export-label {
+      font-size: 11px;
+      margin-left: 3px;
+      font-weight: 500;
+    }
+    .row-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      justify-content: flex-end;
+    }
     .context-menu {
       position: absolute;
       background: #fff;
@@ -784,11 +809,21 @@
       var html = '<table class="file-list"><thead><tr><th>Name</th><th class="col-size">Size</th><th class="col-date">Modified</th><th></th></tr></thead><tbody>';
       sorted.forEach(function(item) {
         var icon = item.type === 'folder' ? getFolderIcon() : getFileIcon(item.mimeType);
+        var exportBtnHtml = '';
+        if (item.type === 'file' && isDocxFile(item.name, item.mimeType)) {
+          var canExport = true;
+          if (item.permissions && !item.permissions.download) canExport = false;
+          if (canExport) {
+            exportBtnHtml = '<button class="export-btn" title="Export as EPUB" data-id="' + item.id + '" data-name="' + escapeHtml(item.name) + '" onclick="event.stopPropagation(); exportAsEpub(\'' + item.id + '\', \'' + escapeHtml(item.name).replace(/'/g, "\\'") + '\')">'
+              + '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M8 7h8"/><path d="M8 11h6"/></svg>'
+              + '<span class="export-label">EPUB</span></button>';
+          }
+        }
         html += '<tr data-id="' + item.id + '" data-type="' + item.type + '" data-name="' + escapeHtml(item.name) + '">';
         html += '<td><div class="item-name-cell"><span class="item-icon">' + icon + '</span><span class="item-name">' + escapeHtml(item.name) + '</span></div></td>';
         html += '<td class="col-size">' + (item.type === 'file' ? formatSize(item.size) : '—') + '</td>';
         html += '<td class="col-date">' + formatDate(item.updatedAt) + '</td>';
-        html += '<td><button class="action-btn" data-action="menu" data-id="' + item.id + '" data-type="' + item.type + '" data-name="' + escapeHtml(item.name) + '" data-mime="' + escapeHtml(item.mimeType || '') + '"' + (item.permissions ? ' data-permissions="' + escapeHtml(JSON.stringify(item.permissions)) + '"' : '') + ' onclick="event.stopPropagation(); openContextMenu(event, this)">⋮</button></td>';
+        html += '<td><div class="row-actions">' + exportBtnHtml + '<button class="action-btn" data-action="menu" data-id="' + item.id + '" data-type="' + item.type + '" data-name="' + escapeHtml(item.name) + '" data-mime="' + escapeHtml(item.mimeType || '') + '"' + (item.permissions ? ' data-permissions="' + escapeHtml(JSON.stringify(item.permissions)) + '"' : '') + ' onclick="event.stopPropagation(); openContextMenu(event, this)">⋮</button></div></td>';
         html += '</tr>';
       });
       html += '</tbody></table>';

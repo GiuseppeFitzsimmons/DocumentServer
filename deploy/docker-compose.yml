@@ -7,6 +7,8 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./geo-whitelist.txt:/etc/caddy/geo-whitelist.txt:ro
+      - ./blocked.html:/etc/caddy/blocked.html:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
@@ -40,6 +42,7 @@ services:
       OVH_S3_REGION: ${OVH_S3_REGION:-eu-west-par}
     volumes:
       - /mnt/euro-office-data/files:/data/files
+      - ./data/disposable-domains.txt:/app/data/disposable-domains.txt:ro
     depends_on:
       - postgres
       - redis
