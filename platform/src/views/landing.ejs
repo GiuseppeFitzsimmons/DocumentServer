@@ -232,6 +232,14 @@
     .file-tree-actions:hover {
       background: #eee;
     }
+    .epub-export-btn {
+      font-size: 14px;
+      padding: 2px 6px;
+      color: #4285F4;
+    }
+    .epub-export-btn:hover {
+      background: #e8f0fe;
+    }
     .file-tree-children {
       padding-left: 20px;
     }
@@ -1051,12 +1059,20 @@
         item.appendChild(icon);
         item.appendChild(name);
         item.appendChild(meta);
+        if (isDocxFile(file.name, file.mimeType)) {
+          var exportBtn = document.createElement('button');
+          exportBtn.className = 'file-tree-actions epub-export-btn';
+          exportBtn.title = 'Export as EPUB';
+          exportBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>';
+          exportBtn.onclick = function(e) { e.stopPropagation(); exportAsEpub(file.id, file.name); };
+          item.appendChild(exportBtn);
+        }
         item.appendChild(actions);
         node.appendChild(item);
 
         // Click to open file
         item.onclick = function(e) {
-          if (e.target.closest('.file-tree-actions')) return;
+          if (e.target.closest('.file-tree-actions') || e.target.closest('.epub-export-btn')) return;
           window.open('/editor/' + file.id, '_blank');
         };
 

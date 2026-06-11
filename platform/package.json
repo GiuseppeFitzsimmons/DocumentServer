@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1065.0",
+    "adm-zip": "0.5.17",
     "argon2": "^0.41.1",
     "connect-redis": "^8.0.1",
     "dotenv": "^17.4.2",
@@ -19,6 +20,7 @@
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
     "express-session": "^1.18.1",
+    "fast-xml-parser": "5.8.0",
     "helmet": "^8.0.0",
     "http-proxy-middleware": "^4.0.0",
     "ioredis": "^5.4.2",
@@ -29,6 +31,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/adm-zip": "0.5.8",
     "@types/express": "^5.0.0",
     "@types/express-session": "^1.18.1",
     "@types/jsonwebtoken": "^9.0.7",
