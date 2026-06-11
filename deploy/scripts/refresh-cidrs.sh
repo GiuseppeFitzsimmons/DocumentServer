@@ -6,7 +6,7 @@ set -euo pipefail
 # validates them, and atomically updates the geo-whitelist used by Caddy.
 
 # --- Configuration ---
-WHITELIST_FILE="/opt/euro-office/deploy/geo-whitelist.txt"
+MATCHER_FILE="/opt/euro-office/repo/deploy/geo-blocked-matcher.caddy"
 TEMP_DIR=$(mktemp -d)
 BASE_URL="https://www.ipdeny.com/ipblocks/data/aggregated"
 
@@ -88,9 +88,16 @@ fi
 line_count=$(wc -l < "$aggregate")
 log "Aggregate whitelist contains ${line_count} CIDR entries"
 
-# --- Atomically replace the active whitelist ---
-mv "$aggregate" "$WHITELIST_FILE"
-log "Whitelist file updated at ${WHITELIST_FILE}"
+# --- Generate Caddy matcher snippet ---
+# Caddy's remote_ip matcher takes space-separated CIDRs as arguments.
+# We generate a file that defines the @blocked matcher for import into the Caddyfile.
+matcher_file="${TEMP_DIR}/geo-blocked-matcher.caddy"
+cidrs=$(tr '\n' ' ' < "$aggregate")
+echo "@blocked not remote_ip ${cidrs}" > "$matcher_file"
+
+# --- Atomically replace the active matcher file ---
+mv "$matcher_file" "$MATCHER_FILE"
+log "Caddy matcher file updated at ${MATCHER_FILE}"
 
 # --- Reload Caddy configuration ---
 if docker exec caddy caddy reload --config /etc/caddy/Caddyfile; then

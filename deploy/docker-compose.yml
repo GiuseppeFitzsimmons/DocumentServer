@@ -7,8 +7,7 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
-      - ./geo-whitelist.txt:/etc/caddy/geo-whitelist.txt:ro
-      - ./blocked.html:/etc/caddy/blocked.html:ro
+      - ./geo-blocked-matcher.caddy:/etc/caddy/geo-blocked-matcher.caddy:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

@@ -6,7 +6,7 @@ set -euo pipefail
 # GitHub repository, validates it, and atomically updates the active list file.
 
 # --- Configuration ---
-DOMAIN_LIST_FILE="/opt/euro-office/data/disposable-domains.txt"
+DOMAIN_LIST_FILE="/opt/euro-office/repo/deploy/data/disposable-domains.txt"
 TEMP_DIR=$(mktemp -d)
 SOURCE_URL="https://raw.githubusercontent.com/disposable-email-domains/disposable-email-domains/master/disposable_email_blocklist.conf"
 
