@@ -14,6 +14,7 @@ RUN npm install --omit=dev
 COPY --from=builder /app/dist ./dist
 COPY src/views ./dist/views
 COPY src/db/migrations ./dist/db/migrations
+COPY public ./public
 COPY config ./config
 ENV NODE_ENV=production
 EXPOSE 3000

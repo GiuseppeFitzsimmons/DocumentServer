@@ -42,7 +42,10 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
 // Static assets (fonts, images)
-app.use('/fonts', express.static(path.join(__dirname, '..', '..', 'fonts')));
+const fontsPath = process.env.NODE_ENV === 'production'
+  ? '/data/fonts'
+  : path.join(__dirname, '..', '..', 'fonts');
+app.use('/fonts', express.static(fontsPath));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Render with layout
