@@ -541,17 +541,6 @@
       });
     })();
 
-    // Override EPUB downloads to use the platform's Pandoc-based exporter
-    config.events.onDownloadAs = function(event) {
-      if (event && event.data && event.data.fileType === 'epub') {
-        window.location.href = '/api/files/<%= fileId %>/export/epub';
-        return;
-      }
-      if (event && event.data && event.data.url) {
-        window.location.href = event.data.url;
-      }
-    };
-
     var docEditor = new DocsAPI.DocEditor('editor-container', config);
   </script>
 <% if (isOwner) { %>
