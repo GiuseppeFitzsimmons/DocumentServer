@@ -370,7 +370,22 @@
   <script>
     var config = <%- JSON.stringify(editorConfig) %>;
 
+    var _hasUnsavedChanges = false;
+
     config.events = {
+      onDownloadAs: function(event) {
+        var fileType = event.data.fileType || event.data.ext || '';
+        if (fileType.toLowerCase() === 'epub') {
+          // Intercept epub downloads — use our custom pipeline with font embedding.
+          // Export from the last saved version (auto-save keeps this fresh).
+          window.location.href = '/api/files/<%= fileId %>/export/epub';
+          return;
+        }
+        // For all other formats, trigger normal download
+        if (event.data.url) {
+          window.location.href = event.data.url;
+        }
+      },
       onRequestSaveAs: function(event) {
         var title = event.data.title || 'Copy of ' + config.document.title;
         var url = event.data.url;
@@ -496,6 +511,7 @@
     };
 
     config.events.onDocumentStateChange = function(event) {
+      _hasUnsavedChanges = event.data; // true = unsaved changes, false = saved
       if (!event.data) {
         fetch('/api/ds/callback/save-status?fileId=<%= fileId %>', {
           credentials: 'same-origin'
