@@ -173,7 +173,6 @@ resource "hcloud_server" "proxy" {
 
   user_data = templatefile("${path.module}/cloud-init-proxy.yaml", {
     nginx_config_b64     = base64encode(file("${path.module}/../deploy/nginx/nginx.conf"))
-    epub_intercept_b64   = base64encode(file("${path.module}/../deploy/nginx/epub_intercept.js"))
     refresh_cidrs_b64    = base64encode(file("${path.module}/../deploy/scripts/refresh-cidrs-nginx.sh"))
     proxy_domain         = var.proxy_domain
   })
