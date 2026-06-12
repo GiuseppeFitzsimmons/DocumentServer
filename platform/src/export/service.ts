@@ -10,7 +10,10 @@ import { pipeline } from 'stream/promises';
 import { extractFontsFromDocx } from './font-extractor.js';
 import { resolveFonts } from './font-resolver.js';
 import { injectFontsIntoEpub } from './epub-font-injector.js';
+import { extractFontAssignments } from './font-assignment-extractor.js';
+import { injectXhtmlFonts } from './xhtml-font-injector.js';
 import type { FontResolutionResult } from './font-types.js';
+import type { FontAssignmentResult } from './font-assignment-extractor.js';
 
 const PANDOC_TIMEOUT_MS = 30_000;
 
@@ -106,13 +109,34 @@ export async function convertDocxToEpub(inputStream: Readable, options?: Convert
     console.warn('Font extraction/resolution failed, proceeding without fonts:', err);
   }
 
+  // Extract per-element font assignments (best-effort)
+  let assignmentResult: FontAssignmentResult | null = null;
+  try {
+    assignmentResult = await extractFontAssignments(inputPath);
+  } catch (err) {
+    console.warn('Font assignment extraction failed, proceeding without per-element styling:', err);
+  }
+
   // Invoke Pandoc
   await runPandoc(inputPath, outputPath, options);
+
+  // Inject per-element font-family styles into XHTML (best-effort)
+  if (assignmentResult) {
+    try {
+      await injectXhtmlFonts({ epubPath: outputPath, assignments: assignmentResult });
+    } catch (err) {
+      console.warn('XHTML font injection failed, proceeding without per-element styling:', err);
+    }
+  }
 
   // Inject fonts into epub (best-effort)
   try {
     if (resolvedFonts.some(r => r.filePath !== null)) {
-      await injectFontsIntoEpub({ epubPath: outputPath, resolvedFonts });
+      await injectFontsIntoEpub({
+        epubPath: outputPath,
+        resolvedFonts,
+        bodyFont: assignmentResult?.bodyFont,
+      });
     }
   } catch (err) {
     console.warn('Font injection failed, returning epub without fonts:', err);

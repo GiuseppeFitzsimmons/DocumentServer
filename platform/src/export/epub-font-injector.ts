@@ -21,6 +21,7 @@ import type { FontResolutionResult } from './font-types.js';
 export interface EpubFontInjectorInput {
   epubPath: string;
   resolvedFonts: FontResolutionResult[];
+  bodyFont?: string;
 }
 
 /**
@@ -38,7 +39,7 @@ export interface EpubFontInjectorInput {
  * @param input - The epub path and resolved font entries
  */
 export async function injectFontsIntoEpub(input: EpubFontInjectorInput): Promise<void> {
-  const { epubPath, resolvedFonts } = input;
+  const { epubPath, resolvedFonts, bodyFont } = input;
 
   // Filter to only fonts with a resolved file path
   const fontsToEmbed = resolvedFonts.filter(
@@ -91,7 +92,7 @@ export async function injectFontsIntoEpub(input: EpubFontInjectorInput): Promise
 
   const existingCss = zip.getEntry(cssEntry)!.getData().toString('utf-8');
   const fontFaceDeclarations = generateFontFaceCSS(fontsToEmbed, fontsRelativeToCSS);
-  const bodyFontRule = generateBodyFontRule(fontsToEmbed);
+  const bodyFontRule = generateBodyFontRule(fontsToEmbed, bodyFont);
   const updatedCss = existingCss + '\n' + fontFaceDeclarations + '\n' + bodyFontRule;
   zip.updateFile(cssEntry, Buffer.from(updatedCss, 'utf-8'));
 
@@ -340,13 +341,18 @@ function generateFontFaceCSS(
 
 /**
  * Generates a body CSS rule that assigns the document's embedded fonts.
- * Uses the first resolved "normal" weight+style font as the primary body font,
- * with remaining fonts as fallbacks in the font stack.
+ * If a specific bodyFont is provided, uses only that font in the body rule.
+ * Otherwise falls back to listing all embedded fonts (legacy behavior).
  */
 function generateBodyFontRule(
-  fonts: Array<FontResolutionResult & { filePath: string }>
+  fonts: Array<FontResolutionResult & { filePath: string }>,
+  bodyFont?: string
 ): string {
-  // Deduplicate font families (keep order, first occurrence wins)
+  if (bodyFont) {
+    return `body {\n  font-family: "${bodyFont}", serif;\n}\n`;
+  }
+
+  // Legacy fallback: list all embedded fonts
   const seen = new Set<string>();
   const families: string[] = [];
   for (const font of fonts) {
