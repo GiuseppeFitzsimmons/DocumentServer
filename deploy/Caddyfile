@@ -43,6 +43,12 @@ eurobureau.eu {
 		reverse_proxy documentserver:80
 	}
 
+	# Intercept downloadas requests — route through platform to intercept epub exports
+	@downloadas path_regexp downloadas .*/downloadas/.*
+	handle @downloadas {
+		reverse_proxy portal:3000
+	}
+
 	# Versioned DS assets (e.g. /9.3.1-hash/web-apps/...)
 	@versioned path_regexp ^/[0-9]+\.[0-9]+\.[0-9]+
 	handle @versioned {
