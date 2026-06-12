@@ -2,6 +2,9 @@ FROM ghcr.io/euro-office/documentserver:latest
 
 USER root
 
+# Override web-apps documenteditor bundle with patched version (epub export intercept)
+COPY patches/documenteditor-app.js /var/www/euro-office/documentserver/web-apps/apps/documenteditor/main/app.js
+
 # Remove the default core-fonts bundle
 RUN rm -rf /var/www/euro-office/documentserver/core-fonts/*
 
