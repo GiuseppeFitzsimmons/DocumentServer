@@ -15,7 +15,7 @@ exportRouter.use(requireAuth);
 
 // Internal endpoint - only accessible via nginx internal redirect (no session required)
 // Protected by X-Internal-Export header that nginx sets
-internalExportRouter.get('/:id/epub', async (req, res) => {
+internalExportRouter.all('/:id/epub', async (req, res) => {
   const internalHeader = req.headers['x-internal-export'];
   if (internalHeader !== 'true') {
     res.status(403).json({ error: 'Forbidden' });
