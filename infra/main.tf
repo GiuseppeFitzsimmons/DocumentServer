@@ -20,30 +20,55 @@ resource "hcloud_ssh_key" "default" {
   public_key = var.ssh_public_key
 }
 
-# --- Firewall ---
+# --- Firewalls ---
+
+resource "hcloud_firewall" "proxy" {
+  name = "proxy"
+
+  rule {
+    direction  = "in"
+    protocol   = "tcp"
+    port       = "22"
+    source_ips = ["0.0.0.0/0", "::/0"]
+  }
+
+  rule {
+    direction  = "in"
+    protocol   = "tcp"
+    port       = "80"
+    source_ips = ["0.0.0.0/0", "::/0"]
+  }
+
+  rule {
+    direction  = "in"
+    protocol   = "tcp"
+    port       = "443"
+    source_ips = ["0.0.0.0/0", "::/0"]
+  }
+}
 
 resource "hcloud_firewall" "euro_office" {
   name = "euro-office"
 
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "22"
+    direction  = "in"
+    protocol   = "tcp"
+    port       = "22"
     source_ips = ["0.0.0.0/0", "::/0"]
   }
 
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "80"
-    source_ips = ["0.0.0.0/0", "::/0"]
+    direction  = "in"
+    protocol   = "tcp"
+    port       = "80"
+    source_ips = ["${var.proxy_private_ip}/32"]
   }
 
   rule {
-    direction = "in"
-    protocol  = "tcp"
-    port      = "443"
-    source_ips = ["0.0.0.0/0", "::/0"]
+    direction  = "in"
+    protocol   = "tcp"
+    port       = "443"
+    source_ips = ["${var.proxy_private_ip}/32"]
   }
 }
 
@@ -111,4 +136,62 @@ resource "hcloud_volume_attachment" "data" {
   volume_id = hcloud_volume.data.id
   server_id = hcloud_server.euro_office.id
   automount = true
+}
+
+# --- Private Network ---
+
+resource "hcloud_network" "internal" {
+  name     = "euro-office-internal"
+  ip_range = var.private_network_subnet
+}
+
+resource "hcloud_network_subnet" "internal" {
+  network_id   = hcloud_network.internal.id
+  type         = "cloud"
+  network_zone = "eu-central"
+  ip_range     = var.private_network_subnet
+}
+
+resource "hcloud_server_network" "backend" {
+  server_id  = hcloud_server.euro_office.id
+  network_id = hcloud_network.internal.id
+  ip         = var.backend_private_ip
+
+  depends_on = [hcloud_network_subnet.internal]
+}
+
+# --- Proxy Server ---
+
+resource "hcloud_server" "proxy" {
+  name        = "euro-office-proxy"
+  image       = "ubuntu-24.04"
+  server_type = var.proxy_server_type
+  location    = var.location
+  ssh_keys    = [hcloud_ssh_key.default.id]
+
+  firewall_ids = [hcloud_firewall.proxy.id]
+
+  user_data = templatefile("${path.module}/cloud-init-proxy.yaml", {
+    nginx_config_b64     = base64encode(file("${path.module}/../deploy/nginx/nginx.conf"))
+    refresh_cidrs_b64    = base64encode(file("${path.module}/../deploy/scripts/refresh-cidrs-nginx.sh"))
+    proxy_domain         = var.proxy_domain
+  })
+
+  public_net {
+    ipv4_enabled = true
+    ipv6_enabled = true
+  }
+
+  labels = {
+    project = "euro-office"
+    role    = "proxy"
+  }
+}
+
+resource "hcloud_server_network" "proxy" {
+  server_id  = hcloud_server.proxy.id
+  network_id = hcloud_network.internal.id
+  ip         = var.proxy_private_ip
+
+  depends_on = [hcloud_network_subnet.internal]
 }

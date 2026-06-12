@@ -14,6 +14,13 @@ repo_url = "https://github.com/GiuseppeFitzsimmons/DocumentServer.git"
 # server_type = "cx31"
 # location    = "fsn1"
 
+# --- Proxy Server ---
+# proxy_server_type      = "cx23"
+# proxy_domain           = "eurobureau.eu"
+# private_network_subnet = "10.0.1.0/24"
+# proxy_private_ip       = "10.0.1.1"
+# backend_private_ip     = "10.0.1.2"
+
 # Email (DKIM key as a single line with \n for line breaks)
 # mail_domain      = "eurobureau.eu"
 # dkim_private_key = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"

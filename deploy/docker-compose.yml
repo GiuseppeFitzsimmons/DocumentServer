@@ -1,22 +1,9 @@
 services:
-  caddy:
-    image: caddy:2
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - ./geo-blocked-matcher.caddy:/etc/caddy/geo-blocked-matcher.caddy:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - portal
-      - documentserver
-
   portal:
     build: ../platform
     restart: unless-stopped
+    ports:
+      - "0.0.0.0:3000:3000"
     environment:
       PORT: 3000
       NODE_ENV: production
@@ -53,6 +40,8 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile.documentserver
     restart: unless-stopped
+    ports:
+      - "0.0.0.0:80:80"
     environment:
       JWT_SECRET: ${JWT_SECRET}
       ALLOW_PRIVATE_IP_ADDRESS: "true"
@@ -75,6 +64,4 @@ services:
       - redis_data:/data
 
 volumes:
-  caddy_data:
-  caddy_config:
   redis_data:

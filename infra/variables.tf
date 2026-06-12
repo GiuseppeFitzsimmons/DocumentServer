@@ -116,3 +116,37 @@ variable "ovh_s3_region" {
   type        = string
   default     = "eu-west-par"
 }
+
+# --- Private Network ---
+
+variable "private_network_subnet" {
+  description = "CIDR for the private network subnet"
+  type        = string
+  default     = "10.0.1.0/24"
+}
+
+variable "proxy_private_ip" {
+  description = "Private IP address for the proxy server"
+  type        = string
+  default     = "10.0.1.3"
+}
+
+variable "backend_private_ip" {
+  description = "Private IP address for the backend server"
+  type        = string
+  default     = "10.0.1.2"
+}
+
+# --- Proxy Server ---
+
+variable "proxy_server_type" {
+  description = "Hetzner server type for the proxy server"
+  type        = string
+  default     = "cx23"
+}
+
+variable "proxy_domain" {
+  description = "Primary domain for the proxy server TLS certificate"
+  type        = string
+  default     = "eurobureau.eu"
+}
