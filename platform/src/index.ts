@@ -46,6 +46,7 @@ const fontsPath = process.env.NODE_ENV === 'production'
   ? '/data/fonts'
   : path.join(__dirname, '..', '..', 'fonts');
 app.use('/fonts', express.static(fontsPath));
+app.use('/static-fonts', express.static(fontsPath));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Render with layout

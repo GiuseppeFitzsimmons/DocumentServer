@@ -2,7 +2,7 @@
 
 @font-face {
   font-family: 'Caslon OS';
-  src: url('/fonts/CaslonOS-Regular.otf') format('opentype');
+  src: url('/static-fonts/CaslonOS-Regular.otf') format('opentype');
   font-weight: normal;
   font-style: normal;
   font-display: swap;
