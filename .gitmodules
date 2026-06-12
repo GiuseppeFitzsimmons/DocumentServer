@@ -3,7 +3,7 @@
 	url = https://github.com/Euro-Office/server.git
 [submodule "web-apps"]
 	path = web-apps
-	url = git@github.com:GiuseppeFitzsimmons/web-apps.git
+	url = https://github.com/Euro-Office/web-apps.git
 	branch = epub-intercept
 [submodule "sdkjs"]
 	path = sdkjs
