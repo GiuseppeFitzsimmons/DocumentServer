@@ -10,6 +10,7 @@ package_upgrade: true
 
 packages:
   - nginx
+  - libnginx-mod-http-js
   - certbot
   - python3-certbot-nginx
 
@@ -18,6 +19,11 @@ write_files:
     permissions: "0644"
     encoding: b64
     content: ${nginx_config_b64}
+
+  - path: /etc/nginx/njs/epub_intercept.js
+    permissions: "0644"
+    encoding: b64
+    content: ${epub_intercept_b64}
 
   - path: /opt/refresh-cidrs-nginx.sh
     permissions: "0755"

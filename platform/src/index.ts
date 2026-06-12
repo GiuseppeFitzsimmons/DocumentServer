@@ -16,7 +16,7 @@ import { usersRouter } from './users/routes.js';
 import { serveRouter } from './ds/serve.js';
 import { callbackRouter } from './ds/callback.js';
 import { versionRouter } from './versions/routes.js';
-import { exportRouter } from './export/routes.js';
+import { exportRouter, internalExportRouter } from './export/routes.js';
 import { editorRouter } from './pages/editor.js';
 import { landingRouter } from './pages/landing.js';
 import { homeRouter } from './pages/home.js';
@@ -98,6 +98,7 @@ app.use('/api/ds/callback', callbackRouter);
 // File storage API
 app.use('/api/files', versionRouter);
 app.use('/api/files', exportRouter);
+app.use('/internal/export', internalExportRouter);
 app.use('/api/files', fileRouter);
 app.use('/api/folders', folderRouter);
 
