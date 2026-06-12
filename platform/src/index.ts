@@ -94,47 +94,6 @@ app.get('/health', (_req, res) => {
 app.use('/api/files/serve', serveRouter);
 app.use('/api/ds/callback', callbackRouter);
 
-// Intercept DS "Download As" for epub — redirect to custom font pipeline
-app.use((req, res, next) => {
-  if (!req.path.includes('/downloadas/')) return next();
-
-  try {
-    const cmdParam = req.query.cmd;
-    if (typeof cmdParam !== 'string') return next();
-
-    const cmd = JSON.parse(cmdParam);
-    // outputformat 72 = epub in OnlyOffice
-    if (cmd.outputformat === 72 || (cmd.title && cmd.title.endsWith('.epub'))) {
-      // Extract the fileId from the document key (format: fileId_timestamp)
-      const docKey = cmd.id || '';
-      const fileId = docKey.split('_')[0];
-      if (fileId) {
-        res.redirect(`/api/files/${fileId}/export/epub`);
-        return;
-      }
-    }
-  } catch {
-    // If cmd parsing fails, fall through to DS proxy
-  }
-
-  next();
-});
-
-// Proxy remaining DS downloadas requests to DocumentServer
-const dsDownloadProxy = createProxyMiddleware({
-  target: config.DS_URL,
-  changeOrigin: true,
-  on: {
-    proxyReq: (proxyReq, req) => {
-      proxyReq.path = (req as any).originalUrl;
-    },
-  },
-});
-app.use((req, res, next) => {
-  if (!req.path.includes('/downloadas/')) return next();
-  dsDownloadProxy(req, res, next);
-});
-
 // File storage API
 app.use('/api/files', versionRouter);
 app.use('/api/files', exportRouter);

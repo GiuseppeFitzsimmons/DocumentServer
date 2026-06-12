@@ -370,8 +370,6 @@
   <script>
     var config = <%- JSON.stringify(editorConfig) %>;
 
-    var _hasUnsavedChanges = false;
-
     config.events = {
       onRequestSaveAs: function(event) {
         var title = event.data.title || 'Copy of ' + config.document.title;
@@ -498,7 +496,6 @@
     };
 
     config.events.onDocumentStateChange = function(event) {
-      _hasUnsavedChanges = event.data; // true = unsaved changes, false = saved
       if (!event.data) {
         fetch('/api/ds/callback/save-status?fileId=<%= fileId %>', {
           credentials: 'same-origin'
