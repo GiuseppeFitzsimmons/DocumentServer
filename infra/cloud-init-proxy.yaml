@@ -48,6 +48,41 @@ write_files:
       </body>
       </html>
 
+  - path: /var/www/html/maintenance.html
+    permissions: "0644"
+    encoding: b64
+    content: ${maintenance_page_b64}
+
+  - path: /opt/maintenance-mode.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      # Toggle maintenance mode for nginx
+      # Usage: maintenance-mode.sh on|off
+      set -euo pipefail
+      FLAG="/etc/nginx/maintenance.flag"
+      case "${1:-}" in
+        on)
+          touch "$FLAG"
+          echo "Maintenance mode ENABLED — nginx will return 503 to all requests."
+          ;;
+        off)
+          rm -f "$FLAG"
+          echo "Maintenance mode DISABLED — nginx will proxy normally."
+          ;;
+        status)
+          if [ -f "$FLAG" ]; then
+            echo "Maintenance mode is ON"
+          else
+            echo "Maintenance mode is OFF"
+          fi
+          ;;
+        *)
+          echo "Usage: $0 {on|off|status}"
+          exit 1
+          ;;
+      esac
+
   - path: /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
     permissions: "0755"
     content: |
