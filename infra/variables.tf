@@ -5,7 +5,7 @@ variable "hcloud_token" {
 }
 
 variable "ssh_public_key" {
-  description = "SSH public key for server access"
+  description = "SSH public key for server access (primary machine)"
   type        = string
 }
 

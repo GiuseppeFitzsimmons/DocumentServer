@@ -13,7 +13,7 @@ provider "hcloud" {
   token = var.hcloud_token
 }
 
-# --- SSH Key ---
+# --- SSH Keys ---
 
 resource "hcloud_ssh_key" "default" {
   name       = "euro-office-deploy"
@@ -97,7 +97,10 @@ resource "hcloud_server" "euro_office" {
   image       = "ubuntu-24.04"
   server_type = var.server_type
   location    = var.location
-  ssh_keys    = [hcloud_ssh_key.default.id]
+  ssh_keys    = concat(
+    [hcloud_ssh_key.default.id],
+    [for k in hcloud_ssh_key.secondary : k.id]
+  )
 
   firewall_ids = [hcloud_firewall.euro_office.id]
 
