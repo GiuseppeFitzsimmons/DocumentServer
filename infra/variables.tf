@@ -58,8 +58,14 @@ variable "mail_domain" {
   default     = "eurobureau.eu"
 }
 
+variable "resend_api_key" {
+  description = "Resend API key for transactional email"
+  type        = string
+  sensitive   = true
+}
+
 variable "smtp_host" {
-  description = "SMTP relay hostname (e.g. ssl0.ovh.net)"
+  description = "SMTP relay hostname (e.g. ssl0.ovh.net) — legacy, unused if Resend is configured"
   type        = string
   default     = ""
 }

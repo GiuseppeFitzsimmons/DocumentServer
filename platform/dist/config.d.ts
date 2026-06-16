@@ -11,6 +11,7 @@ export declare const config: {
     FILE_STORAGE_PATH: string;
     PLATFORM_BASE_URL: string;
     MAIL_DOMAIN: string;
+    RESEND_API_KEY: string;
     DKIM_PRIVATE_KEY: string;
     SMTP_HOST: string;
     SMTP_PORT: number;

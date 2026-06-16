@@ -21,15 +21,18 @@ repo_url = "https://github.com/GiuseppeFitzsimmons/DocumentServer.git"
 # proxy_private_ip       = "10.0.1.1"
 # backend_private_ip     = "10.0.1.2"
 
+# Email — Resend (primary)
+resend_api_key = "re_your_resend_api_key"
+
 # Email (DKIM key as a single line with \n for line breaks)
 # mail_domain      = "eurobureau.eu"
 # dkim_private_key = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
 
-# SMTP relay (OVH)
-smtp_host = "ssl0.ovh.net"
-smtp_port = 587
-smtp_user = "noreply@eurobureau.eu"
-smtp_pass = "your-ovh-email-password"
+# SMTP relay (legacy fallback — unused when resend_api_key is set)
+# smtp_host = "ssl0.ovh.net"
+# smtp_port = 587
+# smtp_user = "noreply@eurobureau.eu"
+# smtp_pass = "your-ovh-email-password"
 
 # OVH Object Storage (off-site replication)
 ovh_s3_endpoint   = "https://s3.eu-west-par.io.cloud.ovh.net"

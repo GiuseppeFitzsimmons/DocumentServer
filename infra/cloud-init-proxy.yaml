@@ -61,7 +61,7 @@ write_files:
       # Usage: maintenance-mode.sh on|off
       set -euo pipefail
       FLAG="/etc/nginx/maintenance.flag"
-      case "${1:-}" in
+      case "$${1:-}" in
         on)
           touch "$FLAG"
           echo "Maintenance mode ENABLED — nginx will return 503 to all requests."

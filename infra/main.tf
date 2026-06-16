@@ -98,8 +98,7 @@ resource "hcloud_server" "euro_office" {
   server_type = var.server_type
   location    = var.location
   ssh_keys    = concat(
-    [hcloud_ssh_key.default.id],
-    [for k in hcloud_ssh_key.secondary : k.id]
+    [hcloud_ssh_key.default.id]
   )
 
   firewall_ids = [hcloud_firewall.euro_office.id]
@@ -110,6 +109,7 @@ resource "hcloud_server" "euro_office" {
     session_secret   = var.session_secret
     repo_url         = var.repo_url
     mail_domain      = var.mail_domain
+    resend_api_key   = var.resend_api_key
     dkim_private_key = var.dkim_private_key
     smtp_host        = var.smtp_host
     smtp_port        = var.smtp_port

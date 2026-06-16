@@ -16,7 +16,7 @@ import { usersRouter } from './users/routes.js';
 import { serveRouter } from './ds/serve.js';
 import { callbackRouter } from './ds/callback.js';
 import { versionRouter } from './versions/routes.js';
-import { exportRouter } from './export/routes.js';
+import { exportRouter, internalExportRouter } from './export/routes.js';
 import { editorRouter } from './pages/editor.js';
 import { landingRouter } from './pages/landing.js';
 import { homeRouter } from './pages/home.js';
@@ -36,7 +36,11 @@ app.use(sessionMiddleware);
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 // Static assets (fonts, images)
-app.use('/fonts', express.static(path.join(__dirname, '..', '..', 'fonts')));
+const fontsPath = process.env.NODE_ENV === 'production'
+    ? '/data/fonts'
+    : path.join(__dirname, '..', '..', 'fonts');
+app.use('/fonts', express.static(fontsPath));
+app.use('/static-fonts', express.static(fontsPath));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 // Render with layout
 app.use((req, res, next) => {
@@ -79,6 +83,7 @@ app.use('/api/ds/callback', callbackRouter);
 // File storage API
 app.use('/api/files', versionRouter);
 app.use('/api/files', exportRouter);
+app.use('/internal/export', internalExportRouter);
 app.use('/api/files', fileRouter);
 app.use('/api/folders', folderRouter);
 // Sharing API

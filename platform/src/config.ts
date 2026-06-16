@@ -13,6 +13,7 @@ const envSchema = z.object({
   FILE_STORAGE_PATH: z.string().default('/data/files'),
   PLATFORM_BASE_URL: z.string().url(),
   MAIL_DOMAIN: z.string().default('eurobureau.eu'),
+  RESEND_API_KEY: z.string().default(''),
   DKIM_PRIVATE_KEY: z.string().default(''),
   SMTP_HOST: z.string().default(''),
   SMTP_PORT: z.coerce.number().default(465),

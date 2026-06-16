@@ -19,6 +19,7 @@ write_files:
       DB_PASSWORD=${db_password}
       SESSION_SECRET=${session_secret}
       MAIL_DOMAIN=${mail_domain}
+      RESEND_API_KEY=${resend_api_key}
       DKIM_PRIVATE_KEY="${dkim_private_key}"
       SMTP_HOST=${smtp_host}
       SMTP_PORT=${smtp_port}
