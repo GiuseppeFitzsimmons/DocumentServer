@@ -1,12 +1,13 @@
 (function (window, undefined) {
   "use strict";
 
-  var isFirstInit = true;
+  var FLAG = "__eurobureau_email_plugin_ready";
 
   window.Asc.plugin.init = function () {
-    if (isFirstInit) {
-      // First init: just register the toolbar button
-      isFirstInit = false;
+    if (!window.parent[FLAG]) {
+      // First init (autostart): register the toolbar button, set flag
+      window.parent[FLAG] = true;
+
       window.Asc.plugin.executeMethod("AddToolbarMenuItem", [{
         guid: window.Asc.plugin.guid,
         tabs: [{
@@ -29,7 +30,7 @@
       return;
     }
 
-    // Subsequent inits = button was clicked, do the action
+    // Subsequent init = button was clicked
     sendEmailToMe();
   };
 
