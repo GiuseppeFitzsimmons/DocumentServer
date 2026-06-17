@@ -1,35 +1,39 @@
 (function (window, undefined) {
   "use strict";
 
-  var PLUGIN_GUID = "asc.{B5C5E3D0-7F2A-4E91-9C12-EUROBUREAU001}";
+  var isFirstInit = true;
 
   window.Asc.plugin.init = function () {
-    // Add a button to the Home tab
-    window.Asc.plugin.executeMethod("AddToolbarMenuItem", [{
-      guid: PLUGIN_GUID,
-      tabs: [{
-        id: "home",
-        text: "Home",
-        items: [{
-          id: "email-to-me-btn",
-          type: "button",
-          text: "Email to me",
-          hint: "Send this document to your email",
-          data: "email_to_me",
-          lockInViewMode: false,
-          enableToggle: false,
-          separator: true,
-          icons: "resources/%theme-type%(light|dark)/icon%state%(normal)%scale%(default|*).%extension%(svg)",
-          items: []
+    if (isFirstInit) {
+      // First init: just register the toolbar button
+      isFirstInit = false;
+      window.Asc.plugin.executeMethod("AddToolbarMenuItem", [{
+        guid: window.Asc.plugin.guid,
+        tabs: [{
+          id: "home",
+          text: "Home",
+          items: [{
+            id: "email-to-me-btn",
+            type: "button",
+            text: "Email to me",
+            hint: "Send this document to your email",
+            data: "email_to_me",
+            lockInViewMode: false,
+            enableToggle: false,
+            separator: true,
+            icons: "resources/%theme-type%(light|dark)/icon.svg",
+            items: []
+          }]
         }]
-      }]
-    }]);
+      }]);
+      return;
+    }
+
+    // Subsequent inits = button was clicked, do the action
+    sendEmailToMe();
   };
 
-  window.Asc.plugin.event_onToolbarMenuClick = function (id) {
-    if (id !== "email-to-me-btn") return;
-
-    // Get the file ID from the parent page URL (format: /editor/:fileId)
+  function sendEmailToMe() {
     var fileId;
     try {
       var pathParts = window.parent.location.pathname.split("/");
@@ -43,7 +47,6 @@
       return;
     }
 
-    // Call the platform API from the parent frame context
     window.parent.fetch("/api/files/" + fileId + "/email-to-me", {
       method: "POST",
       credentials: "include",
@@ -67,7 +70,7 @@
           "Error: " + (err.message || "Could not send email")
         ]);
       });
-  };
+  }
 
   window.Asc.plugin.button = function () {};
 })(window);

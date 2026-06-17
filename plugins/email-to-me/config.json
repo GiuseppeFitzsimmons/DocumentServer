@@ -12,8 +12,8 @@
       "url": "index.html",
       "description": "Email to me",
       "icons": [
-        "resources/icon.svg",
-        "resources/icon.svg"
+        "resources/light/icon.svg",
+        "resources/dark/icon.svg"
       ],
       "isViewer": true,
       "EditorsSupport": ["word", "cell", "slide", "pdf"],
