@@ -4,11 +4,18 @@ import { config } from './config.js';
 
 const DKIM_SELECTOR = 'euro';
 
+interface EmailAttachment {
+  filename: string;
+  content: Buffer;
+  contentType: string;
+}
+
 interface EmailParams {
   to: string;
   subject: string;
   html: string;
   text?: string;
+  attachments?: EmailAttachment[];
 }
 
 // --- Resend (primary) ---
@@ -62,6 +69,13 @@ export async function sendEmail(params: EmailParams): Promise<void> {
       subject: params.subject,
       html: params.html,
       text: params.text,
+      ...(params.attachments?.length ? {
+        attachments: params.attachments.map(a => ({
+          filename: a.filename,
+          content: a.content,
+          content_type: a.contentType,
+        })),
+      } : {}),
     });
 
     if (error) {
@@ -82,5 +96,12 @@ export async function sendEmail(params: EmailParams): Promise<void> {
     subject: params.subject,
     html: params.html,
     text: params.text,
+    ...(params.attachments?.length ? {
+      attachments: params.attachments.map(a => ({
+        filename: a.filename,
+        content: a.content,
+        contentType: a.contentType,
+      })),
+    } : {}),
   });
 }

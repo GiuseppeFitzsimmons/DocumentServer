@@ -8,6 +8,8 @@ import * as metadata from './metadata.js';
 import { getTemplate, isValidDocumentType } from './templates.js';
 import { getShare, deleteSharesForFile } from '../sharing/service.js';
 import * as versionRepo from '../versions/repository.js';
+import { pool } from '../db/pool.js';
+import { sendEmail } from '../email.js';
 // Must match the callback handler's MAX_SAVE_SIZE_BYTES
 const MAX_FILE_SIZE = 1000 * 1024; // 1mb
 // Allowed MIME types for upload
@@ -210,6 +212,56 @@ fileRouter.get('/:id/download', async (req, res) => {
     catch (err) {
         console.error('Download error:', err);
         res.status(500).json({ error: 'Storage error' });
+    }
+});
+// POST /api/files/:id/email-to-me — email the file to the current user
+fileRouter.post('/:id/email-to-me', async (req, res) => {
+    try {
+        const userId = req.session.userId;
+        const file = await metadata.getFile(req.params.id);
+        if (!file) {
+            res.status(404).json({ error: 'Not found' });
+            return;
+        }
+        // Check access: owner or shared with download permission
+        if (file.userId !== userId) {
+            const share = await getShare(file.id, userId);
+            if (!share || !share.permissions.download) {
+                res.status(403).json({ error: 'Forbidden' });
+                return;
+            }
+        }
+        // Get user's email
+        const userResult = await pool.query('SELECT email, display_name FROM users WHERE id = $1', [userId]);
+        if (userResult.rows.length === 0) {
+            res.status(404).json({ error: 'User not found' });
+            return;
+        }
+        const userEmail = userResult.rows[0].email;
+        const userName = userResult.rows[0].display_name;
+        // Download the file from storage
+        const stream = await storage.download(file.s3Key);
+        const chunks = [];
+        for await (const chunk of stream) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        const fileBuffer = Buffer.concat(chunks);
+        await sendEmail({
+            to: userEmail,
+            subject: `Your document: ${file.name}`,
+            text: `Hi ${userName},\n\nHere is your document "${file.name}" from Euro Bureau.\n\nBest regards,\nEuro Bureau`,
+            html: `<p>Hi ${userName},</p><p>Here is your document "<strong>${file.name}</strong>" from Euro Bureau.</p><p>Best regards,<br>Euro Bureau</p>`,
+            attachments: [{
+                    filename: file.name,
+                    content: fileBuffer,
+                    contentType: file.mimeType,
+                }],
+        });
+        res.json({ success: true, email: userEmail });
+    }
+    catch (err) {
+        console.error('Email-to-me error:', err);
+        res.status(500).json({ error: 'Failed to send email' });
     }
 });
 // PATCH /api/files/:id

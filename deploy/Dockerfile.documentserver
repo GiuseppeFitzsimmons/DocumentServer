@@ -11,6 +11,10 @@ RUN rm -rf /var/www/euro-office/documentserver/core-fonts/*
 # Copy our curated font set (msttcore still present at /usr/share/fonts/msttcore/)
 COPY fonts/ /var/www/euro-office/documentserver/core-fonts/custom/
 
+# Install the "Email to me" plugin
+COPY plugins/email-to-me/ /var/www/euro-office/documentserver/sdkjs-plugins/email-to-me/
+
 # Fix permissions and regenerate the font index
 RUN chown -R ds:ds /var/www/euro-office/documentserver/core-fonts && \
+    chown -R ds:ds /var/www/euro-office/documentserver/sdkjs-plugins/email-to-me && \
     documentserver-generate-allfonts.sh true

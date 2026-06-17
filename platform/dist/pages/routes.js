@@ -94,7 +94,7 @@ pageRouter.post('/register', async (req, res) => {
         try {
             await sendEmail({
                 to: email,
-                subject: 'Welcome to Euro Bureau — Your Temporary Password',
+                subject: 'Welcome to Euro Bureau - Your Temporary Password',
                 text: [
                     `Welcome to Euro Bureau!`,
                     ``,

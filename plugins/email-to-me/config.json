@@ -1,0 +1,29 @@
+{
+  "name": "Email to me",
+  "nameLocale": {},
+  "guid": "asc.{B5C5E3D0-7F2A-4E91-9C12-EUROBUREAU001}",
+  "version": "1.0.0",
+  "baseUrl": "",
+  "provider": "Euro Bureau",
+  "description": "Email the current document to yourself",
+  "descriptionLocale": {},
+  "variations": [
+    {
+      "url": "index.html",
+      "description": "Email to me",
+      "icons": [
+        "resources/icon.svg",
+        "resources/icon.svg"
+      ],
+      "isViewer": true,
+      "EditorsSupport": ["word", "cell", "slide", "pdf"],
+      "isVisual": false,
+      "isModal": false,
+      "isInsideMode": false,
+      "initDataType": "none",
+      "initData": "",
+      "buttons": [],
+      "events": ["onToolbarMenuClick"]
+    }
+  ]
+}
