@@ -4,9 +4,9 @@
   var FLAG = "__eurobureau_email_plugin_ready";
 
   window.Asc.plugin.init = function () {
-    if (!window.parent[FLAG]) {
+    if (!window.top[FLAG]) {
       // First init (autostart): register the toolbar button, set flag
-      window.parent[FLAG] = true;
+      window.top[FLAG] = true;
 
       window.Asc.plugin.executeMethod("AddToolbarMenuItem", [{
         guid: window.Asc.plugin.guid,
@@ -37,18 +37,19 @@
   function sendEmailToMe() {
     var fileId;
     try {
-      var pathParts = window.parent.location.pathname.split("/");
+      var pathParts = window.top.location.pathname.split("/");
+      // URL is /editor/:fileId
       fileId = pathParts[pathParts.length - 1];
     } catch (e) {
       fileId = null;
     }
 
-    if (!fileId) {
+    if (!fileId || fileId.length < 30) {
       window.Asc.plugin.executeMethod("ShowMessage", ["Could not determine file ID"]);
       return;
     }
 
-    window.parent.fetch("/api/files/" + fileId + "/email-to-me", {
+    window.top.fetch("/api/files/" + fileId + "/email-to-me", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" }
