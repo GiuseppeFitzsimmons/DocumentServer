@@ -35,3 +35,6 @@
 	path = document-formats
 	url = https://github.com/Euro-Office/document-formats.git
 	branch = main
+[submodule "fonts"]
+	path = fonts
+	url = https://github.com/GiuseppeFitzsimmons/EuroBureau-Fonts.git
