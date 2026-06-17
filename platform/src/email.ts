@@ -91,7 +91,7 @@ export async function sendEmail(params: EmailParams): Promise<void> {
   }
 
   await transporter.sendMail({
-    from: `"Euro Bureau" <noreply@${config.MAIL_DOMAIN}>`,
+    from: `"Euro Bureau" <${config.SMTP_USER || `noreply@${config.MAIL_DOMAIN}`}>`,
     to: params.to,
     subject: params.subject,
     html: params.html,
