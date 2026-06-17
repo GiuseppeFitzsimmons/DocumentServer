@@ -1,11 +1,11 @@
-(function (window) {
+(function (window, undefined) {
   "use strict";
 
   var PLUGIN_GUID = "asc.{B5C5E3D0-7F2A-4E91-9C12-EUROBUREAU001}";
 
   window.Asc.plugin.init = function () {
     // Add a button to the Home tab
-    Asc.plugin.executeMethod("AddToolbarMenuItem", [{
+    window.Asc.plugin.executeMethod("AddToolbarMenuItem", [{
       guid: PLUGIN_GUID,
       tabs: [{
         id: "home",
@@ -29,17 +29,22 @@
   window.Asc.plugin.event_onToolbarMenuClick = function (id) {
     if (id !== "email-to-me-btn") return;
 
-    // Get the file ID from the page URL (format: /editor/:fileId)
-    var pathParts = window.parent.location.pathname.split("/");
-    var fileId = pathParts[pathParts.length - 1];
+    // Get the file ID from the parent page URL (format: /editor/:fileId)
+    var fileId;
+    try {
+      var pathParts = window.parent.location.pathname.split("/");
+      fileId = pathParts[pathParts.length - 1];
+    } catch (e) {
+      fileId = null;
+    }
 
     if (!fileId) {
-      console.error("[email-to-me] Could not determine file ID");
+      window.Asc.plugin.executeMethod("ShowMessage", ["Could not determine file ID"]);
       return;
     }
 
-    // Call the platform API
-    fetch("/api/files/" + fileId + "/email-to-me", {
+    // Call the platform API from the parent frame context
+    window.parent.fetch("/api/files/" + fileId + "/email-to-me", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" }
@@ -53,12 +58,12 @@
         return res.json();
       })
       .then(function (data) {
-        Asc.plugin.executeMethod("ShowMessage", [
+        window.Asc.plugin.executeMethod("ShowMessage", [
           "Document sent to " + data.email
         ]);
       })
       .catch(function (err) {
-        Asc.plugin.executeMethod("ShowMessage", [
+        window.Asc.plugin.executeMethod("ShowMessage", [
           "Error: " + (err.message || "Could not send email")
         ]);
       });
