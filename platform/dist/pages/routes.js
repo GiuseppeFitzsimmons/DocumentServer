@@ -166,4 +166,105 @@ pageRouter.get('/logout', (req, res) => {
         res.redirect('/login');
     });
 });
+// --- Forgot / Reset Password ---
+pageRouter.get('/forgot-password', (req, res) => {
+    if (req.session.userId) {
+        res.redirect('/');
+        return;
+    }
+    res.render('forgot-password', { title: 'Reset your password', error: null, success: null });
+});
+pageRouter.post('/forgot-password', async (req, res) => {
+    const email = (req.body.email || '').trim().toLowerCase();
+    if (!email || !z.string().email().safeParse(email).success) {
+        res.render('forgot-password', { title: 'Reset your password', error: 'Please enter a valid email address.', success: null });
+        return;
+    }
+    // Always show success to prevent email enumeration
+    const successMessage = 'If an account with that email exists, a reset link has been sent. Check your inbox.';
+    try {
+        const userResult = await pool.query('SELECT id, display_name FROM users WHERE email = $1', [email]);
+        if (userResult.rows.length === 0) {
+            res.render('forgot-password', { title: 'Reset your password', error: null, success: successMessage });
+            return;
+        }
+        const user = userResult.rows[0];
+        // Invalidate any existing unused tokens for this user
+        await pool.query('UPDATE password_reset_tokens SET used = true WHERE user_id = $1 AND used = false', [user.id]);
+        // Generate a secure token
+        const { randomBytes } = await import('crypto');
+        const token = randomBytes(32).toString('hex');
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+        await pool.query('INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)', [user.id, token, expiresAt]);
+        const resetUrl = `https://eurobureau.eu/reset-password/${token}`;
+        await sendEmail({
+            to: email,
+            subject: 'Euro Bureau - Password Reset',
+            text: [
+                `Hi ${user.display_name},`,
+                ``,
+                `You requested a password reset. Click the link below to set a new password:`,
+                ``,
+                resetUrl,
+                ``,
+                `This link expires in 1 hour.`,
+                ``,
+                `If you didn't request this, you can safely ignore this email.`,
+            ].join('\n'),
+            html: [
+                `<p>Hi ${user.display_name},</p>`,
+                `<p>You requested a password reset. Click the link below to set a new password:</p>`,
+                `<p><a href="${resetUrl}">${resetUrl}</a></p>`,
+                `<p>This link expires in 1 hour.</p>`,
+                `<p>If you didn't request this, you can safely ignore this email.</p>`,
+            ].join('\n'),
+        });
+    }
+    catch (err) {
+        console.error('Forgot password error:', err);
+    }
+    res.render('forgot-password', { title: 'Reset your password', error: null, success: successMessage });
+});
+const resetPasswordSchema = z.object({
+    password: z.string().min(8, 'Password must be at least 8 characters'),
+    confirmPassword: z.string(),
+}).refine(data => data.password === data.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+});
+pageRouter.get('/reset-password/:token', async (req, res) => {
+    const { token } = req.params;
+    const result = await pool.query('SELECT id, expires_at, used FROM password_reset_tokens WHERE token = $1', [token]);
+    if (result.rows.length === 0 || result.rows[0].used || new Date(result.rows[0].expires_at) < new Date()) {
+        res.render('forgot-password', { title: 'Reset your password', error: 'This reset link is invalid or has expired.', success: null });
+        return;
+    }
+    res.render('reset-password', { title: 'Set a new password', error: null, token });
+});
+pageRouter.post('/reset-password/:token', async (req, res) => {
+    const { token } = req.params;
+    const tokenResult = await pool.query('SELECT id, user_id, expires_at, used FROM password_reset_tokens WHERE token = $1', [token]);
+    if (tokenResult.rows.length === 0 || tokenResult.rows[0].used || new Date(tokenResult.rows[0].expires_at) < new Date()) {
+        res.render('forgot-password', { title: 'Reset your password', error: 'This reset link is invalid or has expired.', success: null });
+        return;
+    }
+    const parsed = resetPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+        const msg = parsed.error.issues.map(i => i.message).join(', ');
+        res.render('reset-password', { title: 'Set a new password', error: msg, token });
+        return;
+    }
+    const { password } = parsed.data;
+    const userId = tokenResult.rows[0].user_id;
+    try {
+        const passwordHash = await hashPassword(password);
+        await pool.query('UPDATE users SET password_hash = $1, is_temp_password = false WHERE id = $2', [passwordHash, userId]);
+        await pool.query('UPDATE password_reset_tokens SET used = true WHERE id = $1', [tokenResult.rows[0].id]);
+        res.render('forgot-password', { title: 'Password reset', error: null, success: 'Your password has been reset. You can now sign in.' });
+    }
+    catch (err) {
+        console.error('Reset password error:', err);
+        res.render('reset-password', { title: 'Set a new password', error: 'Something went wrong.', token });
+    }
+});
 //# sourceMappingURL=routes.js.map
