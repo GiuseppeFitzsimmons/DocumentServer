@@ -13,6 +13,7 @@ import { requirePermanentPassword } from './auth/require-permanent-password.js';
 import { fileRouter, folderRouter } from './storage/routes.js';
 import { sharingRouter } from './sharing/routes.js';
 import { usersRouter } from './users/routes.js';
+import { accountRouter, accountPageRouter } from './account/routes.js';
 import { serveRouter } from './ds/serve.js';
 import { callbackRouter } from './ds/callback.js';
 import { versionRouter } from './versions/routes.js';
@@ -90,6 +91,9 @@ app.use('/api/folders', folderRouter);
 app.use('/api/shares', sharingRouter);
 // Users API
 app.use('/api/users', usersRouter);
+// Account management
+app.use('/api/account', accountRouter);
+app.use(accountPageRouter);
 // Editor page (authenticated)
 app.use(editorRouter);
 // Proxy /example to DocumentServer (authenticated)
