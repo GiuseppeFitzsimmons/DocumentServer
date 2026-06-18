@@ -12,6 +12,7 @@
   <nav class="navbar">
     <a href="/" class="navbar-brand">EuroBureau</a>
     <div class="navbar-right">
+      <span class="navbar-storage" title="<%= quotaUsed %> of <%= quotaLimit %> used"><%= quotaUsed %> / <%= quotaLimit %></span>
       <a href="/account" class="navbar-user"><%= displayName %></a>
       <a href="/logout" class="navbar-logout">Logout</a>
     </div>

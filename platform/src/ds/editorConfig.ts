@@ -94,10 +94,6 @@ export function buildEditorConfig(params: EditorConfigParams): object {
       customization: {
         forcesave: true,
       },
-      plugins: {
-        autostart: ['asc.{B5C5E3D0-7F2A-4E91-9C12-EUROBUREAU001}'],
-        pluginsData: ['/sdkjs-plugins/email-to-me/config.json'],
-      },
       ...(params.hasVersions ? {
         events: {
           onRequestHistory: true,
