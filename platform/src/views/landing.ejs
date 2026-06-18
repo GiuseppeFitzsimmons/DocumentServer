@@ -308,9 +308,17 @@
     async function handleCreateDocument(type) {
       try {
         var result = await FileManagerAPI.createDocument(type, null);
+        if (result.quota && result.quota.isWarning) {
+          var pct = Math.round(result.quota.percentage * 100);
+          showToast('Storage warning: ' + pct + '% used (' + formatSize(result.quota.usedBytes) + ' of ' + formatSize(result.quota.limitBytes) + ')', 'error');
+        }
         window.open('/editor/' + result.id, '_blank');
       } catch (err) {
-        showError(err.message || 'Failed to create document');
+        if (err.message && err.message.includes('storage is full')) {
+          showError('Account storage is full. Delete some files to free up space.');
+        } else {
+          showError(err.message || 'Failed to create document');
+        }
       }
     }
 

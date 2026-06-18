@@ -159,6 +159,41 @@
       </div>
     </div>
 
+    <!-- Storage Section -->
+    <div class="account-section">
+      <h2>Storage</h2>
+      <div class="storage-bar-container">
+        <div class="storage-bar">
+          <div class="storage-bar-fill<%= quotaPercentage >= 1 ? ' full' : quotaPercentage >= 0.8 ? ' warning' : '' %>" id="storage-bar-fill" style="width: <%= Math.round(quotaPercentage * 100) %>%"></div>
+        </div>
+        <div class="storage-label">
+          <span id="storage-used"><%= quotaUsed %></span> of <span><%= quotaLimit %></span> used
+        </div>
+      </div>
+      <style>
+        .storage-bar-container { margin-top: 8px; }
+        .storage-bar {
+          height: 8px;
+          background: #eee;
+          border-radius: 4px;
+          overflow: hidden;
+        }
+        .storage-bar-fill {
+          height: 100%;
+          background: #111;
+          border-radius: 4px;
+          transition: width 0.3s;
+        }
+        .storage-bar-fill.warning { background: #e65100; }
+        .storage-bar-fill.full { background: #900; }
+        .storage-label {
+          margin-top: 8px;
+          font-size: 13px;
+          color: #666;
+        }
+      </style>
+    </div>
+
     <!-- Nightly Backup Section -->
     <div class="account-section">
       <h2>Nightly backup</h2>

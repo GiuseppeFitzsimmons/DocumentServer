@@ -8,6 +8,7 @@ import * as storage from '../storage/s3.js';
 import * as metadata from '../storage/metadata.js';
 import { deleteSharesForFile } from '../sharing/service.js';
 import * as versionRepo from '../versions/repository.js';
+import { getAccountUsage } from '../storage/quota.js';
 
 export const accountRouter = Router();
 export const accountPageRouter = Router();
@@ -33,12 +34,23 @@ accountPageRouter.get('/account', requireAuth, async (req, res) => {
     day: 'numeric',
   });
 
+  const quota = await getAccountUsage(userId);
+
+  function formatBytes(bytes: number): string {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
   res.render('account', {
     title: 'Account',
     email: user.email,
     displayName: user.display_name,
     createdAt,
     nightlyBackup: user.nightly_backup,
+    quotaPercentage: quota.percentage,
+    quotaUsed: formatBytes(quota.usedBytes),
+    quotaLimit: formatBytes(quota.limitBytes),
     layout: false,
   });
 });

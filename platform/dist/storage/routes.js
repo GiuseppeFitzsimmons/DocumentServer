@@ -10,6 +10,7 @@ import { getShare, deleteSharesForFile } from '../sharing/service.js';
 import * as versionRepo from '../versions/repository.js';
 import { pool } from '../db/pool.js';
 import { sendEmail } from '../email.js';
+import { getAccountUsage } from './quota.js';
 // Must match the callback handler's MAX_SAVE_SIZE_BYTES
 const MAX_FILE_SIZE = 1000 * 1024; // 1mb
 // Allowed MIME types for upload
@@ -103,6 +104,18 @@ fileRouter.post('/upload', (req, res, next) => {
         res.status(500).json({ error: 'Storage error' });
     }
 });
+// GET /api/files/quota — get account storage usage
+fileRouter.get('/quota', async (req, res) => {
+    try {
+        const userId = req.session.userId;
+        const quota = await getAccountUsage(userId);
+        res.json(quota);
+    }
+    catch (err) {
+        console.error('Quota check error:', err);
+        res.status(500).json({ error: 'Failed to check quota' });
+    }
+});
 // POST /api/files/create — create a new blank document
 fileRouter.post('/create', async (req, res) => {
     try {
@@ -110,6 +123,12 @@ fileRouter.post('/create', async (req, res) => {
         const { type, name, folderId } = req.body;
         if (!type || !isValidDocumentType(type)) {
             res.status(400).json({ error: 'Invalid type. Must be docx, xlsx, or pptx' });
+            return;
+        }
+        // Check account quota
+        const quota = await getAccountUsage(userId);
+        if (quota.isFull) {
+            res.status(413).json({ error: 'Account storage is full. Delete some files to free up space.', quota });
             return;
         }
         const fileName = name ? `${name}.${type}` : `Untitled.${type}`;
@@ -137,7 +156,9 @@ fileRouter.post('/create', async (req, res) => {
             folderId: folderId || null,
             s3Key,
         });
-        res.status(201).json(fileRecord);
+        // Include quota warning if approaching limit
+        const updatedQuota = await getAccountUsage(userId);
+        res.status(201).json({ ...fileRecord, quota: updatedQuota.isWarning ? updatedQuota : undefined });
     }
     catch (err) {
         console.error('Create document error:', err);
