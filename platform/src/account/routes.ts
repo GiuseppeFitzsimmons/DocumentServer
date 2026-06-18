@@ -17,7 +17,7 @@ export const accountPageRouter = Router();
 accountPageRouter.get('/account', requireAuth, async (req, res) => {
   const userId = req.session.userId!;
   const result = await pool.query(
-    'SELECT email, display_name, created_at FROM users WHERE id = $1',
+    'SELECT email, display_name, created_at, nightly_backup FROM users WHERE id = $1',
     [userId]
   );
 
@@ -38,6 +38,7 @@ accountPageRouter.get('/account', requireAuth, async (req, res) => {
     email: user.email,
     displayName: user.display_name,
     createdAt,
+    nightlyBackup: user.nightly_backup,
     layout: false,
   });
 });
@@ -60,6 +61,22 @@ accountRouter.post('/name', async (req, res) => {
 
   await pool.query('UPDATE users SET display_name = $1, updated_at = NOW() WHERE id = $2', [displayName, userId]);
   res.json({ success: true, displayName });
+});
+
+// POST /api/account/nightly-backup
+accountRouter.post('/nightly-backup', async (req, res) => {
+  const schema = z.object({ enabled: z.boolean() });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid input.' });
+    return;
+  }
+
+  const userId = req.session.userId!;
+  const { enabled } = parsed.data;
+
+  await pool.query('UPDATE users SET nightly_backup = $1, updated_at = NOW() WHERE id = $2', [enabled, userId]);
+  res.json({ success: true, enabled });
 });
 
 // POST /api/account/password

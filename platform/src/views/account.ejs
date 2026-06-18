@@ -159,6 +159,16 @@
       </div>
     </div>
 
+    <!-- Nightly Backup Section -->
+    <div class="account-section">
+      <h2>Nightly backup</h2>
+      <p style="font-size:14px;color:#666;margin:0 0 16px;line-height:1.6;">Receive a nightly email with all files modified that day, attached at their latest version.</p>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;">
+        <input type="checkbox" id="nightly-backup-toggle" <%= nightlyBackup ? 'checked' : '' %> style="width:18px;height:18px;cursor:pointer;" />
+        Enable nightly file backup emails
+      </label>
+    </div>
+
     <!-- Change Name Section -->
     <div class="account-section">
       <h2>Change display name</h2>
@@ -268,6 +278,24 @@
         document.getElementById('password-form').reset();
         showToast('Password updated', 'success');
       } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+
+    // Nightly backup toggle
+    document.getElementById('nightly-backup-toggle').addEventListener('change', async function() {
+      var enabled = this.checked;
+      try {
+        var res = await fetch('/api/account/nightly-backup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: enabled })
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to update preference');
+        showToast(enabled ? 'Nightly backup enabled' : 'Nightly backup disabled', 'success');
+      } catch (err) {
+        this.checked = !enabled;
         showToast(err.message, 'error');
       }
     });

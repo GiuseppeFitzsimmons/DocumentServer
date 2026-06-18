@@ -88,3 +88,8 @@ runcmd:
   # Run initial DoS protection data fetch during provisioning
   - /opt/euro-office/repo/deploy/scripts/refresh-cidrs.sh >> /var/log/euro-office-dos-protection.log 2>&1
   - /opt/euro-office/repo/deploy/scripts/refresh-disposable-emails.sh >> /var/log/euro-office-dos-protection.log 2>&1
+
+  # Set up nightly backup email cron (runs at 00:05 UTC daily)
+  - |
+    echo '5 0 * * * root docker compose -f /opt/euro-office/repo/deploy/docker-compose.yml exec -T portal node dist/jobs/nightly-backup.js >> /var/log/euro-office-nightly-backup.log 2>&1' > /etc/cron.d/euro-office-nightly-backup
+    chmod 644 /etc/cron.d/euro-office-nightly-backup
