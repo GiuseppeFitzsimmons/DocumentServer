@@ -14,6 +14,7 @@ import { fileRouter, folderRouter } from './storage/routes.js';
 import { sharingRouter } from './sharing/routes.js';
 import { usersRouter } from './users/routes.js';
 import { accountRouter, accountPageRouter } from './account/routes.js';
+import { supportRouter } from './support/routes.js';
 import { serveRouter } from './ds/serve.js';
 import { callbackRouter } from './ds/callback.js';
 import { versionRouter } from './versions/routes.js';
@@ -112,6 +113,9 @@ app.use('/api/users', usersRouter);
 // Account management
 app.use('/api/account', accountRouter);
 app.use(accountPageRouter);
+
+// Support tickets
+app.use('/api/support', supportRouter);
 
 // Editor page (authenticated)
 app.use(editorRouter);

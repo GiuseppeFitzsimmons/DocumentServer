@@ -998,5 +998,190 @@
       loadSharedFiles();
     })();
   </script>
+
+  <!-- Support Widget -->
+  <div id="support-widget" class="support-widget">
+    <button id="support-toggle" class="support-toggle" aria-label="Contact support">
+      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    </button>
+    <div id="support-panel" class="support-panel" style="display:none;">
+      <div class="support-panel-header">
+        <span>Contact Support</span>
+        <button id="support-close" class="support-panel-close" aria-label="Close">&times;</button>
+      </div>
+      <form id="support-form" class="support-form">
+        <div class="support-field">
+          <label for="support-subject">Subject</label>
+          <input type="text" id="support-subject" name="subject" required maxlength="200" placeholder="Brief description of your issue" />
+        </div>
+        <div class="support-field">
+          <label for="support-message">Message</label>
+          <textarea id="support-message" name="message" required maxlength="5000" rows="5" placeholder="Describe your issue in detail..."></textarea>
+        </div>
+        <button type="submit" class="support-submit">Send</button>
+      </form>
+      <div id="support-success" class="support-success" style="display:none;">
+        <p>Your message has been sent. We'll get back to you shortly.</p>
+        <button id="support-reset" class="support-submit">Send another</button>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .support-widget {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 900;
+      font-family: inherit;
+    }
+    .support-toggle {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: #111;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+      transition: background 0.15s;
+    }
+    .support-toggle:hover { background: #333; }
+    .support-panel {
+      position: absolute;
+      bottom: 64px;
+      right: 0;
+      width: 340px;
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+      overflow: hidden;
+    }
+    .support-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid #eee;
+      font-size: 15px;
+      font-weight: 500;
+    }
+    .support-panel-close {
+      background: none;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      padding: 0 4px;
+      color: #666;
+    }
+    .support-panel-close:hover { color: #111; }
+    .support-form {
+      padding: 20px;
+    }
+    .support-field {
+      margin-bottom: 14px;
+    }
+    .support-field label {
+      display: block;
+      font-size: 13px;
+      color: #444;
+      margin-bottom: 4px;
+    }
+    .support-field input,
+    .support-field textarea {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      font-family: inherit;
+      font-size: 14px;
+      resize: vertical;
+    }
+    .support-field input:focus,
+    .support-field textarea:focus {
+      outline: none;
+      border-color: #111;
+    }
+    .support-submit {
+      width: 100%;
+      padding: 10px;
+      background: #111;
+      color: #fff;
+      border: none;
+      border-radius: 3px;
+      font-family: inherit;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .support-submit:hover { background: #333; }
+    .support-success {
+      padding: 32px 20px;
+      text-align: center;
+    }
+    .support-success p {
+      font-size: 14px;
+      color: #444;
+      margin: 0 0 16px;
+      line-height: 1.6;
+    }
+    @media (max-width: 480px) {
+      .support-panel { width: calc(100vw - 48px); right: 0; }
+    }
+  </style>
+
+  <script>
+    (function() {
+      var toggle = document.getElementById('support-toggle');
+      var panel = document.getElementById('support-panel');
+      var closeBtn = document.getElementById('support-close');
+      var form = document.getElementById('support-form');
+      var successEl = document.getElementById('support-success');
+      var resetBtn = document.getElementById('support-reset');
+
+      toggle.addEventListener('click', function() {
+        var visible = panel.style.display !== 'none';
+        panel.style.display = visible ? 'none' : '';
+        if (!visible) document.getElementById('support-subject').focus();
+      });
+
+      closeBtn.addEventListener('click', function() {
+        panel.style.display = 'none';
+      });
+
+      form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        var subject = document.getElementById('support-subject').value.trim();
+        var message = document.getElementById('support-message').value.trim();
+        if (!subject || !message) return;
+
+        try {
+          var res = await fetch('/api/support', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ subject: subject, message: message })
+          });
+          if (!res.ok) {
+            var data = await res.json();
+            throw new Error(data.error || 'Failed to send');
+          }
+          form.style.display = 'none';
+          successEl.style.display = '';
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
+
+      resetBtn.addEventListener('click', function() {
+        form.reset();
+        form.style.display = '';
+        successEl.style.display = 'none';
+      });
+    })();
+  </script>
 </body>
 </html>
