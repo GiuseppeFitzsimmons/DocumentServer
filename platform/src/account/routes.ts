@@ -38,6 +38,7 @@ accountPageRouter.get('/account', requireAuth, async (req, res) => {
     email: user.email,
     displayName: user.display_name,
     createdAt,
+    layout: false,
   });
 });
 
