@@ -8,7 +8,7 @@ const envSchema = z.object({
   REDIS_URL: z.string().default('redis://localhost:6379'),
   SESSION_SECRET: z.string().min(16),
   DS_URL: z.string().url(),
-  DS_INTERNAL_URL: z.string().url().default(''),
+  DS_INTERNAL_URL: z.string().default(''),
   DS_JWT_SECRET: z.string().min(8),
   TRUST_PROXY: z.string().default('false'),
   FILE_STORAGE_PATH: z.string().default('/data/files'),
