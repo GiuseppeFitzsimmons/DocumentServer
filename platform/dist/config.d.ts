@@ -6,6 +6,7 @@ export declare const config: {
     REDIS_URL: string;
     SESSION_SECRET: string;
     DS_URL: string;
+    DS_INTERNAL_URL: string;
     DS_JWT_SECRET: string;
     TRUST_PROXY: string;
     FILE_STORAGE_PATH: string;

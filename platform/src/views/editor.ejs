@@ -542,6 +542,78 @@
     })();
 
     var docEditor = new DocsAPI.DocEditor('editor-container', config);
+
+    // PoC: Font filter — hide fonts not in the allowed list from the picker
+    (function() {
+      var ALLOWED_FONTS = ['Caslon OS', 'Baskervville', 'Cormorant', 'Liberation Serif'];
+      var allowedSet = {};
+      ALLOWED_FONTS.forEach(function(f) { allowedSet[f] = true; });
+
+      console.log('[font-filter] Script loaded, starting poll...');
+
+      var attempts = 0;
+      var filterInterval = setInterval(function() {
+        attempts++;
+        if (attempts > 60) {
+          console.log('[font-filter] Gave up after 60 attempts');
+          clearInterval(filterInterval);
+          return;
+        }
+
+        try {
+          var iframe = document.querySelector('#editor-container iframe') || document.querySelector('iframe[name*="editor"]') || document.querySelector('iframe');
+          if (!iframe) {
+            var container = document.getElementById('editor-container');
+            console.log('[font-filter] attempt ' + attempts + ': no iframe. Container innerHTML type: ' + (container ? container.children.length + ' children, first: ' + (container.children[0] ? container.children[0].tagName : 'none') : 'no container'));
+            return;
+          }
+          if (!iframe.contentWindow) { console.log('[font-filter] attempt ' + attempts + ': no contentWindow'); return; }
+
+          var win = iframe.contentWindow;
+          var iframeDoc = iframe.contentDocument || win.document;
+
+          if (!win.Common) { console.log('[font-filter] attempt ' + attempts + ': no Common'); return; }
+
+          // Try to find DE (document editor app)
+          if (!win.DE) { console.log('[font-filter] attempt ' + attempts + ': no DE'); return; }
+
+          var app = win.DE.getController ? win.DE.getController('Toolbar') : null;
+          if (!app) { console.log('[font-filter] attempt ' + attempts + ': no Toolbar controller'); return; }
+
+          var toolbar = app.getView ? app.getView('Toolbar') : null;
+          if (!toolbar) { console.log('[font-filter] attempt ' + attempts + ': no Toolbar view'); return; }
+
+          if (!toolbar.cmbFontName) { console.log('[font-filter] attempt ' + attempts + ': no cmbFontName'); return; }
+
+          var store = toolbar.cmbFontName.store;
+          if (!store) { console.log('[font-filter] attempt ' + attempts + ': no store'); return; }
+          if (store.length === 0) { console.log('[font-filter] attempt ' + attempts + ': store empty'); return; }
+
+          console.log('[font-filter] Found store with ' + store.length + ' fonts, filtering...');
+
+          // Filter: remove models not in allowedSet
+          var toRemove = [];
+          store.each(function(model) {
+            var name = model.get('name');
+            var keep = false;
+            for (var i = 0; i < ALLOWED_FONTS.length; i++) {
+              if (name === ALLOWED_FONTS[i] || name.indexOf(ALLOWED_FONTS[i] + ' ') === 0) {
+                keep = true;
+                break;
+              }
+            }
+            if (!keep) toRemove.push(model);
+          });
+
+          console.log('[font-filter] Removing ' + toRemove.length + ' fonts, keeping ' + (store.length - toRemove.length));
+          store.remove(toRemove);
+          clearInterval(filterInterval);
+          console.log('[font-filter] Done! ' + store.length + ' fonts remain');
+        } catch(e) {
+          console.log('[font-filter] attempt ' + attempts + ': error - ' + e.message);
+        }
+      }, 500);
+    })();
   </script>
 <% if (isOwner) { %>
   <script>

@@ -5,6 +5,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EuroBureau</title>
   <link rel="stylesheet" href="/styles.css">
+  <style>
+    .font-picker-grid {
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid #eee;
+      border-radius: 4px;
+    }
+    .font-chip {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-bottom: 1px solid #f0f0f0;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.1s;
+      user-select: none;
+    }
+    .font-chip:last-child { border-bottom: none; }
+    .font-chip:hover { background: #fafafa; }
+    .font-chip.selected { background: #f5f5f5; }
+    .font-chip input {
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+      accent-color: #111;
+    }
+    .font-chip-name { white-space: nowrap; }
+  </style>
 </head>
 <body>
 
@@ -70,6 +99,16 @@
         </div>
         <div id="shared-grid" role="group"></div>
       </div>
+    </section>
+
+    <!-- Font Preferences Section -->
+    <section class="section" id="fonts-section">
+      <div class="browser-toolbar">
+        <h2 class="browser-heading">My Fonts</h2>
+        <button class="btn-toolbar" id="btn-save-fonts" onclick="saveFontPreferences()" disabled>Save selection</button>
+      </div>
+      <p style="font-size:14px;color:#666;margin:0 0 16px;">Choose which fonts appear in the editor font picker. Changes take effect on next document open.</p>
+      <div class="font-picker-grid" id="font-picker-grid"></div>
     </section>
 
     <!-- Placeholder Section -->
@@ -998,6 +1037,90 @@
     }
 
     // ========================================
+    // Font Preferences
+    // ========================================
+    var fontCatalog = [];
+    var userFontSelection = new Set();
+    var fontsDirty = false;
+
+    async function loadFontPreferences() {
+      try {
+        var [catalogRes, prefsRes] = await Promise.all([
+          fetch('/api/fonts/catalog'),
+          fetch('/api/fonts/preferences')
+        ]);
+        fontCatalog = await catalogRes.json();
+        var prefs = await prefsRes.json();
+        userFontSelection = new Set(prefs.length > 0 ? prefs : fontCatalog.map(function(f) { return f.name; }));
+        renderFontPicker();
+      } catch(err) {
+        console.error('Failed to load font preferences:', err);
+      }
+    }
+
+    function renderFontPicker() {
+      var grid = document.getElementById('font-picker-grid');
+      grid.innerHTML = '';
+
+      // Build @font-face rules for previews
+      var style = document.getElementById('font-preview-styles');
+      if (!style) {
+        style = document.createElement('style');
+        style.id = 'font-preview-styles';
+        document.head.appendChild(style);
+      }
+      var cssRules = '';
+
+      fontCatalog.forEach(function(entry) {
+        var font = entry.name;
+        var file = entry.file;
+        var safeName = font.replace(/'/g, "\\'");
+
+        cssRules += "@font-face { font-family: '" + safeName + "'; src: url('/static-fonts/" + encodeURIComponent(file) + "'); font-display: swap; }\n";
+
+        var chip = document.createElement('label');
+        chip.className = 'font-chip' + (userFontSelection.has(font) ? ' selected' : '');
+        chip.innerHTML =
+          '<input type="checkbox" ' + (userFontSelection.has(font) ? 'checked' : '') + ' />' +
+          '<span class="font-chip-name" style="font-family:\'' + safeName + '\', serif;">' + escapeHtml(font) + '</span>';
+        chip.querySelector('input').addEventListener('change', function() {
+          if (this.checked) {
+            userFontSelection.add(font);
+            chip.classList.add('selected');
+          } else {
+            userFontSelection.delete(font);
+            chip.classList.remove('selected');
+          }
+          fontsDirty = true;
+          document.getElementById('btn-save-fonts').disabled = false;
+        });
+        grid.appendChild(chip);
+      });
+
+      style.textContent = cssRules;
+    }
+
+    async function saveFontPreferences() {
+      var btn = document.getElementById('btn-save-fonts');
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+      try {
+        var res = await fetch('/api/fonts/preferences', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fonts: [...userFontSelection] })
+        });
+        if (!res.ok) throw new Error('Failed to save');
+        showSuccess('Font preferences saved! Changes apply on next document open.');
+        fontsDirty = false;
+      } catch(err) {
+        showError(err.message || 'Failed to save font preferences');
+        btn.disabled = false;
+      }
+      btn.textContent = 'Save selection';
+    }
+
+    // ========================================
     // Initialize on page load
     // ========================================
     (function init() {
@@ -1005,6 +1128,7 @@
       renderBreadcrumb();
       initFileTree();
       loadSharedFiles();
+      loadFontPreferences();
     })();
   </script>
 
