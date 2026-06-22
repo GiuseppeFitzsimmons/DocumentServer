@@ -343,6 +343,14 @@ fileRouter.patch('/:id', async (req, res) => {
 
     const updates: Partial<Pick<metadata.FileRecord, 'name' | 'folderId'>> = {};
 
+    if (req.body.touch) {
+      // Just update the timestamp to generate a new document key
+      await pool.query('UPDATE files SET updated_at = NOW() WHERE id = $1', [file.id]);
+      const refreshed = await metadata.getFile(file.id);
+      res.json(refreshed);
+      return;
+    }
+
     if (req.body.name) {
       updates.name = req.body.name;
     }

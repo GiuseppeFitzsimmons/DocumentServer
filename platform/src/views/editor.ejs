@@ -461,7 +461,16 @@
     };
 
     config.events.onOutdatedVersion = function() {
-      document.location.reload();
+      // Force a new document key by touching the file, then reload
+      fetch('/api/files/<%= fileId %>', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ touch: true })
+      }).then(function() {
+        document.location.reload();
+      }).catch(function() {
+        document.location.reload();
+      });
     };
 
     config.events.onRequestRestore = function(event) {
