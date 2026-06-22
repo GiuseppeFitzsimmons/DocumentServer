@@ -107,22 +107,27 @@ fontsRouter.post('/preferences', requireAuth, async (req, res) => {
 });
 
 // GET /api/fonts/AllFonts.js — filtered font manifest (per-user)
-fontsRouter.get('/AllFonts.js', requireAuth, async (req, res) => {
+// No auth required — DS iframe loads this without session cookies
+fontsRouter.get('/AllFonts.js', async (req, res) => {
   try {
-    const userId = req.session.userId!;
-    const userFonts = await getUserFonts(userId);
+    // Try to get user from session, fall back to full catalog
+    const userId = req.session?.userId;
+    let fontList = FONT_NAMES;
 
-    // If user has no preferences, serve all custom fonts
-    const fontList = userFonts.length > 0 ? userFonts : FONT_NAMES;
+    if (userId) {
+      const userFonts = await getUserFonts(userId);
+      if (userFonts.length > 0) {
+        fontList = userFonts;
+      }
+    }
+
     const allowedSet = new Set(fontList);
-
     const cacheKey = getCacheKey(fontList);
 
     if (!filteredCache.has(cacheKey)) {
       const upstream = await fetchUpstreamAllFonts();
       const filtered = buildFilteredAllFonts(upstream, allowedSet);
 
-      // Evict oldest if cache is full
       if (filteredCache.size >= MAX_CACHE_ENTRIES) {
         const firstKey = filteredCache.keys().next().value;
         if (firstKey) filteredCache.delete(firstKey);
@@ -136,7 +141,9 @@ fontsRouter.get('/AllFonts.js', requireAuth, async (req, res) => {
     res.send(filteredCache.get(cacheKey));
   } catch (err) {
     console.error('[fonts] AllFonts.js proxy error:', err);
-    res.status(502).json({ error: 'Failed to load font manifest' });
+    // On error, fall through to DS directly would be ideal but we can't here
+    // Return a 502 so the editor retries or shows an error
+    res.status(502).send('// AllFonts.js proxy error');
   }
 });
 
