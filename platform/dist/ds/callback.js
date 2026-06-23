@@ -46,7 +46,7 @@ async function archiveCurrentVersion(file, payload) {
                     diffChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
                 }
                 const diffBuffer = Buffer.concat(diffChunks);
-                const diffKey = `${file.userId}/${file.id}/versions/${nextVersion}/diff.zip`;
+                const diffKey = `${file.userId}/${file.id}/versions/${nextVersion}.diff.zip`;
                 await storage.upload(diffKey, diffBuffer, 'application/zip');
                 changesS3Key = diffKey;
             }

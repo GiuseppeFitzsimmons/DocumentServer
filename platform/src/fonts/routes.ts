@@ -28,36 +28,51 @@ async function fetchUpstreamAllFonts(): Promise<string> {
 }
 
 function buildFilteredAllFonts(source: string, allowedFonts: Set<string>): string {
-  // 1. Filter g_fonts_selection_bin
-  const binMatch = source.match(/window\["g_fonts_selection_bin"\]\s*=\s*"([^"]+)"/);
-  let filteredBinB64 = '';
+  // 1. Parse and filter __fonts_infos, building an old→new index map
+  const infosMatch = source.match(/window\["__fonts_infos"\]\s*=\s*\[([\s\S]*?)\];/);
+  let filtered = source;
+
+  if (!infosMatch) return source;
+
+  // Parse all infos entries with their original indexes
+  const allEntries: { index: number; name: string; raw: string }[] = [];
+  const regex = /\["([^"]+)",([\d\-,]+)\]/g;
+  let match;
+  while ((match = regex.exec(infosMatch[1])) !== null) {
+    allEntries.push({ index: allEntries.length, name: match[1], raw: match[0] });
+  }
+
+  // Build filtered infos: keep allowed entries at their original positions,
+  // replace others with null so sprite indexes stay aligned
+  const filteredEntries: string[] = [];
+  const keptIndexes = new Set<number>();
+  for (const entry of allEntries) {
+    if (allowedFonts.has(entry.name)) {
+      filteredEntries.push(entry.raw);
+      keptIndexes.add(entry.index);
+    } else {
+      // Placeholder: "ASCW3" with valid file index 0 — editor skips these in the font list
+      filteredEntries.push(`["ASCW3",0,0,-1,-1,-1,-1,-1,-1]`);
+    }
+  }
+
+  // Replace __fonts_infos (same length as original, preserving indexes)
+  filtered = filtered.replace(
+    /window\["__fonts_infos"\]\s*=\s*\[[\s\S]*?\];/,
+    `window["__fonts_infos"] = [\n${filteredEntries.join(',\n')}\n];`
+  );
+
+  // 2. __fonts_ranges stays untouched — indexes still valid since we preserved positions
+
+  // 3. Filter g_fonts_selection_bin
+  const binMatch = filtered.match(/window\["g_fonts_selection_bin"\]\s*=\s*"([^"]+)"/);
   if (binMatch) {
     const rawBin = Buffer.from(binMatch[1], 'base64');
     const filteredBin = filterFontsBin(rawBin, allowedFonts);
-    filteredBinB64 = filteredBin.toString('base64');
-  }
-
-  // 2. Filter __fonts_infos
-  const infosMatch = source.match(/window\["__fonts_infos"\]\s*=\s*\[([\s\S]*?)\];/);
-  let filteredInfos = '';
-  if (infosMatch) {
-    filteredInfos = filterFontsInfos(infosMatch[1], allowedFonts);
-  }
-
-  // 3. Rebuild the response
-  let filtered = source;
-
-  if (binMatch && filteredBinB64) {
+    const filteredBinB64 = filteredBin.toString('base64');
     filtered = filtered.replace(
       /window\["g_fonts_selection_bin"\]\s*=\s*"[^"]+"/,
       `window["g_fonts_selection_bin"] = "${filteredBinB64}"`
-    );
-  }
-
-  if (infosMatch) {
-    filtered = filtered.replace(
-      /window\["__fonts_infos"\]\s*=\s*\[[\s\S]*?\];/,
-      `window["__fonts_infos"] = [\n${filteredInfos}\n];`
     );
   }
 
@@ -99,6 +114,12 @@ fontsRouter.post('/preferences', requireAuth, async (req, res) => {
   try {
     const userId = req.session.userId!;
     await setUserFonts(userId, parsed.data.fonts);
+
+    // Rebuild the filtered AllFonts.js immediately
+    const upstream = await fetchUpstreamAllFonts();
+    currentFilteredResponse = buildFilteredAllFonts(upstream, new Set(parsed.data.fonts));
+    console.log(`[fonts] Rebuilt AllFonts.js with ${parsed.data.fonts.length} fonts after preference save`);
+
     res.json({ success: true, count: parsed.data.fonts.length });
   } catch (err) {
     console.error('[fonts] Set preferences error:', err);
@@ -107,42 +128,30 @@ fontsRouter.post('/preferences', requireAuth, async (req, res) => {
 });
 
 // GET /api/fonts/AllFonts.js — filtered font manifest (per-user)
-// No auth required — DS iframe loads this without session cookies
+// Strategy: when preferences are saved, we pre-build the filtered response.
+// All requests (authenticated or not) get the same pre-built response.
+let currentFilteredResponse: string | null = null;
+
 fontsRouter.get('/AllFonts.js', async (req, res) => {
   try {
-    // Try to get user from session, fall back to full catalog
-    const userId = req.session?.userId;
-    let fontList = FONT_NAMES;
-
-    if (userId) {
-      const userFonts = await getUserFonts(userId);
-      if (userFonts.length > 0) {
-        fontList = userFonts;
+    // If no pre-built response exists, build one now
+    if (!currentFilteredResponse) {
+      const userId = req.session?.userId;
+      let fontList = FONT_NAMES;
+      if (userId) {
+        const userFonts = await getUserFonts(userId);
+        if (userFonts.length > 0) fontList = userFonts;
       }
-    }
-
-    const allowedSet = new Set(fontList);
-    const cacheKey = getCacheKey(fontList);
-
-    if (!filteredCache.has(cacheKey)) {
       const upstream = await fetchUpstreamAllFonts();
-      const filtered = buildFilteredAllFonts(upstream, allowedSet);
-
-      if (filteredCache.size >= MAX_CACHE_ENTRIES) {
-        const firstKey = filteredCache.keys().next().value;
-        if (firstKey) filteredCache.delete(firstKey);
-      }
-
-      filteredCache.set(cacheKey, filtered);
+      currentFilteredResponse = buildFilteredAllFonts(upstream, new Set(fontList));
+      console.log(`[fonts] Built initial AllFonts.js with ${fontList.length} fonts`);
     }
 
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-    res.setHeader('Cache-Control', 'private, no-cache');
-    res.send(filteredCache.get(cacheKey));
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(currentFilteredResponse);
   } catch (err) {
     console.error('[fonts] AllFonts.js proxy error:', err);
-    // On error, fall through to DS directly would be ideal but we can't here
-    // Return a 502 so the editor retries or shows an error
     res.status(502).send('// AllFonts.js proxy error');
   }
 });
@@ -150,6 +159,7 @@ fontsRouter.get('/AllFonts.js', async (req, res) => {
 // POST /api/fonts/invalidate-cache
 fontsRouter.post('/invalidate-cache', requireAuth, (_req, res) => {
   cachedUpstream = null;
+  currentFilteredResponse = null;
   filteredCache.clear();
   res.json({ success: true });
 });

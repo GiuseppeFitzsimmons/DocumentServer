@@ -25,16 +25,17 @@ async function run() {
     process.exit(0);
   }
 
-  // Get midnight UTC today
+  // Get midnight UTC yesterday (since the job runs just after midnight, we want yesterday's edits)
   const now = new Date();
-  const midnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const yesterday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1));
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
   for (const user of usersResult.rows) {
     try {
-      // Find files modified since midnight
+      // Find files modified yesterday (between yesterday midnight and today midnight)
       const filesResult = await pool.query(
-        'SELECT id, name, mime_type, s3_key FROM files WHERE user_id = $1 AND updated_at >= $2',
-        [user.id, midnight]
+        'SELECT id, name, mime_type, s3_key FROM files WHERE user_id = $1 AND updated_at >= $2 AND updated_at < $3',
+        [user.id, yesterday, today]
       );
 
       if (filesResult.rows.length === 0) {
@@ -67,7 +68,7 @@ async function run() {
         continue;
       }
 
-      const dateStr = midnight.toLocaleDateString('en-GB', {
+      const dateStr = yesterday.toLocaleDateString('en-GB', {
         year: 'numeric',
         month: 'long',
         day: 'numeric',

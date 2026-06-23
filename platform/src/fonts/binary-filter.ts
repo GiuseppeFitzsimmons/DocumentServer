@@ -68,16 +68,15 @@ export function filterFontsInfos(
   infosBlock: string,
   allowedFonts: Set<string>
 ): string {
-  // Match each entry: ["FontName", numbers...]
+  // Split entries by matching balanced brackets with quoted font names
   const entries: string[] = [];
-  const entryRegex = /\[("[^"]+?"(?:,[^[\]]*)?)\]/g;
+  const regex = /\["([^"]+)",([\d\-,]+)\]/g;
   let match;
 
-  while ((match = entryRegex.exec(infosBlock)) !== null) {
-    const entryContent = match[1];
-    const nameMatch = entryContent.match(/^"([^"]+)"/);
-    if (nameMatch && allowedFonts.has(nameMatch[1])) {
-      entries.push(`[${entryContent}]`);
+  while ((match = regex.exec(infosBlock)) !== null) {
+    const fontName = match[1];
+    if (allowedFonts.has(fontName)) {
+      entries.push(match[0]);
     }
   }
 

@@ -6,7 +6,13 @@ import { pipeline } from 'stream/promises';
 import { replicateUpload, replicateDelete } from './replicate.js';
 const STORAGE_DIR = config.FILE_STORAGE_PATH;
 async function ensureDir(filePath) {
-    await mkdir(path.dirname(filePath), { recursive: true });
+    try {
+        await mkdir(path.dirname(filePath), { recursive: true });
+    }
+    catch (err) {
+        if (err.code !== 'EEXIST')
+            throw err;
+    }
 }
 function resolvePath(key) {
     // Prevent path traversal
