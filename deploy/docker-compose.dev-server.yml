@@ -1,0 +1,7 @@
+# Dev server override — use with: docker compose -f docker-compose.yml -f docker-compose.dev-server.yml up -d --build
+# Changes DS port to 8080 (nginx handles port 80/443 on the same box)
+
+services:
+  documentserver:
+    ports:
+      - "127.0.0.1:8080:80"
