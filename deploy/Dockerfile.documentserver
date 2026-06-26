@@ -1,5 +1,5 @@
-# Pinned to 9.3.2 — update digest and re-apply epub patch when upgrading
-FROM ghcr.io/euro-office/documentserver@sha256:bb7ba0a9609f395c7848f48f86c3219f187d804a28239ec949bc5e97e1e778a5
+# Pinned to 9.3.1 (v9.3.2 tag) — the Euro-Office registry labels this as 9.3.2 but internal version is 9.3.1
+FROM ghcr.io/euro-office/documentserver:v9.3.2
 
 USER root
 

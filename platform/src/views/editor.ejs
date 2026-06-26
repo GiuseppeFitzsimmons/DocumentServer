@@ -456,6 +456,14 @@
       document.location.reload();
     };
 
+    config.events.onOutdatedVersion = function() {
+      document.location.reload();
+    };
+
+    config.events.onRequestRefreshFile = function() {
+      document.location.reload();
+    };
+
     config.events.onRequestRestore = function(event) {
       var version = event.data.version;
       fetch('/api/files/<%= fileId %>/versions/' + version + '/restore', {
