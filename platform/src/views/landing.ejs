@@ -1114,6 +1114,10 @@
     }
 
     async function saveFontPreferences() {
+      if (userFontSelection.size === 0) {
+        showError('Please select at least 1 font.');
+        return;
+      }
       var btn = document.getElementById('btn-save-fonts');
       btn.disabled = true;
       btn.textContent = 'Saving...';
