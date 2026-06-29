@@ -6,6 +6,12 @@ USER root
 # Override web-apps documenteditor bundle with patched version (epub export intercept)
 COPY deploy/patches/documenteditor-app.js /var/www/euro-office/documentserver/web-apps/apps/documenteditor/main/app.js
 
+# Inject custom book page sizes into sdkjs
+COPY deploy/patches/apply-page-sizes.js /tmp/apply-page-sizes.js
+RUN node /tmp/apply-page-sizes.js /var/www/euro-office/documentserver/sdkjs/word/sdk-all.js && \
+    node /tmp/apply-page-sizes.js /var/www/euro-office/documentserver/sdkjs/word/sdk-all-min.js && \
+    rm /tmp/apply-page-sizes.js
+
 # Remove the default core-fonts bundle
 RUN rm -rf /var/www/euro-office/documentserver/core-fonts/*
 
