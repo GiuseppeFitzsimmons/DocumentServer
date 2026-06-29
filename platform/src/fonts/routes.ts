@@ -117,8 +117,9 @@ fontsRouter.post('/preferences', requireAuth, async (req, res) => {
 
     // Rebuild the filtered AllFonts.js immediately
     const upstream = await fetchUpstreamAllFonts();
-    currentFilteredResponse = buildFilteredAllFonts(upstream, new Set(parsed.data.fonts));
-    console.log(`[fonts] Rebuilt AllFonts.js with ${parsed.data.fonts.length} fonts after preference save`);
+    const fontsToServe = parsed.data.fonts.length > 0 ? parsed.data.fonts : DEFAULT_FONTS;
+    currentFilteredResponse = buildFilteredAllFonts(upstream, new Set(fontsToServe));
+    console.log(`[fonts] Rebuilt AllFonts.js with ${fontsToServe.length} fonts after preference save`);
 
     res.json({ success: true, count: parsed.data.fonts.length });
   } catch (err) {
