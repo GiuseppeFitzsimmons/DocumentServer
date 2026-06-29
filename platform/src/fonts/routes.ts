@@ -73,17 +73,8 @@ function buildFilteredAllFonts(source: string, allowedFonts: Set<string>): strin
 
   // 2. __fonts_ranges stays untouched — indexes still valid since we preserved positions
 
-  // 3. Filter g_fonts_selection_bin
-  const binMatch = filtered.match(/window\["g_fonts_selection_bin"\]\s*=\s*"([^"]+)"/);
-  if (binMatch) {
-    const rawBin = Buffer.from(binMatch[1], 'base64');
-    const filteredBin = filterFontsBin(rawBin, blobAllowed);
-    const filteredBinB64 = filteredBin.toString('base64');
-    filtered = filtered.replace(
-      /window\["g_fonts_selection_bin"\]\s*=\s*"[^"]+"/,
-      `window["g_fonts_selection_bin"] = "${filteredBinB64}"`
-    );
-  }
+  // 3. Leave g_fonts_selection_bin unfiltered — it must remain complete for font substitution
+  // The blob is independent of __fonts_infos and handles Unicode coverage/fallback.
 
   return filtered;
 }
