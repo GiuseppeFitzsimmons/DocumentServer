@@ -24,6 +24,9 @@ async function fetchUpstreamAllFonts(): Promise<string> {
 }
 
 function buildFilteredAllFonts(source: string, allowedFonts: Set<string>): string {
+  // Always include DejaVu Sans for full Unicode coverage (symbols, special chars)
+  const fontsWithFallback = new Set([...allowedFonts, 'DejaVu Sans']);
+
   // 1. Filter __fonts_infos: replace non-allowed entries with ASCW3 placeholder
   //    (preserves array indexes so sprite thumbnails and __fonts_ranges stay valid)
   const infosMatch = source.match(/window\["__fonts_infos"\]\s*=\s*\[([\s\S]*?)\];/);
@@ -41,7 +44,7 @@ function buildFilteredAllFonts(source: string, allowedFonts: Set<string>): strin
 
   // Build filtered infos preserving positions
   const filteredEntries = allEntries.map(entry => {
-    if (allowedFonts.has(entry.name)) return entry.raw;
+    if (fontsWithFallback.has(entry.name)) return entry.raw;
     return '["ASCW3",0,0,-1,-1,-1,-1,-1,-1]';
   });
 
@@ -54,7 +57,7 @@ function buildFilteredAllFonts(source: string, allowedFonts: Set<string>): strin
   const binMatch = filtered.match(/window\["g_fonts_selection_bin"\]\s*=\s*"([^"]+)"/);
   if (binMatch) {
     const rawBin = Buffer.from(binMatch[1], 'base64');
-    const filteredBin = filterFontsBin(rawBin, allowedFonts);
+    const filteredBin = filterFontsBin(rawBin, fontsWithFallback);
     const filteredBinB64 = filteredBin.toString('base64');
     filtered = filtered.replace(
       /window\["g_fonts_selection_bin"\]\s*=\s*"[^"]+"/,
