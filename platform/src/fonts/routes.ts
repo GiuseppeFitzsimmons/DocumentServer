@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { config } from '../config.js';
 import { requireAuth } from '../auth/middleware.js';
-import { filterFontsBin, filterFontsInfos } from './binary-filter.js';
+import { filterFontsBin } from './binary-filter.js';
 import { FONT_CATALOG, FONT_NAMES, FONT_CATALOG_SET, DEFAULT_FONTS } from './catalog.js';
 import { getUserFonts, setUserFonts } from './preferences.js';
 
@@ -10,10 +10,6 @@ export const fontsRouter = Router();
 
 // Cache upstream AllFonts.js (same for all users)
 let cachedUpstream: string | null = null;
-
-// Per-user filtered cache (keyed by sorted font list hash)
-const filteredCache = new Map<string, string>();
-const MAX_CACHE_ENTRIES = 100;
 
 async function fetchUpstreamAllFonts(): Promise<string> {
   if (cachedUpstream) return cachedUpstream;
@@ -27,61 +23,50 @@ async function fetchUpstreamAllFonts(): Promise<string> {
   return cachedUpstream;
 }
 
-// System fonts always included in the binary blob for Unicode coverage (substitution)
-const SYSTEM_FONTS_FOR_BLOB = new Set([
-  'DejaVu Sans', 'DejaVu Serif', 'DejaVu Sans Mono',
-  'Liberation Sans', 'Liberation Serif', 'Liberation Mono',
-]);
-
 function buildFilteredAllFonts(source: string, allowedFonts: Set<string>): string {
-  // Combine user fonts + system fonts for the blob filter (system fonts provide Unicode fallback)
-  const blobAllowed = new Set([...allowedFonts, ...SYSTEM_FONTS_FOR_BLOB]);
-
-  // 1. Parse and filter __fonts_infos, building an old→new index map
+  // 1. Filter __fonts_infos: replace non-allowed entries with ASCW3 placeholder
+  //    (preserves array indexes so sprite thumbnails and __fonts_ranges stay valid)
   const infosMatch = source.match(/window\["__fonts_infos"\]\s*=\s*\[([\s\S]*?)\];/);
   let filtered = source;
 
   if (!infosMatch) return source;
 
-  // Parse all infos entries with their original indexes
-  const allEntries: { index: number; name: string; raw: string }[] = [];
+  // Parse all entries
+  const allEntries: { name: string; raw: string }[] = [];
   const regex = /\["([^"]+)",([\d\-,]+)\]/g;
   let match;
   while ((match = regex.exec(infosMatch[1])) !== null) {
-    allEntries.push({ index: allEntries.length, name: match[1], raw: match[0] });
+    allEntries.push({ name: match[1], raw: match[0] });
   }
 
-  // Build filtered infos: keep allowed entries at their original positions,
-  // replace others with null so sprite indexes stay aligned
-  const filteredEntries: string[] = [];
-  const keptIndexes = new Set<number>();
-  for (const entry of allEntries) {
-    if (allowedFonts.has(entry.name)) {
-      filteredEntries.push(entry.raw);
-      keptIndexes.add(entry.index);
-    } else {
-      // Placeholder: "ASCW3" with valid file index 0 — editor skips these in the font list
-      filteredEntries.push(`["ASCW3",0,0,-1,-1,-1,-1,-1,-1]`);
-    }
-  }
+  // Build filtered infos preserving positions
+  const filteredEntries = allEntries.map(entry => {
+    if (allowedFonts.has(entry.name)) return entry.raw;
+    return '["ASCW3",0,0,-1,-1,-1,-1,-1,-1]';
+  });
 
-  // Replace __fonts_infos (same length as original, preserving indexes)
   filtered = filtered.replace(
     /window\["__fonts_infos"\]\s*=\s*\[[\s\S]*?\];/,
     `window["__fonts_infos"] = [\n${filteredEntries.join(',\n')}\n];`
   );
 
-  // 2. __fonts_ranges stays untouched — indexes still valid since we preserved positions
-
-  // 3. Leave g_fonts_selection_bin unfiltered — it must remain complete for font substitution
-  // The blob is independent of __fonts_infos and handles Unicode coverage/fallback.
+  // 2. Filter g_fonts_selection_bin to same set
+  const binMatch = filtered.match(/window\["g_fonts_selection_bin"\]\s*=\s*"([^"]+)"/);
+  if (binMatch) {
+    const rawBin = Buffer.from(binMatch[1], 'base64');
+    const filteredBin = filterFontsBin(rawBin, allowedFonts);
+    const filteredBinB64 = filteredBin.toString('base64');
+    filtered = filtered.replace(
+      /window\["g_fonts_selection_bin"\]\s*=\s*"[^"]+"/,
+      `window["g_fonts_selection_bin"] = "${filteredBinB64}"`
+    );
+  }
 
   return filtered;
 }
 
-function getCacheKey(fonts: string[]): string {
-  return fonts.slice().sort().join('|');
-}
+// Pre-built filtered response (rebuilt on preference save)
+let currentFilteredResponse: string | null = null;
 
 // --- Public API endpoints ---
 
@@ -107,7 +92,7 @@ fontsRouter.post('/preferences', requireAuth, async (req, res) => {
   const schema = z.object({ fonts: z.array(z.string()).min(1).max(14) });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: 'Must select at least 1 font.' });
+    res.status(400).json({ error: 'Must select between 1 and 14 fonts.' });
     return;
   }
 
@@ -129,13 +114,8 @@ fontsRouter.post('/preferences', requireAuth, async (req, res) => {
 });
 
 // GET /api/fonts/AllFonts.js — filtered font manifest (per-user)
-// Strategy: when preferences are saved, we pre-build the filtered response.
-// All requests (authenticated or not) get the same pre-built response.
-let currentFilteredResponse: string | null = null;
-
 fontsRouter.get('/AllFonts.js', async (req, res) => {
   try {
-    // If no pre-built response exists, build one now
     if (!currentFilteredResponse) {
       const userId = req.session?.userId;
       let fontList: string[] = DEFAULT_FONTS;
@@ -161,6 +141,5 @@ fontsRouter.get('/AllFonts.js', async (req, res) => {
 fontsRouter.post('/invalidate-cache', requireAuth, (_req, res) => {
   cachedUpstream = null;
   currentFilteredResponse = null;
-  filteredCache.clear();
   res.json({ success: true });
 });
