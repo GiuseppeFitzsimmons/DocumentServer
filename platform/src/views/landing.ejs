@@ -1052,7 +1052,8 @@
         ]);
         fontCatalog = await catalogRes.json();
         var prefs = await prefsRes.json();
-        userFontSelection = new Set(prefs.length > 0 ? prefs : fontCatalog.map(function(f) { return f.name; }));
+        var defaultFonts = ["Baskervville", "Caslon OS", "Cormorant", "Dancing Script", "Libre Bodoni", "TeX Gyre Bonum", "TeXGyrePagella", "TeXGyreTermes"];
+        userFontSelection = new Set(prefs.length > 0 ? prefs : defaultFonts);
         renderFontPicker();
       } catch(err) {
         console.error('Failed to load font preferences:', err);
