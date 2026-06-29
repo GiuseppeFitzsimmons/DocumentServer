@@ -27,7 +27,16 @@ async function fetchUpstreamAllFonts(): Promise<string> {
   return cachedUpstream;
 }
 
+// System fonts always included in the binary blob for Unicode coverage (substitution)
+const SYSTEM_FONTS_FOR_BLOB = new Set([
+  'DejaVu Sans', 'DejaVu Serif', 'DejaVu Sans Mono',
+  'Liberation Sans', 'Liberation Serif', 'Liberation Mono',
+]);
+
 function buildFilteredAllFonts(source: string, allowedFonts: Set<string>): string {
+  // Combine user fonts + system fonts for the blob filter (system fonts provide Unicode fallback)
+  const blobAllowed = new Set([...allowedFonts, ...SYSTEM_FONTS_FOR_BLOB]);
+
   // 1. Parse and filter __fonts_infos, building an old→new index map
   const infosMatch = source.match(/window\["__fonts_infos"\]\s*=\s*\[([\s\S]*?)\];/);
   let filtered = source;
@@ -68,7 +77,7 @@ function buildFilteredAllFonts(source: string, allowedFonts: Set<string>): strin
   const binMatch = filtered.match(/window\["g_fonts_selection_bin"\]\s*=\s*"([^"]+)"/);
   if (binMatch) {
     const rawBin = Buffer.from(binMatch[1], 'base64');
-    const filteredBin = filterFontsBin(rawBin, allowedFonts);
+    const filteredBin = filterFontsBin(rawBin, blobAllowed);
     const filteredBinB64 = filteredBin.toString('base64');
     filtered = filtered.replace(
       /window\["g_fonts_selection_bin"\]\s*=\s*"[^"]+"/,
