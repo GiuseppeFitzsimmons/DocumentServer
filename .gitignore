@@ -7,3 +7,4 @@ platform/node_modules
 */.env
 .env
 /scripts/dev/
+tools/.venv

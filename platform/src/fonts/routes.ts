@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { config } from '../config.js';
 import { requireAuth } from '../auth/middleware.js';
 import { filterFontsBin, filterFontsInfos } from './binary-filter.js';
-import { FONT_CATALOG, FONT_NAMES, FONT_CATALOG_SET } from './catalog.js';
+import { FONT_CATALOG, FONT_NAMES, FONT_CATALOG_SET, DEFAULT_FONTS } from './catalog.js';
 import { getUserFonts, setUserFonts } from './preferences.js';
 
 export const fontsRouter = Router();
@@ -104,7 +104,7 @@ fontsRouter.get('/preferences', requireAuth, async (req, res) => {
 
 // POST /api/fonts/preferences — set current user's font selection
 fontsRouter.post('/preferences', requireAuth, async (req, res) => {
-  const schema = z.object({ fonts: z.array(z.string()).min(1).max(FONT_NAMES.length) });
+  const schema = z.object({ fonts: z.array(z.string()).min(1).max(14) });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Must select at least 1 font.' });
@@ -137,7 +137,7 @@ fontsRouter.get('/AllFonts.js', async (req, res) => {
     // If no pre-built response exists, build one now
     if (!currentFilteredResponse) {
       const userId = req.session?.userId;
-      let fontList = FONT_NAMES;
+      let fontList: string[] = DEFAULT_FONTS;
       if (userId) {
         const userFonts = await getUserFonts(userId);
         if (userFonts.length > 0) fontList = userFonts;

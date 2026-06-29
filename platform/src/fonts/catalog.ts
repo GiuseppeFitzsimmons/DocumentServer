@@ -57,3 +57,15 @@ export const FONT_CATALOG: FontEntry[] = [
 
 export const FONT_NAMES = FONT_CATALOG.map(f => f.name);
 export const FONT_CATALOG_SET = new Set(FONT_NAMES);
+
+// Default font set for users who haven't customized their preferences
+export const DEFAULT_FONTS = [
+  "Baskervville",
+  "Caslon OS",
+  "Cormorant",
+  "Dancing Script",
+  "Libre Bodoni",
+  "TeX Gyre Bonum",
+  "TeXGyrePagella",
+  "TeXGyreTermes",
+];

@@ -1085,6 +1085,11 @@
           '<span class="font-chip-name" style="font-family:\'' + safeName + '\', serif;">' + escapeHtml(font) + '</span>';
         chip.querySelector('input').addEventListener('change', function() {
           if (this.checked) {
+            if (userFontSelection.size >= 14) {
+              this.checked = false;
+              showToast('Maximum 14 fonts allowed', 'error');
+              return;
+            }
             userFontSelection.add(font);
             chip.classList.add('selected');
           } else {
