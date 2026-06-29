@@ -403,8 +403,7 @@ function matchesCacheablePath(url) {
 }
 
 self.addEventListener('install', (event) => {
-	// Don't skipWaiting — let the new SW activate naturally on next navigation
-	// This prevents "version updated" modal for currently active clients
+	event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener('activate', (event) => {
