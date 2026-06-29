@@ -105,6 +105,7 @@
     <section class="section" id="fonts-section">
       <div class="browser-toolbar">
         <h2 class="browser-heading">My Fonts</h2>
+        <span id="font-counter" style="font-size:13px;color:#666;margin-right:auto;padding-left:12px;">0 / 14 selected</span>
         <button class="btn-toolbar" id="btn-save-fonts" onclick="saveFontPreferences()" disabled>Save selection</button>
       </div>
       <p style="font-size:14px;color:#666;margin:0 0 16px;">Choose which fonts appear in the editor font picker. Changes take effect on next document open.</p>
@@ -1098,11 +1099,17 @@
           }
           fontsDirty = true;
           document.getElementById('btn-save-fonts').disabled = false;
+          updateFontCounter();
         });
         grid.appendChild(chip);
       });
 
       style.textContent = cssRules;
+      updateFontCounter();
+    }
+
+    function updateFontCounter() {
+      document.getElementById('font-counter').textContent = userFontSelection.size + ' / 14 selected';
     }
 
     async function saveFontPreferences() {

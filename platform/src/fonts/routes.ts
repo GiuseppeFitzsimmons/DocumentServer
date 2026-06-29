@@ -104,7 +104,7 @@ fontsRouter.get('/preferences', requireAuth, async (req, res) => {
 
 // POST /api/fonts/preferences — set current user's font selection
 fontsRouter.post('/preferences', requireAuth, async (req, res) => {
-  const schema = z.object({ fonts: z.array(z.string()).min(1).max(14) });
+  const schema = z.object({ fonts: z.array(z.string()).max(14) });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Must select at least 1 font.' });
