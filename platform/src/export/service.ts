@@ -58,7 +58,8 @@ export interface ConvertOptions {
  * Extracted as a helper to keep the main function clean with async/await.
  */
 function runPandoc(inputPath: string, outputPath: string, options?: ConvertOptions): Promise<void> {
-  const args = [inputPath, '--toc', '--toc-depth=3', '-o', outputPath];
+  const cssPath = path.resolve(process.cwd(), 'config/epub-styles.css');
+  const args = [inputPath, '--toc', '--toc-depth=3', '--css', cssPath, '-o', outputPath];
   if (options?.title) {
     args.push('--metadata', `title=${options.title}`);
   }

@@ -1,0 +1,26 @@
+/* EuroBureau EPUB export stylesheet */
+
+h1 {
+  margin: 0 0 0 0;
+  font-size: 1em;
+  page-break-before: always;
+  line-height: 100%;
+}
+
+h2 {
+  margin: 1.5em 0 0.5em 0;
+  font-size: 0.9em;
+  line-height: 120%;
+}
+
+h3 {
+  margin: 1em 0 0.3em 0;
+  font-size: 0.85em;
+  line-height: 120%;
+}
+
+p {
+  margin: 0;
+  text-indent: 1.5em;
+  line-height: 150%;
+}
