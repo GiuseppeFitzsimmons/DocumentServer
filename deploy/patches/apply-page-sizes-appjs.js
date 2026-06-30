@@ -20,8 +20,8 @@ const CUSTOM_SIZES = [
 
 let code = fs.readFileSync(target, 'utf8');
 
-// The anchor: last page size entry followed by the separator
-const anchor = 'toggleGroup:"menuPageSize",value:[305,487]},{caption:"--"}';
+// The anchor: inject before Super B/A3 (last standard size)
+const anchor = '{caption:"Super B/A3"';
 
 if (!code.includes(anchor)) {
   console.error('ERROR: Could not find page size anchor in ' + target);
@@ -34,9 +34,8 @@ const entries = CUSTOM_SIZES.map(s => {
   return `{caption:"${s.caption}",subtitle:"${subtitle}",template:c,checkable:!0,toggleGroup:"menuPageSize",value:[${s.w},${s.h}]}`;
 }).join(',');
 
-// Insert our sizes after the last entry, before the separator
-const replacement = `toggleGroup:"menuPageSize",value:[305,487]},${entries},{caption:"--"}`;
-code = code.replace(anchor, replacement);
+// Insert our sizes before Super B/A3
+code = code.replace(anchor, entries + ',' + anchor);
 
 fs.writeFileSync(target, code);
 console.log(`Injected ${CUSTOM_SIZES.length} page sizes into ${target}`);
