@@ -11,7 +11,7 @@ let code = fs.readFileSync(target, 'utf8');
 const oldCode = 'if(c)return window.location.href="/api/files/"+c+"/export/epub",void(t&&t.hide())';
 
 // Use a simple confirm() dialog as PoC — native, no API dependency issues
-const newCode = 'if(c){t&&t.hide();if(confirm("Export to EPUB?\\n\\nOptions (coming soon):\\n☑ Include Table of Contents\\n☑ Embed fonts\\n☐ Chapter-based splitting")){window.location.href="/api/files/"+c+"/export/epub"}return}';
+const newCode = 'if(c){console.log("[EPUB INTERCEPT] triggered, fileId="+c);t&&t.hide();if(confirm("Export to EPUB?\\n\\nOptions (coming soon):\\n☑ Include Table of Contents\\n☑ Embed fonts\\n☐ Chapter-based splitting")){window.location.href="/api/files/"+c+"/export/epub"}return}';
 
 if (!code.includes(oldCode)) {
   console.error('ERROR: Epub redirect pattern not found in ' + target);
