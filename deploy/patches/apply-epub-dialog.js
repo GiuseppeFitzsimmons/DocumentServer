@@ -10,8 +10,19 @@ let code = fs.readFileSync(target, 'utf8');
 
 const oldCode = 'if(c)return window.location.href="/api/files/"+c+"/export/epub",void(t&&t.hide())';
 
-// Use a simple confirm() dialog as PoC — native, no API dependency issues
-const newCode = 'if(c){console.log("[EPUB INTERCEPT] triggered, fileId="+c);t&&t.hide();if(confirm("Export to EPUB?\\n\\nOptions (coming soon):\\n☑ Include Table of Contents\\n☑ Embed fonts\\n☐ Chapter-based splitting")){window.location.href="/api/files/"+c+"/export/epub"}return}';
+const newCode = [
+  'if(c){t&&t.hide();',
+  'Common.UI.warning({',
+  'width:500,',
+  'title:"EPUB Export Options",',
+  'msg:"<div style=\\"text-align:left;padding:10px 0\\"><label style=\\"display:block;margin:8px 0;font-size:13px;cursor:pointer\\"><input type=\\"checkbox\\" checked id=\\"epub-opt-toc\\" style=\\"margin-right:8px\\"/>Include Table of Contents</label><label style=\\"display:block;margin:8px 0;font-size:13px;cursor:pointer\\"><input type=\\"checkbox\\" checked id=\\"epub-opt-fonts\\" style=\\"margin-right:8px\\"/>Embed fonts</label><label style=\\"display:block;margin:8px 0;font-size:13px;cursor:pointer\\"><input type=\\"checkbox\\" id=\\"epub-opt-chapters\\" style=\\"margin-right:8px\\"/>Chapter-based splitting</label></div>",',
+  'buttons:["ok","cancel"],',
+  'primary:"ok",',
+  'callback:function(r){',
+  'if(r=="ok"){window.location.href="/api/files/"+c+"/export/epub"}',
+  '}',
+  '});return}',
+].join('');
 
 if (!code.includes(oldCode)) {
   console.error('ERROR: Epub redirect pattern not found in ' + target);
