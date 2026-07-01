@@ -428,7 +428,11 @@ self.addEventListener('fetch', (event) => {
 	}
 
 	// Never cache AllFonts.js — it's per-user filtered
+	// Never cache app.js — it contains patches that may be updated
 	if (url.indexOf("/sdkjs/common/AllFonts.js") !== -1) {
+		return;
+	}
+	if (url.indexOf("/documenteditor/main/app.js") !== -1) {
 		return;
 	}
 

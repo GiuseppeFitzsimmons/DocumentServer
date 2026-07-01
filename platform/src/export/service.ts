@@ -52,6 +52,7 @@ export interface ConvertResult {
 export interface ConvertOptions {
   title?: string;
   includeToc?: boolean;
+  embedFonts?: boolean;
 }
 
 /**
@@ -136,16 +137,18 @@ export async function convertDocxToEpub(inputStream: Readable, options?: Convert
   }
 
   // Inject fonts into epub (best-effort)
-  try {
-    if (resolvedFonts.some(r => r.filePath !== null)) {
-      await injectFontsIntoEpub({
-        epubPath: outputPath,
-        resolvedFonts,
-        bodyFont: assignmentResult?.bodyFont,
-      });
+  if (options?.embedFonts !== false) {
+    try {
+      if (resolvedFonts.some(r => r.filePath !== null)) {
+        await injectFontsIntoEpub({
+          epubPath: outputPath,
+          resolvedFonts,
+          bodyFont: assignmentResult?.bodyFont,
+        });
+      }
+    } catch (err) {
+      console.warn('Font injection failed, returning epub without fonts:', err);
     }
-  } catch (err) {
-    console.warn('Font injection failed, returning epub without fonts:', err);
   }
 
   return {
