@@ -1,10 +1,16 @@
 import { Router } from 'express';
-import { createReadStream } from 'fs';
+import { createReadStream, createWriteStream } from 'fs';
+import { mkdir } from 'fs/promises';
+import { tmpdir } from 'os';
+import path from 'path';
+import { pipeline } from 'stream/promises';
+import { randomUUID } from 'crypto';
 import { requireAuth } from '../auth/middleware.js';
 import * as metadata from '../storage/metadata.js';
 import * as storage from '../storage/s3.js';
 import { getShare } from '../sharing/service.js';
 import { convertDocxToEpub, PandocError, PandocTimeoutError } from './service.js';
+import { extractHeadings } from './heading-extractor.js';
 
 const DOCX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
@@ -12,6 +18,52 @@ export const exportRouter = Router();
 export const internalExportRouter = Router();
 
 exportRouter.use(requireAuth);
+
+// GET /api/files/:id/export/headings — extract headings from docx for section selection
+exportRouter.get('/:id/export/headings', async (req, res) => {
+  try {
+    const userId = req.session.userId!;
+    const file = await metadata.getFile(req.params.id);
+
+    if (!file) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+
+    if (file.userId !== userId) {
+      const share = await getShare(file.id, userId);
+      if (!share || !share.permissions.download) {
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+      }
+    }
+
+    if (file.mimeType !== DOCX_MIME_TYPE) {
+      res.status(400).json({ error: 'Only .docx files supported' });
+      return;
+    }
+
+    // Download to temp file for parsing
+    const tempDir = path.join(tmpdir(), `headings-${randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    const tempPath = path.join(tempDir, 'input.docx');
+
+    const inputStream = await storage.download(file.s3Key);
+    const writeStream = createWriteStream(tempPath);
+    await pipeline(inputStream, writeStream);
+
+    const headings = await extractHeadings(tempPath);
+
+    // Cleanup
+    const { rm } = await import('fs/promises');
+    await rm(tempDir, { recursive: true, force: true });
+
+    res.json(headings);
+  } catch (err) {
+    console.error('Heading extraction error:', err);
+    res.status(500).json({ error: 'Failed to extract headings' });
+  }
+});
 
 // Internal endpoint - only accessible via nginx internal redirect (no session required)
 // Protected by X-Internal-Export header that nginx sets
