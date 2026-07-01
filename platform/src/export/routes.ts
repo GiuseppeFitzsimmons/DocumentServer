@@ -113,7 +113,8 @@ exportRouter.get('/:id/export/epub', async (req, res) => {
 
     const inputStream = await storage.download(file.s3Key);
     const title = file.name.replace(/\.docx$/i, '');
-    const result = await convertDocxToEpub(inputStream, { title });
+    const includeToc = req.query.toc !== '0';
+    const result = await convertDocxToEpub(inputStream, { title, includeToc });
     cleanup = result.cleanup;
 
     const epubName = file.name.replace(/\.docx$/i, '.epub');

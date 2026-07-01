@@ -51,6 +51,7 @@ export interface ConvertResult {
 
 export interface ConvertOptions {
   title?: string;
+  includeToc?: boolean;
 }
 
 /**
@@ -59,7 +60,11 @@ export interface ConvertOptions {
  */
 function runPandoc(inputPath: string, outputPath: string, options?: ConvertOptions): Promise<void> {
   const cssPath = path.resolve(process.cwd(), 'config/epub-styles.css');
-  const args = [inputPath, '--toc', '--toc-depth=3', '--css', cssPath, '-o', outputPath];
+  const args = [inputPath];
+  if (options?.includeToc !== false) {
+    args.push('--toc', '--toc-depth=3');
+  }
+  args.push('--css', cssPath, '-o', outputPath);
   if (options?.title) {
     args.push('--metadata', `title=${options.title}`);
   }
