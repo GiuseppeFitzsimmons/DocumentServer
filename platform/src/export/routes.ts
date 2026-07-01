@@ -167,7 +167,10 @@ exportRouter.get('/:id/export/epub', async (req, res) => {
     const title = file.name.replace(/\.docx$/i, '');
     const includeToc = req.query.toc !== '0';
     const embedFonts = req.query.fonts !== '0';
-    const result = await convertDocxToEpub(inputStream, { title, includeToc, embedFonts });
+    const excludeSections = req.query.exclude
+      ? String(req.query.exclude).split(',').map(Number).filter(n => !isNaN(n))
+      : [];
+    const result = await convertDocxToEpub(inputStream, { title, includeToc, embedFonts, excludeSections });
     cleanup = result.cleanup;
 
     const epubName = file.name.replace(/\.docx$/i, '.epub');

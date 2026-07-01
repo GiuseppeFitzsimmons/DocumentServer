@@ -12,6 +12,7 @@ import { resolveFonts } from './font-resolver.js';
 import { injectFontsIntoEpub } from './epub-font-injector.js';
 import { extractFontAssignments } from './font-assignment-extractor.js';
 import { injectXhtmlFonts } from './xhtml-font-injector.js';
+import { removeSections } from './section-remover.js';
 import type { FontResolutionResult } from './font-types.js';
 import type { FontAssignmentResult } from './font-assignment-extractor.js';
 
@@ -53,6 +54,7 @@ export interface ConvertOptions {
   title?: string;
   includeToc?: boolean;
   embedFonts?: boolean;
+  excludeSections?: number[];  // Heading indexes to exclude
 }
 
 /**
@@ -103,6 +105,15 @@ export async function convertDocxToEpub(inputStream: Readable, options?: Convert
   // Write the input stream to the temp file
   const writeStream = createWriteStream(inputPath);
   await pipeline(inputStream, writeStream);
+
+  // Remove excluded sections from docx (pre-pandoc)
+  if (options?.excludeSections && options.excludeSections.length > 0) {
+    try {
+      await removeSections({ docxPath: inputPath, excludeIndexes: options.excludeSections });
+    } catch (err) {
+      console.warn('Section removal failed, proceeding with full document:', err);
+    }
+  }
 
   // Extract and resolve fonts (best-effort)
   let resolvedFonts: FontResolutionResult[] = [];
