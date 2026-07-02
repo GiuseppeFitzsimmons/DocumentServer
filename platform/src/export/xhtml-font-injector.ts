@@ -208,34 +208,48 @@ function stripAbsoluteInlineStyles(content: string): string {
 }
 
 /**
- * Replaces section break marker paragraphs with page-break-after styled elements.
- * The marker text was inserted by docx-preprocessor and passed through pandoc as-is.
- * Pandoc wraps it in a <p>. We find and replace the entire <p> with a page break span.
+ * Replaces section break marker paragraphs with page breaks.
+ * Instead of inserting an empty element, applies page-break-before: always
+ * on the next block element — the most e-reader-compatible approach.
  */
 function replaceSectionBreakMarkers(content: string): string {
   if (!content.includes(SECTION_BREAK_MARKER)) return content;
 
-  // Split on marker text — the marker sits inside a <p>...</p>
   const parts = content.split(SECTION_BREAK_MARKER);
   if (parts.length <= 1) return content;
 
   let result = parts[0];
   for (let i = 1; i < parts.length; i++) {
-    // Previous part ends with: ...<p> or ...<p class="...">
-    // Remove the trailing <p...> open tag
+    // Previous part ends with the opening <p...> tag that contained the marker
+    // Remove that trailing <p...> open tag
     const openMatch = result.match(/<p[^>]*>$/);
     if (openMatch) {
       result = result.slice(0, -openMatch[0].length);
     }
 
-    // Current part starts with: </p>...
-    // Remove the leading </p>
+    // Current part starts with </p> from the marker paragraph — remove it
     let part = parts[i];
     if (part.startsWith('</p>')) {
       part = part.slice(4);
     }
 
-    result += '<span style="page-break-after: always"></span>' + part;
+    // Find the next block element and inject page-break-before on it
+    const nextBlockMatch = part.match(/^(\s*)<(p|h[1-6]|div|section)\b([^>]*?)>/);
+    if (nextBlockMatch) {
+      const [fullMatch, whitespace, tag, attrs] = nextBlockMatch;
+      const styleInject = 'page-break-before: always';
+      const existingStyle = attrs.match(/style="([^"]*)"/);
+      let newAttrs: string;
+      if (existingStyle) {
+        const combined = existingStyle[1].trim() + (existingStyle[1].trim().endsWith(';') ? ' ' : '; ') + styleInject;
+        newAttrs = attrs.replace(/style="[^"]*"/, `style="${combined}"`);
+      } else {
+        newAttrs = attrs + ` style="${styleInject}"`;
+      }
+      part = `${whitespace}<${tag}${newAttrs}>` + part.slice(fullMatch.length);
+    }
+
+    result += part;
   }
 
   return result;
