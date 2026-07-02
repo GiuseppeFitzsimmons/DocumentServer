@@ -33,6 +33,7 @@ export async function removeSections(options: SectionRemovalOptions): Promise<vo
     preserveOrder: true,
     commentPropName: '#comment',
     textNodeName: '#text',
+    trimValues: false,
   });
 
   // Parse styles to build heading level map
