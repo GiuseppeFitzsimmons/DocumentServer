@@ -71,14 +71,11 @@ export async function injectXhtmlFonts(input: XhtmlFontInjectorInput): Promise<v
 }
 
 interface FontMapEntry {
-  font: string;       // The uniform font for this paragraph (when all runs share same font)
+  font: string;
 }
 
 /**
  * Builds a map of normalized paragraph text → font for non-body-font paragraphs.
- * Handles two cases:
- * 1. All runs share the same font (different from body) → use that font
- * 2. Paragraph-level font differs from body (heading with override) → use para font
  */
 function buildFontMap(
   nonBodyParas: ParagraphAssignment[],
@@ -90,7 +87,6 @@ function buildFontMap(
     const text = normalizeText(para.runs.map(r => r.text).join(''));
     if (text.length === 0) continue;
 
-    // Case 1: All runs share the same non-body font
     const fonts = new Set(para.runs.map(r => r.font));
     if (fonts.size === 1) {
       const font = para.runs[0].font;
@@ -100,7 +96,6 @@ function buildFontMap(
       }
     }
 
-    // Case 2: Paragraph font is non-body (e.g. heading with style-level font)
     if (para.font && para.font !== bodyFont) {
       map.set(text, { font: para.font });
     }
@@ -133,10 +128,10 @@ interface InjectResult {
 }
 
 /**
- * Processes a single XHTML file, matching block elements by text content
- * and injecting font-family styles where needed. Also strips pandoc's
- * inline font-size (pt) and line-height (absolute) declarations, and
- * converts section break markers into page-break-before styles.
+ * Processes a single XHTML file:
+ * 1. Injects font-family styles on elements with non-body fonts
+ * 2. Strips pandoc's inline absolute font-size/line-height
+ * 3. Converts section break markers into page-break-after styled elements
  */
 function injectFontsIntoXhtml(
   content: string,
@@ -145,29 +140,23 @@ function injectFontsIntoXhtml(
   let modified = false;
 
   let result = content.replace(BLOCK_REGEX, (match, openTag: string, inner: string, closeTag: string) => {
-    // Extract text content from this block element
     const textContent = normalizeText(stripHtmlTags(inner));
     if (textContent.length === 0) return match;
 
-    // Look up in font map
     const entry = fontMap.get(textContent);
     if (!entry) return match;
 
     modified = true;
-
-    // Apply font-family to the block element
     const styledTag = injectStyleOnTag(openTag, `font-family: '${entry.font}'`);
     return styledTag + inner + closeTag;
   });
 
-  // Strip pandoc-injected absolute font-size and line-height from inline styles
   const cleaned = stripAbsoluteInlineStyles(result);
   if (cleaned !== result) {
     result = cleaned;
     modified = true;
   }
 
-  // Replace section break markers with page-break-before styled elements
   const paged = replaceSectionBreakMarkers(result);
   if (paged !== result) {
     result = paged;
@@ -179,7 +168,6 @@ function injectFontsIntoXhtml(
 
 /**
  * Injects a CSS style property into an opening HTML tag.
- * Appends to existing style attribute if present.
  */
 function injectStyleOnTag(openTag: string, style: string): string {
   const styleAttrRegex = /style="([^"]*)"/i;
@@ -210,39 +198,45 @@ function normalizeText(text: string): string {
 }
 
 /**
- * Strips pandoc-injected absolute font-size and line-height declarations from
- * inline style attributes. These override our CSS rules and produce wrong sizing.
- * Our epub-styles.css defines correct relative sizes (em, %) for all elements.
+ * Strips pandoc-injected absolute font-size and line-height from inline styles.
  */
 function stripAbsoluteInlineStyles(content: string): string {
-  // Remove font-size in pt/px from style attributes
   let result = content.replace(/font-size:\s*[\d.]+(?:pt|px)\s*;?\s*/gi, '');
-  // Remove line-height in pt/px from style attributes
   result = result.replace(/line-height:\s*[\d.]+(?:pt|px)\s*;?\s*/gi, '');
-  // Clean up empty or whitespace-only style attributes
   result = result.replace(/\s*style="\s*;?\s*"/gi, '');
   return result;
 }
 
 /**
- * Replaces section break marker paragraphs with a page-break-before styled element.
- * The marker was inserted by the docx-preprocessor and passed through pandoc as text.
- * We find the <p> containing the marker and replace it with a styled span,
- * then add page-break-before to the NEXT block element.
+ * Replaces section break marker paragraphs with page-break-after styled elements.
+ * The marker text was inserted by docx-preprocessor and passed through pandoc as-is.
+ * Pandoc wraps it in a <p>. We find and replace the entire <p> with a page break span.
  */
 function replaceSectionBreakMarkers(content: string): string {
-  // The marker ends up inside a <p>...</p> in the XHTML.
-  // Find paragraphs containing the marker text and replace them with a page break.
-  const escapedMarker = SECTION_BREAK_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (!content.includes(SECTION_BREAK_MARKER)) return content;
 
-  // Match the entire <p> element containing the marker
-  const markerParaPattern = new RegExp(
-    `<p[^>]*>[^<]*${escapedMarker}[^<]*</p>`,
-    'g'
-  );
+  // Split on marker text — the marker sits inside a <p>...</p>
+  const parts = content.split(SECTION_BREAK_MARKER);
+  if (parts.length <= 1) return content;
 
-  // Replace marker paragraph with a div that forces a page break on the next element
-  let result = content.replace(markerParaPattern, '<span style="page-break-after: always"></span>');
+  let result = parts[0];
+  for (let i = 1; i < parts.length; i++) {
+    // Previous part ends with: ...<p> or ...<p class="...">
+    // Remove the trailing <p...> open tag
+    const openMatch = result.match(/<p[^>]*>$/);
+    if (openMatch) {
+      result = result.slice(0, -openMatch[0].length);
+    }
+
+    // Current part starts with: </p>...
+    // Remove the leading </p>
+    let part = parts[i];
+    if (part.startsWith('</p>')) {
+      part = part.slice(4);
+    }
+
+    result += '<span style="page-break-after: always"></span>' + part;
+  }
 
   return result;
 }
