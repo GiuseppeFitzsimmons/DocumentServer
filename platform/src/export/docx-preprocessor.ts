@@ -67,37 +67,53 @@ interface TransformResult {
  * A paragraph-level section break looks like:
  *   <w:p><w:pPr>...<w:sectPr>...</w:sectPr></w:pPr><w:r>...</w:r></w:p>
  *
- * We remove the w:sectPr from pPr and insert a page break run as the first
- * content after pPr: <w:r><w:br w:type="page"/></w:r>
- * 
- * Pandoc reliably converts w:br type="page" into epub page breaks.
+ * The sectPr is a property of the LAST paragraph in that section — meaning the
+ * NEXT paragraph starts a new section/page. So we:
+ * 1. Remove the w:sectPr from the pPr
+ * 2. Find the enclosing <w:p> and insert a dedicated page-break paragraph AFTER it
+ *
+ * This produces: <w:p>...original...</w:p><w:p><w:r><w:br w:type="page"/></w:r></w:p>
+ * Pandoc reliably converts a standalone page-break paragraph into an epub page break.
+ *
  * The final body-level w:sectPr (direct child of w:body) is untouched.
  */
 function replaceSectionBreaks(xml: string): TransformResult {
   let count = 0;
 
-  // Match the full paragraph containing a sectPr in its pPr.
-  // Capture: (before-pPr)(pPr-open ... sectPr ... pPr-close)(after-pPr content)
-  // Strategy: find pPr blocks containing sectPr, remove the sectPr,
-  // then inject a page break run right after </w:pPr>.
-  
-  // Step 1: Remove sectPr from pPr blocks and mark the spot
-  const MARKER = '<!--PAGEBREAK_MARKER-->';
+  // Step 1: Remove sectPr from pPr blocks and mark with a placeholder
+  const MARKER = '\x00PAGEBREAK\x00';
   const pprPattern = /(<w:pPr\b[^>]*>)([\s\S]*?)(<w:sectPr\b[^>]*(?:\/>|>[\s\S]*?<\/w:sectPr>))([\s\S]*?)(<\/w:pPr>)/g;
 
   let result = xml.replace(pprPattern, (_, open: string, before: string, _sectPr: string, after: string, close: string) => {
     count++;
+    // Place marker after the closing </w:pPr> — we'll move it to after </w:p> next
     return `${open}${before}${after}${close}${MARKER}`;
   });
 
-  // Step 2: Replace markers with actual page break runs
-  result = result.replace(new RegExp(MARKER, 'g'), '<w:r><w:br w:type="page"/></w:r>');
+  if (count === 0) {
+    return { xml, changed: false, count: 0 };
+  }
+
+  // Step 2: The marker is now right after </w:pPr> inside the <w:p>...</w:p>.
+  // We need to move it to AFTER the closing </w:p> of that paragraph.
+  // Match: MARKER followed by content until </w:p>
+  const movePattern = new RegExp(
+    MARKER.replace(/\x00/g, '\\x00') + '([\\s\\S]*?)(</w:p>)',
+    'g'
+  );
+  result = result.replace(movePattern, (_, innerContent: string, closeP: string) => {
+    return `${innerContent}${closeP}<w:p><w:r><w:br w:type="page"/></w:r></w:p>`;
+  });
+
+  // Safety: remove any remaining markers (shouldn't happen)
+  result = result.replace(new RegExp(MARKER.replace(/\x00/g, '\\x00'), 'g'), '');
 
   return { xml: result, changed: count > 0, count };
 }
 
 /**
  * Removes soft returns (w:br elements that are line breaks, not page/column breaks).
+ * Replaces with a space-containing text run to prevent words from merging.
  *
  * Soft returns in docx:
  *   <w:br/>                           — implicit text wrapping break
@@ -110,15 +126,16 @@ function replaceSectionBreaks(xml: string): TransformResult {
 function removeSoftBreaks(xml: string): TransformResult {
   let count = 0;
 
-  // Strategy: match all w:br elements, only remove those that are soft returns
+  // Strategy: match all w:br elements, replace soft returns with a space
   const result = xml.replace(/<w:br\b([^>]*?)(?:\/>|><\/w:br>)/g, (match, attrs: string) => {
     // If it has w:type="page" or w:type="column", keep it
     if (/w:type\s*=\s*"(page|column)"/.test(attrs)) {
       return match;
     }
-    // Otherwise it's a soft return (no type, or type="textWrapping") — remove it
+    // Replace soft return with a space character in a text node
+    // This prevents adjacent words from merging (e.g., "be\nIn" → "be In")
     count++;
-    return '';
+    return '<w:t xml:space="preserve"> </w:t>';
   });
 
   return { xml: result, changed: count > 0, count };
