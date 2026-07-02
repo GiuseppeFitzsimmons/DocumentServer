@@ -64,29 +64,28 @@ interface TransformResult {
 /**
  * Replaces paragraph-level section breaks (w:sectPr inside w:pPr) with page breaks.
  *
- * A paragraph-level section break looks like:
- *   <w:p><w:pPr>...<w:sectPr>...</w:sectPr></w:pPr><w:r>...</w:r></w:p>
- *
- * The sectPr is a property of the LAST paragraph in that section — meaning the
- * NEXT paragraph starts a new section/page. So we:
+ * Since pandoc doesn't reliably convert w:br type="page" into CSS page breaks
+ * in epub output, we use a marker-based approach:
  * 1. Remove the w:sectPr from the pPr
- * 2. Find the enclosing <w:p> and insert a dedicated page-break paragraph AFTER it
- *
- * This produces: <w:p>...original...</w:p><w:p><w:r><w:br w:type="page"/></w:r></w:p>
- * Pandoc reliably converts a standalone page-break paragraph into an epub page break.
+ * 2. Insert a paragraph with unique marker text after the enclosing </w:p>
+ * 3. The xhtml-font-injector post-processes the epub to replace the marker
+ *    with a page-break-styled element
  *
  * The final body-level w:sectPr (direct child of w:body) is untouched.
  */
+const SECTION_BREAK_MARKER = '\u200B\u00AB\u00ABPAGEBREAK\u00BB\u00BB\u200B';
+
+export { SECTION_BREAK_MARKER };
+
 function replaceSectionBreaks(xml: string): TransformResult {
   let count = 0;
 
-  // Step 1: Remove sectPr from pPr blocks and mark with a placeholder
+  // Step 1: Remove sectPr from pPr blocks and place a temporary marker
   const MARKER = '\x00PAGEBREAK\x00';
   const pprPattern = /(<w:pPr\b[^>]*>)([\s\S]*?)(<w:sectPr\b[^>]*(?:\/>|>[\s\S]*?<\/w:sectPr>))([\s\S]*?)(<\/w:pPr>)/g;
 
   let result = xml.replace(pprPattern, (_, open: string, before: string, _sectPr: string, after: string, close: string) => {
     count++;
-    // Place marker after the closing </w:pPr> — we'll move it to after </w:p> next
     return `${open}${before}${after}${close}${MARKER}`;
   });
 
@@ -94,18 +93,19 @@ function replaceSectionBreaks(xml: string): TransformResult {
     return { xml, changed: false, count: 0 };
   }
 
-  // Step 2: The marker is now right after </w:pPr> inside the <w:p>...</w:p>.
-  // We need to move it to AFTER the closing </w:p> of that paragraph.
-  // Match: MARKER followed by content until </w:p>
+  // Step 2: Move marker to after the enclosing </w:p>, then replace with
+  // a paragraph containing the marker text that pandoc will pass through
   const movePattern = new RegExp(
     MARKER.replace(/\x00/g, '\\x00') + '([\\s\\S]*?)(</w:p>)',
     'g'
   );
   result = result.replace(movePattern, (_, innerContent: string, closeP: string) => {
-    return `${innerContent}${closeP}<w:p><w:r><w:br w:type="page"/></w:r></w:p>`;
+    // Insert a new paragraph with marker text that pandoc will output as-is
+    const markerPara = `<w:p><w:r><w:t>${SECTION_BREAK_MARKER}</w:t></w:r></w:p>`;
+    return `${innerContent}${closeP}${markerPara}`;
   });
 
-  // Safety: remove any remaining markers (shouldn't happen)
+  // Safety: remove any remaining markers
   result = result.replace(new RegExp(MARKER.replace(/\x00/g, '\\x00'), 'g'), '');
 
   return { xml: result, changed: count > 0, count };

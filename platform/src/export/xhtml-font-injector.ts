@@ -11,6 +11,7 @@
 import AdmZip from 'adm-zip';
 import { writeFileSync } from 'fs';
 import type { FontAssignmentResult, ParagraphAssignment } from './font-assignment-extractor.js';
+import { SECTION_BREAK_MARKER } from './docx-preprocessor.js';
 
 export interface XhtmlFontInjectorInput {
   epubPath: string;
@@ -134,7 +135,8 @@ interface InjectResult {
 /**
  * Processes a single XHTML file, matching block elements by text content
  * and injecting font-family styles where needed. Also strips pandoc's
- * inline font-size (pt) and line-height (absolute) declarations.
+ * inline font-size (pt) and line-height (absolute) declarations, and
+ * converts section break markers into page-break-before styles.
  */
 function injectFontsIntoXhtml(
   content: string,
@@ -162,6 +164,13 @@ function injectFontsIntoXhtml(
   const cleaned = stripAbsoluteInlineStyles(result);
   if (cleaned !== result) {
     result = cleaned;
+    modified = true;
+  }
+
+  // Replace section break markers with page-break-before styled elements
+  const paged = replaceSectionBreakMarkers(result);
+  if (paged !== result) {
+    result = paged;
     modified = true;
   }
 
@@ -212,5 +221,28 @@ function stripAbsoluteInlineStyles(content: string): string {
   result = result.replace(/line-height:\s*[\d.]+(?:pt|px)\s*;?\s*/gi, '');
   // Clean up empty or whitespace-only style attributes
   result = result.replace(/\s*style="\s*;?\s*"/gi, '');
+  return result;
+}
+
+/**
+ * Replaces section break marker paragraphs with a page-break-before styled element.
+ * The marker was inserted by the docx-preprocessor and passed through pandoc as text.
+ * We find the <p> containing the marker and replace it with a styled span,
+ * then add page-break-before to the NEXT block element.
+ */
+function replaceSectionBreakMarkers(content: string): string {
+  // The marker ends up inside a <p>...</p> in the XHTML.
+  // Find paragraphs containing the marker text and replace them with a page break.
+  const escapedMarker = SECTION_BREAK_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  // Match the entire <p> element containing the marker
+  const markerParaPattern = new RegExp(
+    `<p[^>]*>[^<]*${escapedMarker}[^<]*</p>`,
+    'g'
+  );
+
+  // Replace marker paragraph with a div that forces a page break on the next element
+  let result = content.replace(markerParaPattern, '<span style="page-break-after: always"></span>');
+
   return result;
 }

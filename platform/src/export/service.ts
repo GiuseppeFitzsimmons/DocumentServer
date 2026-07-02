@@ -127,14 +127,13 @@ export async function convertDocxToEpub(inputStream: Readable, options?: Convert
         removeSoftReturns: options.removeSoftReturns,
       });
 
-      // Debug: verify the page break was actually inserted
+      // Debug: verify the marker was actually inserted
       if (options.convertSectionBreaks) {
         const AdmZip = (await import('adm-zip')).default;
         const debugZip = new AdmZip(inputPath);
         const debugDoc = debugZip.getEntry('word/document.xml')?.getData().toString('utf-8') ?? '';
-        const pageBreakCount = (debugDoc.match(/<w:br w:type="page"/g) || []).length;
-        const sectPrCount = (debugDoc.match(/<w:sectPr/g) || []).length;
-        console.log(`[docx-preprocessor] Post-process: ${pageBreakCount} page breaks, ${sectPrCount} sectPr remaining`);
+        const markerCount = (debugDoc.match(/\u00AB\u00ABPAGEBREAK\u00BB\u00BB/g) || []).length;
+        console.log(`[docx-preprocessor] Post-process: ${markerCount} page break marker(s) inserted`);
       }
     } catch (err) {
       console.warn('Docx preprocessing failed, proceeding without transformations:', err);
