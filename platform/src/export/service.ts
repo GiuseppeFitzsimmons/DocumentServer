@@ -155,6 +155,7 @@ export async function convertDocxToEpub(inputStream: Readable, options?: Convert
           epubPath: outputPath,
           resolvedFonts,
           bodyFont: assignmentResult?.bodyFont,
+          headingFonts: assignmentResult?.headingFonts,
         });
       }
     } catch (err) {

@@ -1,10 +1,57 @@
 /* EuroBureau EPUB export stylesheet */
 
+@page {
+  margin: 10px;
+}
+
+html, body, div, span, applet, object, iframe, h1, h2, h3, h4, h5, h6, p,
+blockquote, pre, a, abbr, acronym, address, big, cite, code, del, dfn, em, img,
+ins, kbd, q, s, samp, small, strike, strong, sub, sup, tt, var, b, u, i, center,
+fieldset, form, label, legend, table, caption, tbody, tfoot, thead, tr, th, td,
+article, aside, canvas, details, embed, figure, figcaption, footer, header,
+hgroup, menu, nav, output, ruby, section, summary, time, mark, audio, video, ol,
+ul, li, dl, dt, dd {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 100%;
+  vertical-align: baseline;
+}
+
+html {
+  line-height: 1.2;
+  font-family: Georgia, serif;
+  color: #1a1a1a;
+}
+
+p {
+  text-indent: 40px;
+  margin: 0 0;
+  widows: 2;
+  orphans: 2;
+  text-align: justify;
+}
+
+img {
+  max-width: 100%;
+}
+
+sup {
+  vertical-align: super;
+  font-size: smaller;
+}
+
+sub {
+  vertical-align: sub;
+  font-size: smaller;
+}
+
 h1 {
-  margin: 0 0 0 0;
+  margin: 0;
   font-size: 1em;
   page-break-before: always;
   line-height: 100%;
+  text-align: center;
 }
 
 h2 {
@@ -19,8 +66,14 @@ h3 {
   line-height: 120%;
 }
 
-p {
-  margin: 0;
-  text-indent: 1.5em;
-  line-height: 150%;
+h4 {
+  margin: 0.6em 0 0.2em 0;
+  font-size: 0.8em;
+  line-height: 120%;
+}
+
+h5, h6 {
+  margin: 0.4em 0 0.2em 0;
+  font-size: 0.75em;
+  line-height: 120%;
 }

@@ -27,9 +27,9 @@ export async function injectXhtmlFonts(input: XhtmlFontInjectorInput): Promise<v
 
   if (paragraphs.length === 0) return;
 
-  // Build lookup: only paragraphs with non-body fonts need injection
+  // Build lookup: paragraphs with non-body fonts (either run-level or para-level)
   const nonBodyParas = paragraphs.filter(
-    p => p.runs.some(r => r.font !== bodyFont)
+    p => p.font !== bodyFont || p.runs.some(r => r.font !== bodyFont)
   );
   if (nonBodyParas.length === 0) return;
 
@@ -75,7 +75,9 @@ interface FontMapEntry {
 
 /**
  * Builds a map of normalized paragraph text → font for non-body-font paragraphs.
- * Only handles the simple case where all runs in a paragraph share the same font.
+ * Handles two cases:
+ * 1. All runs share the same font (different from body) → use that font
+ * 2. Paragraph-level font differs from body (heading with override) → use para font
  */
 function buildFontMap(
   nonBodyParas: ParagraphAssignment[],
@@ -84,17 +86,22 @@ function buildFontMap(
   const map = new Map<string, FontMapEntry>();
 
   for (const para of nonBodyParas) {
-    const fonts = new Set(para.runs.map(r => r.font));
+    const text = normalizeText(para.runs.map(r => r.text).join(''));
+    if (text.length === 0) continue;
 
-    // Only handle uniform-font paragraphs for now
+    // Case 1: All runs share the same non-body font
+    const fonts = new Set(para.runs.map(r => r.font));
     if (fonts.size === 1) {
       const font = para.runs[0].font;
-      if (font === bodyFont) continue;
-
-      const text = normalizeText(para.runs.map(r => r.text).join(''));
-      if (text.length > 0) {
+      if (font !== bodyFont) {
         map.set(text, { font });
+        continue;
       }
+    }
+
+    // Case 2: Paragraph font is non-body (e.g. heading with style-level font)
+    if (para.font && para.font !== bodyFont) {
+      map.set(text, { font: para.font });
     }
   }
 
@@ -126,7 +133,8 @@ interface InjectResult {
 
 /**
  * Processes a single XHTML file, matching block elements by text content
- * and injecting font-family styles where needed.
+ * and injecting font-family styles where needed. Also strips pandoc's
+ * inline font-size (pt) and line-height (absolute) declarations.
  */
 function injectFontsIntoXhtml(
   content: string,
@@ -134,7 +142,7 @@ function injectFontsIntoXhtml(
 ): InjectResult {
   let modified = false;
 
-  const result = content.replace(BLOCK_REGEX, (match, openTag: string, inner: string, closeTag: string) => {
+  let result = content.replace(BLOCK_REGEX, (match, openTag: string, inner: string, closeTag: string) => {
     // Extract text content from this block element
     const textContent = normalizeText(stripHtmlTags(inner));
     if (textContent.length === 0) return match;
@@ -149,6 +157,13 @@ function injectFontsIntoXhtml(
     const styledTag = injectStyleOnTag(openTag, `font-family: '${entry.font}'`);
     return styledTag + inner + closeTag;
   });
+
+  // Strip pandoc-injected absolute font-size and line-height from inline styles
+  const cleaned = stripAbsoluteInlineStyles(result);
+  if (cleaned !== result) {
+    result = cleaned;
+    modified = true;
+  }
 
   return { content: result, modified };
 }
@@ -183,4 +198,19 @@ function stripHtmlTags(html: string): string {
  */
 function normalizeText(text: string): string {
   return text.replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+/**
+ * Strips pandoc-injected absolute font-size and line-height declarations from
+ * inline style attributes. These override our CSS rules and produce wrong sizing.
+ * Our epub-styles.css defines correct relative sizes (em, %) for all elements.
+ */
+function stripAbsoluteInlineStyles(content: string): string {
+  // Remove font-size in pt/px from style attributes
+  let result = content.replace(/font-size:\s*[\d.]+(?:pt|px)\s*;?\s*/gi, '');
+  // Remove line-height in pt/px from style attributes
+  result = result.replace(/line-height:\s*[\d.]+(?:pt|px)\s*;?\s*/gi, '');
+  // Clean up empty or whitespace-only style attributes
+  result = result.replace(/\s*style="\s*;?\s*"/gi, '');
+  return result;
 }

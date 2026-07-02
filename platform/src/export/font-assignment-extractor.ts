@@ -20,11 +20,13 @@ export interface RunAssignment {
 export interface ParagraphAssignment {
   font: string;
   runs: RunAssignment[];
+  headingLevel?: number;  // 1-9 if heading, undefined for body paragraphs
 }
 
 export interface FontAssignmentResult {
   bodyFont: string;
   paragraphs: ParagraphAssignment[];
+  headingFonts: Map<number, string>;  // heading level → most common font for that level
 }
 
 interface StyleEntry {
@@ -41,7 +43,7 @@ export async function extractFontAssignments(docxPath: string): Promise<FontAssi
     zip = new AdmZip(docxPath);
   } catch (err) {
     console.warn('Font assignment extractor: failed to open docx:', err);
-    return { bodyFont: 'serif', paragraphs: [] };
+    return { bodyFont: 'serif', paragraphs: [], headingFonts: new Map() };
   }
 
   const stylesXml = readEntry(zip, 'word/styles.xml');
@@ -49,7 +51,7 @@ export async function extractFontAssignments(docxPath: string): Promise<FontAssi
 
   if (!documentXml) {
     console.warn('Font assignment extractor: missing word/document.xml');
-    return { bodyFont: 'serif', paragraphs: [] };
+    return { bodyFont: 'serif', paragraphs: [], headingFonts: new Map() };
   }
 
   // Parse styles
@@ -66,6 +68,9 @@ export async function extractFontAssignments(docxPath: string): Promise<FontAssi
     }
   }
 
+  // Build heading style map (styleId → heading level)
+  const headingStyleMap = buildHeadingStyleMap(styleMap, stylesXml);
+
   // Resolve body font: Normal style font → docDefault → "serif"
   let bodyFont = docDefaultFont;
   if (normalStyleId) {
@@ -76,12 +81,15 @@ export async function extractFontAssignments(docxPath: string): Promise<FontAssi
   // Parse document
   const docParsed = parseXml(documentXml);
   if (!docParsed) {
-    return { bodyFont, paragraphs: [] };
+    return { bodyFont, paragraphs: [], headingFonts: new Map() };
   }
 
-  const paragraphs = extractParagraphs(docParsed, styleMap, docDefaultFont, bodyFont);
+  const paragraphs = extractParagraphs(docParsed, styleMap, docDefaultFont, bodyFont, headingStyleMap);
 
-  return { bodyFont, paragraphs };
+  // Compute per-level heading fonts
+  const headingFonts = computeHeadingFonts(paragraphs);
+
+  return { bodyFont, paragraphs, headingFonts };
 }
 
 function readEntry(zip: AdmZip, entryPath: string): string | null {
@@ -197,13 +205,14 @@ function extractParagraphs(
   parsed: unknown,
   styleMap: Map<string, StyleEntry>,
   docDefault: string,
-  bodyFont: string
+  bodyFont: string,
+  headingStyleMap: Map<string, number>
 ): ParagraphAssignment[] {
   const body = getPath(parsed, ['w:document', 'w:body']);
   if (!body || typeof body !== 'object') return [];
 
   const paragraphs: ParagraphAssignment[] = [];
-  collectParagraphs(body, styleMap, docDefault, bodyFont, paragraphs);
+  collectParagraphs(body, styleMap, docDefault, bodyFont, headingStyleMap, paragraphs);
   return paragraphs;
 }
 
@@ -215,6 +224,7 @@ function collectParagraphs(
   styleMap: Map<string, StyleEntry>,
   docDefault: string,
   bodyFont: string,
+  headingStyleMap: Map<string, number>,
   out: ParagraphAssignment[]
 ): void {
   if (!node || typeof node !== 'object') return;
@@ -223,7 +233,7 @@ function collectParagraphs(
   if ('w:p' in obj) {
     const paras = ensureArray(obj['w:p']);
     for (const p of paras) {
-      const assignment = processParagraph(p, styleMap, docDefault, bodyFont);
+      const assignment = processParagraph(p, styleMap, docDefault, bodyFont, headingStyleMap);
       if (assignment) out.push(assignment);
     }
   }
@@ -233,10 +243,10 @@ function collectParagraphs(
     if (key === 'w:p') continue; // Already processed
     if (Array.isArray(value)) {
       for (const item of value) {
-        collectParagraphs(item, styleMap, docDefault, bodyFont, out);
+        collectParagraphs(item, styleMap, docDefault, bodyFont, headingStyleMap, out);
       }
     } else if (typeof value === 'object' && value !== null) {
-      collectParagraphs(value, styleMap, docDefault, bodyFont, out);
+      collectParagraphs(value, styleMap, docDefault, bodyFont, headingStyleMap, out);
     }
   }
 }
@@ -249,7 +259,8 @@ function processParagraph(
   p: unknown,
   styleMap: Map<string, StyleEntry>,
   docDefault: string,
-  bodyFont: string
+  bodyFont: string,
+  headingStyleMap: Map<string, number>
 ): ParagraphAssignment | null {
   if (!p || typeof p !== 'object') return null;
   const pObj = p as Record<string, unknown>;
@@ -258,6 +269,9 @@ function processParagraph(
   // Priority: direct pPr/rPr/rFonts > pStyle reference > bodyFont (implicit Normal)
   const pStyleId = getPath(pObj, ['w:pPr', 'w:pStyle', '@_w:val']) as string | undefined;
   const pDirectFont = getFontFromRFonts(getPath(pObj, ['w:pPr', 'w:rPr', 'w:rFonts']));
+
+  // Detect heading level from style
+  const headingLevel = pStyleId ? headingStyleMap.get(pStyleId) : undefined;
 
   // Start with the body font (which is the resolved Normal style font)
   let paraFont = bodyFont;
@@ -297,7 +311,7 @@ function processParagraph(
   // Skip empty paragraphs (no runs with text)
   if (runs.length === 0) return null;
 
-  return { font: paraFont, runs };
+  return { font: paraFont, runs, headingLevel };
 }
 
 /**
@@ -410,4 +424,74 @@ function ensureArray(value: unknown): unknown[] {
   if (Array.isArray(value)) return value;
   if (value === undefined || value === null) return [];
   return [value];
+}
+
+/**
+ * Builds a styleId → heading level map by inspecting style names.
+ * OnlyOffice uses numeric style IDs with names like "heading 1".
+ */
+function buildHeadingStyleMap(styleMap: Map<string, StyleEntry>, stylesXml: string | null): Map<string, number> {
+  const headingStyleMap = new Map<string, number>();
+  if (!stylesXml) return headingStyleMap;
+
+  const parsed = parseXml(stylesXml);
+  if (!parsed) return headingStyleMap;
+
+  const styles = getPath(parsed, ['w:styles', 'w:style']);
+  if (!styles) return headingStyleMap;
+
+  for (const style of ensureArray(styles)) {
+    if (!style || typeof style !== 'object') continue;
+    const obj = style as Record<string, unknown>;
+    const styleId = obj['@_w:styleId'];
+    if (typeof styleId !== 'string') continue;
+
+    const styleName = getPath(obj, ['w:name', '@_w:val']);
+    if (typeof styleName !== 'string') continue;
+
+    const match = styleName.match(/^heading\s*(\d)$/i);
+    if (match) {
+      headingStyleMap.set(styleId, parseInt(match[1], 10));
+    }
+  }
+
+  return headingStyleMap;
+}
+
+/**
+ * Computes the most common font for each heading level.
+ * Uses the effective paragraph font (which accounts for direct formatting overrides).
+ */
+function computeHeadingFonts(paragraphs: ParagraphAssignment[]): Map<number, string> {
+  const levelFontCounts = new Map<number, Map<string, number>>();
+
+  for (const para of paragraphs) {
+    if (!para.headingLevel) continue;
+
+    // Use the paragraph font — this correctly reflects direct formatting overrides
+    const font = para.font;
+    if (!font) continue;
+
+    let fontCounts = levelFontCounts.get(para.headingLevel);
+    if (!fontCounts) {
+      fontCounts = new Map();
+      levelFontCounts.set(para.headingLevel, fontCounts);
+    }
+    fontCounts.set(font, (fontCounts.get(font) ?? 0) + 1);
+  }
+
+  const result = new Map<number, string>();
+  for (const [level, fontCounts] of levelFontCounts) {
+    let maxFont = '';
+    let maxCount = 0;
+    for (const [font, count] of fontCounts) {
+      if (count > maxCount) {
+        maxFont = font;
+        maxCount = count;
+      }
+    }
+    if (maxFont) result.set(level, maxFont);
+  }
+
+  return result;
 }

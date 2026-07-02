@@ -22,6 +22,7 @@ export interface EpubFontInjectorInput {
   epubPath: string;
   resolvedFonts: FontResolutionResult[];
   bodyFont?: string;
+  headingFonts?: Map<number, string>;
 }
 
 /**
@@ -39,7 +40,7 @@ export interface EpubFontInjectorInput {
  * @param input - The epub path and resolved font entries
  */
 export async function injectFontsIntoEpub(input: EpubFontInjectorInput): Promise<void> {
-  const { epubPath, resolvedFonts, bodyFont } = input;
+  const { epubPath, resolvedFonts, bodyFont, headingFonts } = input;
 
   // Filter to only fonts with a resolved file path
   const fontsToEmbed = resolvedFonts.filter(
@@ -93,7 +94,8 @@ export async function injectFontsIntoEpub(input: EpubFontInjectorInput): Promise
   const existingCss = zip.getEntry(cssEntry)!.getData().toString('utf-8');
   const fontFaceDeclarations = generateFontFaceCSS(fontsToEmbed, fontsRelativeToCSS);
   const bodyFontRule = generateBodyFontRule(fontsToEmbed, bodyFont);
-  const updatedCss = existingCss + '\n' + fontFaceDeclarations + '\n' + bodyFontRule;
+  const headingFontRules = generateHeadingFontRules(headingFonts);
+  const updatedCss = existingCss + '\n' + fontFaceDeclarations + '\n' + bodyFontRule + '\n' + headingFontRules;
   zip.updateFile(cssEntry, Buffer.from(updatedCss, 'utf-8'));
 
   // Update OPF manifest
@@ -340,16 +342,14 @@ function generateFontFaceCSS(
 }
 
 /**
- * Generates a body CSS rule that assigns the document's embedded fonts.
- * If a specific bodyFont is provided, uses only that font in the body rule.
- * Otherwise falls back to listing all embedded fonts (legacy behavior).
+ * Generates a body/p CSS rule that assigns the document's body font.
  */
 function generateBodyFontRule(
   fonts: Array<FontResolutionResult & { filePath: string }>,
   bodyFont?: string
 ): string {
   if (bodyFont) {
-    return `body {\n  font-family: "${bodyFont}", serif;\n}\n`;
+    return `body {\n  font-family: "${bodyFont}", serif;\n}\n\np {\n  font-family: "${bodyFont}", serif;\n}\n`;
   }
 
   // Legacy fallback: list all embedded fonts
@@ -366,6 +366,22 @@ function generateBodyFontRule(
 
   const fontStack = families.map(f => `"${f}"`).join(', ') + ', serif';
   return `body {\n  font-family: ${fontStack};\n}\n`;
+}
+
+/**
+ * Generates CSS rules for heading elements based on per-level font assignments.
+ * These override the body font for headings that use a different typeface.
+ */
+function generateHeadingFontRules(headingFonts?: Map<number, string>): string {
+  if (!headingFonts || headingFonts.size === 0) return '';
+
+  const rules: string[] = [];
+  for (const [level, font] of headingFonts) {
+    if (level >= 1 && level <= 6) {
+      rules.push(`h${level} {\n  font-family: "${font}";\n}`);
+    }
+  }
+  return rules.join('\n\n') + '\n';
 }
 
 /**
