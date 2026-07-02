@@ -11,9 +11,9 @@ import path from 'path';
 export const callbackRouter = Router();
 
 // Maximum file size allowed for saves
-const MAX_SAVE_SIZE_BYTES = 1000 * 1024;
+const MAX_SAVE_SIZE_BYTES = 2 * 1024 * 1024;
 // Warning threshold
-const WARN_SIZE_BYTES = 800 * 1024;
+const WARN_SIZE_BYTES = 1600 * 1024;
 
 // In-memory store of recent save rejections/warnings (keyed by fileId)
 interface SaveStatus {

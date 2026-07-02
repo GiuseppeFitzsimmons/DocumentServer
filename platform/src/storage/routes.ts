@@ -13,7 +13,7 @@ import { sendEmail } from '../email.js';
 import { getAccountUsage, ACCOUNT_QUOTA_BYTES, QUOTA_WARNING_THRESHOLD } from './quota.js';
 
 // Must match the callback handler's MAX_SAVE_SIZE_BYTES
-const MAX_FILE_SIZE = 1000 * 1024; // 1mb
+const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2mb
 
 // Allowed MIME types for upload
 const ALLOWED_MIME_TYPES = new Set([

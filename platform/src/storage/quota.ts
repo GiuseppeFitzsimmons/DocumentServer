@@ -1,7 +1,7 @@
 import { pool } from '../db/pool.js';
 
-// 20 MB account storage limit
-export const ACCOUNT_QUOTA_BYTES = 20 * 1024 * 1024;
+// 40 MB account storage limit
+export const ACCOUNT_QUOTA_BYTES = 40 * 1024 * 1024;
 // Warning threshold: 80%
 export const QUOTA_WARNING_THRESHOLD = 0.8;
 
