@@ -65,31 +65,33 @@ interface TransformResult {
  * Replaces paragraph-level section breaks (w:sectPr inside w:pPr) with page breaks.
  *
  * A paragraph-level section break looks like:
- *   <w:pPr>...<w:sectPr w:rsidR="...">...</w:sectPr>...</w:pPr>
+ *   <w:p><w:pPr>...<w:sectPr>...</w:sectPr></w:pPr><w:r>...</w:r></w:p>
  *
- * We remove the w:sectPr and insert <w:pageBreakBefore/> into the pPr instead,
- * which tells the rendering engine to start this paragraph on a new page.
- *
+ * We remove the w:sectPr from pPr and insert a page break run as the first
+ * content after pPr: <w:r><w:br w:type="page"/></w:r>
+ * 
+ * Pandoc reliably converts w:br type="page" into epub page breaks.
  * The final body-level w:sectPr (direct child of w:body) is untouched.
  */
 function replaceSectionBreaks(xml: string): TransformResult {
   let count = 0;
 
-  // Match w:sectPr that lives inside a w:pPr block.
-  // The sectPr can be self-closing or have content.
-  const pattern = /(<w:pPr\b[^>]*>)([\s\S]*?)(<w:sectPr\b[^>]*(?:\/>|>[\s\S]*?<\/w:sectPr>))([\s\S]*?)(<\/w:pPr>)/g;
+  // Match the full paragraph containing a sectPr in its pPr.
+  // Capture: (before-pPr)(pPr-open ... sectPr ... pPr-close)(after-pPr content)
+  // Strategy: find pPr blocks containing sectPr, remove the sectPr,
+  // then inject a page break run right after </w:pPr>.
+  
+  // Step 1: Remove sectPr from pPr blocks and mark the spot
+  const MARKER = '<!--PAGEBREAK_MARKER-->';
+  const pprPattern = /(<w:pPr\b[^>]*>)([\s\S]*?)(<w:sectPr\b[^>]*(?:\/>|>[\s\S]*?<\/w:sectPr>))([\s\S]*?)(<\/w:pPr>)/g;
 
-  const result = xml.replace(pattern, (_, open: string, before: string, _sectPr: string, after: string, close: string) => {
+  let result = xml.replace(pprPattern, (_, open: string, before: string, _sectPr: string, after: string, close: string) => {
     count++;
-    // Check if pageBreakBefore already exists
-    const combined = before + after;
-    if (combined.includes('<w:pageBreakBefore')) {
-      // Already has a page break, just remove the sectPr
-      return `${open}${before}${after}${close}`;
-    }
-    // Insert pageBreakBefore
-    return `${open}${before}<w:pageBreakBefore/>${after}${close}`;
+    return `${open}${before}${after}${close}${MARKER}`;
   });
+
+  // Step 2: Replace markers with actual page break runs
+  result = result.replace(new RegExp(MARKER, 'g'), '<w:r><w:br w:type="page"/></w:r>');
 
   return { xml: result, changed: count > 0, count };
 }
