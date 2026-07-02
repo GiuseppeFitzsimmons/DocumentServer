@@ -91,11 +91,14 @@ export async function injectFontsIntoEpub(input: EpubFontInjectorInput): Promise
   const cssDir = path.posix.dirname(cssEntry);
   const fontsRelativeToCSS = path.posix.relative(cssDir, fontsDir);
 
-  const existingCss = zip.getEntry(cssEntry)!.getData().toString('utf-8');
+  let css = zip.getEntry(cssEntry)!.getData().toString('utf-8');
+
+  // Inject font-family into existing CSS rule blocks instead of appending
+  css = injectFontFamilyIntoRules(css, bodyFont, headingFonts);
+
+  // Append @font-face declarations at the end
   const fontFaceDeclarations = generateFontFaceCSS(fontsToEmbed, fontsRelativeToCSS);
-  const bodyFontRule = generateBodyFontRule(fontsToEmbed, bodyFont);
-  const headingFontRules = generateHeadingFontRules(headingFonts);
-  const updatedCss = existingCss + '\n' + fontFaceDeclarations + '\n' + bodyFontRule + '\n' + headingFontRules;
+  const updatedCss = css + '\n' + fontFaceDeclarations + '\n';
   zip.updateFile(cssEntry, Buffer.from(updatedCss, 'utf-8'));
 
   // Update OPF manifest
@@ -342,46 +345,75 @@ function generateFontFaceCSS(
 }
 
 /**
- * Generates a body/p CSS rule that assigns the document's body font.
+ * Injects font-family declarations directly into existing CSS rule blocks.
+ * Finds the closing brace of matching selectors and inserts font-family before it.
  */
-function generateBodyFontRule(
-  fonts: Array<FontResolutionResult & { filePath: string }>,
-  bodyFont?: string
+function injectFontFamilyIntoRules(
+  css: string,
+  bodyFont?: string,
+  headingFonts?: Map<number, string>
 ): string {
-  if (bodyFont) {
-    return `body {\n  font-family: "${bodyFont}", serif;\n}\n\np {\n  font-family: "${bodyFont}", serif;\n}\n`;
-  }
+  let result = css;
 
-  // Legacy fallback: list all embedded fonts
-  const seen = new Set<string>();
-  const families: string[] = [];
-  for (const font of fonts) {
-    if (!seen.has(font.record.family)) {
-      seen.add(font.record.family);
-      families.push(font.record.family);
+  // Inject into body/p rules
+  if (bodyFont) {
+    result = injectPropertyIntoRule(result, 'p', `font-family: "${bodyFont}", serif;`);
+    // Also add a body rule if one exists; if not, append it
+    if (result.match(/^body\s*\{/m)) {
+      result = injectPropertyIntoRule(result, 'body', `font-family: "${bodyFont}", serif;`);
+    } else {
+      result += `\nbody {\n  font-family: "${bodyFont}", serif;\n}\n`;
     }
   }
 
-  if (families.length === 0) return '';
+  // Inject into heading rules
+  if (headingFonts) {
+    for (const [level, font] of headingFonts) {
+      if (level >= 1 && level <= 6) {
+        result = injectPropertyIntoRule(result, `h${level}`, `font-family: "${font}";`);
+      }
+    }
+  }
 
-  const fontStack = families.map(f => `"${f}"`).join(', ') + ', serif';
-  return `body {\n  font-family: ${fontStack};\n}\n`;
+  return result;
 }
 
 /**
- * Generates CSS rules for heading elements based on per-level font assignments.
- * These override the body font for headings that use a different typeface.
+ * Finds a CSS rule by selector and injects a property before its closing brace.
+ * Handles selectors like "p", "h1", "body", and compound selectors like "h5, h6".
+ * If the selector isn't found as a standalone rule, appends a new rule block.
  */
-function generateHeadingFontRules(headingFonts?: Map<number, string>): string {
-  if (!headingFonts || headingFonts.size === 0) return '';
+function injectPropertyIntoRule(css: string, selector: string, property: string): string {
+  // Match the selector followed by { ... } — find the closing brace
+  // Need to handle both simple (h1 {) and compound (h5, h6 {) selectors
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-  const rules: string[] = [];
-  for (const [level, font] of headingFonts) {
-    if (level >= 1 && level <= 6) {
-      rules.push(`h${level} {\n  font-family: "${font}";\n}`);
-    }
+  // Try exact match first: "h1 {" at start of line
+  const exactPattern = new RegExp(
+    `(^${escapedSelector}\\s*\\{[^}]*)\\}`,
+    'm'
+  );
+  const exactMatch = css.match(exactPattern);
+  if (exactMatch) {
+    const block = exactMatch[1];
+    const insertion = block.endsWith('\n') ? `  ${property}\n` : `\n  ${property}\n`;
+    return css.replace(exactPattern, `${block}${insertion}}`);
   }
-  return rules.join('\n\n') + '\n';
+
+  // Try compound selector match: "h5, h6 {" contains our selector
+  const compoundPattern = new RegExp(
+    `(^[^{}]*\\b${escapedSelector}\\b[^{}]*\\{[^}]*)\\}`,
+    'm'
+  );
+  const compoundMatch = css.match(compoundPattern);
+  if (compoundMatch) {
+    const block = compoundMatch[1];
+    const insertion = block.endsWith('\n') ? `  ${property}\n` : `\n  ${property}\n`;
+    return css.replace(compoundPattern, `${block}${insertion}}`);
+  }
+
+  // Not found — append a new rule
+  return css + `\n${selector} {\n  ${property}\n}\n`;
 }
 
 /**
