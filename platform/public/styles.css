@@ -293,6 +293,12 @@ body.auth-page {
 
 .btn-toolbar:hover { background: #333; }
 
+.btn-toolbar:disabled {
+  background: #ccc;
+  color: #888;
+  cursor: not-allowed;
+}
+
 /* File Tree */
 .file-tree-container {
   background: #fff;
