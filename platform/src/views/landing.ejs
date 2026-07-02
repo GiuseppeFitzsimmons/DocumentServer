@@ -303,46 +303,6 @@
       return div.innerHTML;
     }
 
-    function isDocxFile(name, mimeType) {
-      var docxMime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-      if (mimeType === docxMime) return true;
-      if (name && name.toLowerCase().endsWith('.docx')) return true;
-      return false;
-    }
-
-    async function exportAsEpub(fileId, fileName) {
-      var container = document.getElementById('toastContainer') || document.body;
-      var loadingToast = document.createElement('div');
-      loadingToast.className = 'toast';
-      loadingToast.textContent = 'Exporting to EPUB\u2026';
-      container.appendChild(loadingToast);
-      setTimeout(function() { loadingToast.classList.add('visible'); }, 10);
-
-      try {
-        var res = await fetch('/api/files/' + encodeURIComponent(fileId) + '/export/epub');
-        loadingToast.remove();
-
-        if (!res.ok) {
-          var err = await res.json().catch(function() { return { error: 'Export failed' }; });
-          alert(err.error || 'Export failed');
-          return;
-        }
-
-        var blob = await res.blob();
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement('a');
-        a.href = url;
-        a.download = fileName.replace(/\.docx$/i, '.epub');
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-      } catch (e) {
-        loadingToast.remove();
-        alert('Export failed: ' + (e.message || 'Unknown error'));
-      }
-    }
-
     // ========================================
     // Create Section Handlers
     // ========================================
@@ -565,20 +525,12 @@
         item.appendChild(icon);
         item.appendChild(name);
         item.appendChild(meta);
-        if (isDocxFile(file.name, file.mimeType)) {
-          var exportBtn = document.createElement('button');
-          exportBtn.className = 'file-tree-actions epub-export-btn';
-          exportBtn.title = 'Export as EPUB';
-          exportBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>';
-          exportBtn.onclick = function(e) { e.stopPropagation(); exportAsEpub(file.id, file.name); };
-          item.appendChild(exportBtn);
-        }
         item.appendChild(actions);
         node.appendChild(item);
 
         // Click to open file
         item.onclick = function(e) {
-          if (e.target.closest('.file-tree-actions') || e.target.closest('.epub-export-btn')) return;
+          if (e.target.closest('.file-tree-actions')) return;
           window.open('/editor/' + file.id, '_blank');
         };
 
@@ -624,14 +576,6 @@
       menu.style.top = e.clientY + 'px';
       menu.style.left = e.clientX + 'px';
       menu.style.zIndex = '1000';
-
-      if (type === 'file' && isDocxFile(name, mimeType)) {
-        var exportBtn = document.createElement('button');
-        exportBtn.className = 'context-menu-item';
-        exportBtn.textContent = 'Export as EPUB';
-        exportBtn.onclick = function() { closeTreeContextMenu(); exportAsEpub(id, name); };
-        menu.appendChild(exportBtn);
-      }
 
       var renameBtn = document.createElement('button');
       renameBtn.className = 'context-menu-item';
@@ -1042,7 +986,7 @@
     // ========================================
     var fontCatalog = [];
     var userFontSelection = new Set();
-    var fontsDirty = false;
+    var savedFontSelection = new Set(); // Track what's saved to detect real changes
 
     async function loadFontPreferences() {
       try {
@@ -1054,6 +998,7 @@
         var prefs = await prefsRes.json();
         var defaultFonts = ["Baskervville", "Caslon OS", "Cormorant", "Dancing Script", "Libre Bodoni", "TeX Gyre Bonum", "TeXGyrePagella", "TeXGyreTermes"];
         userFontSelection = new Set(prefs.length > 0 ? prefs : defaultFonts);
+        savedFontSelection = new Set(userFontSelection);
         renderFontPicker();
       } catch(err) {
         console.error('Failed to load font preferences:', err);
@@ -1098,8 +1043,7 @@
             userFontSelection.delete(font);
             chip.classList.remove('selected');
           }
-          fontsDirty = true;
-          document.getElementById('btn-save-fonts').disabled = false;
+          updateSaveButtonState();
           updateFontCounter();
         });
         grid.appendChild(chip);
@@ -1111,6 +1055,19 @@
 
     function updateFontCounter() {
       document.getElementById('font-counter').textContent = userFontSelection.size + ' / 14 selected';
+    }
+
+    function updateSaveButtonState() {
+      // Compare current selection with saved — disable button if identical
+      var hasChanges = false;
+      if (userFontSelection.size !== savedFontSelection.size) {
+        hasChanges = true;
+      } else {
+        for (var f of userFontSelection) {
+          if (!savedFontSelection.has(f)) { hasChanges = true; break; }
+        }
+      }
+      document.getElementById('btn-save-fonts').disabled = !hasChanges;
     }
 
     async function saveFontPreferences() {
@@ -1129,7 +1086,7 @@
         });
         if (!res.ok) throw new Error('Failed to save');
         showSuccess('Font preferences saved! Changes apply on next document open.');
-        fontsDirty = false;
+        savedFontSelection = new Set(userFontSelection);
       } catch(err) {
         showError(err.message || 'Failed to save font preferences');
         btn.disabled = false;

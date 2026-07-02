@@ -13,6 +13,7 @@ import { injectFontsIntoEpub } from './epub-font-injector.js';
 import { extractFontAssignments } from './font-assignment-extractor.js';
 import { injectXhtmlFonts } from './xhtml-font-injector.js';
 import { removeSections } from './section-remover.js';
+import { preprocessDocx } from './docx-preprocessor.js';
 import type { FontResolutionResult } from './font-types.js';
 import type { FontAssignmentResult } from './font-assignment-extractor.js';
 
@@ -54,7 +55,9 @@ export interface ConvertOptions {
   title?: string;
   includeToc?: boolean;
   embedFonts?: boolean;
-  excludeSections?: number[];  // Heading indexes to exclude
+  excludeSections?: number[];        // Heading indexes to exclude
+  convertSectionBreaks?: boolean;    // Replace section breaks with page breaks
+  removeSoftReturns?: boolean;       // Strip soft returns (manual line breaks)
 }
 
 /**
@@ -112,6 +115,19 @@ export async function convertDocxToEpub(inputStream: Readable, options?: Convert
       await removeSections({ docxPath: inputPath, excludeIndexes: options.excludeSections });
     } catch (err) {
       console.warn('Section removal failed, proceeding with full document:', err);
+    }
+  }
+
+  // Pre-pandoc transformations (section breaks → page breaks, soft return removal)
+  if (options?.convertSectionBreaks || options?.removeSoftReturns) {
+    try {
+      await preprocessDocx({
+        docxPath: inputPath,
+        convertSectionBreaks: options.convertSectionBreaks,
+        removeSoftReturns: options.removeSoftReturns,
+      });
+    } catch (err) {
+      console.warn('Docx preprocessing failed, proceeding without transformations:', err);
     }
   }
 
