@@ -14,6 +14,7 @@ import { extractFontAssignments } from './font-assignment-extractor.js';
 import { injectXhtmlFonts } from './xhtml-font-injector.js';
 import { removeSections } from './section-remover.js';
 import { preprocessDocx } from './docx-preprocessor.js';
+import { splitEpubAtPageBreaks } from './epub-page-splitter.js';
 import type { FontResolutionResult } from './font-types.js';
 import type { FontAssignmentResult } from './font-assignment-extractor.js';
 
@@ -185,6 +186,15 @@ export async function convertDocxToEpub(inputStream: Readable, options?: Convert
       }
     } catch (err) {
       console.warn('Font injection failed, returning epub without fonts:', err);
+    }
+  }
+
+  // Split XHTML files at section break markers (guaranteed page breaks)
+  if (options?.convertSectionBreaks) {
+    try {
+      await splitEpubAtPageBreaks(outputPath);
+    } catch (err) {
+      console.warn('Epub page splitting failed:', err);
     }
   }
 

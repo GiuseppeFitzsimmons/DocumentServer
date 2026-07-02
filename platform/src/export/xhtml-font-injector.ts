@@ -11,7 +11,6 @@
 import AdmZip from 'adm-zip';
 import { writeFileSync } from 'fs';
 import type { FontAssignmentResult, ParagraphAssignment } from './font-assignment-extractor.js';
-import { SECTION_BREAK_MARKER } from './docx-preprocessor.js';
 
 export interface XhtmlFontInjectorInput {
   epubPath: string;
@@ -157,12 +156,6 @@ function injectFontsIntoXhtml(
     modified = true;
   }
 
-  const paged = replaceSectionBreakMarkers(result);
-  if (paged !== result) {
-    result = paged;
-    modified = true;
-  }
-
   return { content: result, modified };
 }
 
@@ -204,53 +197,5 @@ function stripAbsoluteInlineStyles(content: string): string {
   let result = content.replace(/font-size:\s*[\d.]+(?:pt|px)\s*;?\s*/gi, '');
   result = result.replace(/line-height:\s*[\d.]+(?:pt|px)\s*;?\s*/gi, '');
   result = result.replace(/\s*style="\s*;?\s*"/gi, '');
-  return result;
-}
-
-/**
- * Replaces section break marker paragraphs with page breaks.
- * Instead of inserting an empty element, applies page-break-before: always
- * on the next block element — the most e-reader-compatible approach.
- */
-function replaceSectionBreakMarkers(content: string): string {
-  if (!content.includes(SECTION_BREAK_MARKER)) return content;
-
-  const parts = content.split(SECTION_BREAK_MARKER);
-  if (parts.length <= 1) return content;
-
-  let result = parts[0];
-  for (let i = 1; i < parts.length; i++) {
-    // Previous part ends with the opening <p...> tag that contained the marker
-    // Remove that trailing <p...> open tag
-    const openMatch = result.match(/<p[^>]*>$/);
-    if (openMatch) {
-      result = result.slice(0, -openMatch[0].length);
-    }
-
-    // Current part starts with </p> from the marker paragraph — remove it
-    let part = parts[i];
-    if (part.startsWith('</p>')) {
-      part = part.slice(4);
-    }
-
-    // Find the next block element and inject page-break-before on it
-    const nextBlockMatch = part.match(/^(\s*)<(p|h[1-6]|div|section)\b([^>]*?)>/);
-    if (nextBlockMatch) {
-      const [fullMatch, whitespace, tag, attrs] = nextBlockMatch;
-      const styleInject = 'page-break-before: always';
-      const existingStyle = attrs.match(/style="([^"]*)"/);
-      let newAttrs: string;
-      if (existingStyle) {
-        const combined = existingStyle[1].trim() + (existingStyle[1].trim().endsWith(';') ? ' ' : '; ') + styleInject;
-        newAttrs = attrs.replace(/style="[^"]*"/, `style="${combined}"`);
-      } else {
-        newAttrs = attrs + ` style="${styleInject}"`;
-      }
-      part = `${whitespace}<${tag}${newAttrs}>` + part.slice(fullMatch.length);
-    }
-
-    result += part;
-  }
-
   return result;
 }
