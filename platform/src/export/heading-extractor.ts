@@ -24,6 +24,7 @@ export async function extractHeadings(docxPath: string): Promise<DocxHeading[]> 
   const parser = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: '@_',
+    trimValues: false,
     isArray: (name) => ['w:p', 'w:r', 'w:t', 'w:hyperlink', 'w:style'].includes(name),
   });
 
