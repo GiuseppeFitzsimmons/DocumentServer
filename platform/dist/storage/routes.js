@@ -12,7 +12,7 @@ import { pool } from '../db/pool.js';
 import { sendEmail } from '../email.js';
 import { getAccountUsage } from './quota.js';
 // Must match the callback handler's MAX_SAVE_SIZE_BYTES
-const MAX_FILE_SIZE = 1000 * 1024; // 1mb
+const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2mb
 // Allowed MIME types for upload
 const ALLOWED_MIME_TYPES = new Set([
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
