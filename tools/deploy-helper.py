@@ -64,6 +64,17 @@ ACTIONS = {
         "targets": ["prod-proxy"],
         "special": "proxy_update",
     },
+    "Update Nginx Config": {
+        "targets": ["dev"],
+        "commands": [
+            "cp /opt/euro-office/repo/deploy/nginx/nginx-dev.conf /etc/nginx/sites-available/dev.conf",
+            "certbot --nginx -d dev.eurobureau.eu --non-interactive --agree-tos -m admin@eurobureau.eu",
+        ],
+    },
+    "Database Shell": {
+        "targets": ["dev", "prod"],
+        "special": "db_shell",
+    },
 }
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -282,6 +293,10 @@ class DeployHelper:
                 args=(env, action["command"]),
                 daemon=True,
             )
+        elif action.get("special") == "db_shell":
+            self.current_thread = threading.Thread(
+                target=self._run_db_shell, args=(env,), daemon=True
+            )
         else:
             self.current_thread = threading.Thread(
                 target=self._run_ssh_commands,
@@ -440,6 +455,49 @@ class DeployHelper:
 
             if not self.running:
                 self._log("\n⚠ Stream stopped by user.\n", "info")
+            self._set_status("Done", "green")
+
+        except Exception as e:
+            self._log(f"\n✗ Error: {e}\n", "error")
+            self._set_status("Error", "red")
+        finally:
+            self._set_running(False)
+
+    def _run_db_shell(self, env):
+        """Open an interactive psql session via SSH in an external terminal."""
+        try:
+            host = env["host"]
+            user = env["user"]
+            cmd = f"ssh -t {user}@{host} 'cd /opt/euro-office/repo/deploy && docker compose exec postgres psql -U portal portal'"
+
+            self._log_header(f"Opening database shell on {env['label']}")
+            self._log_cmd(cmd)
+            self._log("Launching in external terminal...\n", "info")
+
+            # Try various terminal emulators
+            terminals = [
+                ["x-terminal-emulator", "-e"],
+                ["gnome-terminal", "--"],
+                ["konsole", "-e"],
+                ["xfce4-terminal", "-e"],
+                ["xterm", "-e"],
+            ]
+
+            launched = False
+            for term_cmd in terminals:
+                try:
+                    subprocess.Popen(term_cmd + ["bash", "-c", cmd])
+                    launched = True
+                    self._log(f"✓ Opened in {term_cmd[0]}\n", "success")
+                    break
+                except FileNotFoundError:
+                    continue
+
+            if not launched:
+                # Fallback: just tell the user the command
+                self._log("Could not find a terminal emulator. Run manually:\n", "error")
+                self._log(f"  {cmd}\n", "command")
+
             self._set_status("Done", "green")
 
         except Exception as e:

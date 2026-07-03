@@ -15,6 +15,15 @@ RUN SIZES=',{name:"Trade Paperback (small)",w_mm:139.7,h_mm:215.9,w_tw:7921,h_tw
 # Remove the default core-fonts bundle
 RUN rm -rf /var/www/euro-office/documentserver/core-fonts/*
 
+# Install word count plugin (Apache-2.0 licensed, from ONLYOFFICE plugin marketplace)
+RUN mkdir -p /tmp/wc-plugin && \
+    curl -sL "https://github.com/nicedoc/onlyoffice.github.io/archive/master.tar.gz" | \
+    tar -xz --strip-components=4 -C /tmp/wc-plugin \
+      "onlyoffice.github.io-master/sdkjs-plugins/content/wordscounter/" && \
+    GUID=$(grep -oP '"asc\.\{[^}]+\}"' /tmp/wc-plugin/config.json | head -1 | tr -d '"') && \
+    mv /tmp/wc-plugin "/var/www/euro-office/documentserver/sdkjs-plugins/$GUID" && \
+    chown -R ds:ds "/var/www/euro-office/documentserver/sdkjs-plugins/$GUID"
+
 # Copy our curated font set (msttcore still present at /usr/share/fonts/msttcore/)
 COPY fonts/ /var/www/euro-office/documentserver/core-fonts/custom/
 
