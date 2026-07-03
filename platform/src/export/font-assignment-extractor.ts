@@ -10,6 +10,7 @@ import { XMLParser } from 'fast-xml-parser';
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
+  trimValues: false,
 });
 
 export interface RunAssignment {
@@ -445,49 +446,36 @@ function resolveStylePPr(
 
 /**
  * Extracts text content from a run's w:t elements.
- * Treats w:br as a space separator.
+ * Treats w:br as a space (soft return = visual line break = word separator).
  */
 function extractRunText(run: Record<string, unknown>): string {
-  // A run can contain interleaved w:t, w:br, w:tab, etc.
-  // We need to handle the case where these are siblings in the run object.
-  // fast-xml-parser may flatten them — check for both individual and mixed content.
-
-  const parts: string[] = [];
-
-  // Handle w:t
   const wt = run['w:t'];
-  if (wt !== undefined && wt !== null) {
-    parts.push(extractTextValue(wt));
+  const hasBr = run['w:br'] !== undefined;
+
+  if (wt === undefined || wt === null) return '';
+
+  if (hasBr && Array.isArray(wt) && wt.length > 1) {
+    // Multiple w:t elements with a w:br between them — join with space
+    return wt.map(t => {
+      if (typeof t === 'string') return t;
+      if (typeof t === 'number') return String(t);
+      if (typeof t === 'object' && t !== null) {
+        const text = (t as Record<string, unknown>)['#text'];
+        if (typeof text === 'string') return text;
+        if (typeof text === 'number') return String(text);
+      }
+      return '';
+    }).join(' ');
   }
 
-  // Handle w:br — if present, insert a space between text segments
-  // But the real issue is that fast-xml-parser may merge sibling elements.
-  // With the parser config we have, w:t and w:br are separate keys.
-  // If w:br exists and w:t is an array, the text was split by a break.
-  if (run['w:br'] !== undefined) {
-    // Insert space in the middle of text if we have it
-    // Since fast-xml-parser puts all w:t content together, we need to check
-    // if the text should have a space inserted.
-    // Actually, when w:br exists between w:t elements, fast-xml-parser
-    // may combine the w:t values into an array.
-    // We already handle arrays in extractTextValue, but we need to add
-    // a space between array items when w:br is present.
-    if (Array.isArray(wt) && wt.length > 1) {
-      // Re-extract with space separator
-      return wt.map(t => {
-        if (typeof t === 'string') return t;
-        if (typeof t === 'number') return String(t);
-        if (typeof t === 'object' && t !== null) {
-          const text = (t as Record<string, unknown>)['#text'];
-          if (typeof text === 'string') return text;
-          if (typeof text === 'number') return String(text);
-        }
-        return '';
-      }).join(' ');
-    }
-  }
+  // Single w:t (or no br) — extract normally
+  const text = extractTextValue(wt);
 
-  if (parts.length > 0) return parts.join('');
+  // If there's a br but only one w:t, add a trailing space
+  // (the br represents a break after this text segment)
+  if (hasBr && text.length > 0) return text + ' ';
+
+  return text;
 
   return '';
 }

@@ -110,6 +110,15 @@ export async function convertDocxToEpub(inputStream: Readable, options?: Convert
   const writeStream = createWriteStream(inputPath);
   await pipeline(inputStream, writeStream);
 
+  // Extract per-element font/style assignments BEFORE any docx modifications
+  // (section removal and preprocessing can alter text content)
+  let assignmentResult: FontAssignmentResult | null = null;
+  try {
+    assignmentResult = await extractFontAssignments(inputPath);
+  } catch (err) {
+    console.warn('Font assignment extraction failed, proceeding without per-element styling:', err);
+  }
+
   // Remove excluded sections from docx (pre-pandoc)
   if (options?.excludeSections && options.excludeSections.length > 0) {
     try {
@@ -151,14 +160,6 @@ export async function convertDocxToEpub(inputStream: Readable, options?: Convert
     });
   } catch (err) {
     console.warn('Font extraction/resolution failed, proceeding without fonts:', err);
-  }
-
-  // Extract per-element font assignments (best-effort)
-  let assignmentResult: FontAssignmentResult | null = null;
-  try {
-    assignmentResult = await extractFontAssignments(inputPath);
-  } catch (err) {
-    console.warn('Font assignment extraction failed, proceeding without per-element styling:', err);
   }
 
   // Invoke Pandoc
