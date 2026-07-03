@@ -18,6 +18,12 @@ export interface RunAssignment {
   text: string;
 }
 
+export interface BorderDef {
+  style: string;    // CSS border-style (solid, dashed, dotted, double, none)
+  color: string;    // hex color
+  width: number;    // in pt (from w:sz / 8)
+}
+
 export interface ParagraphStyle {
   textAlign?: 'left' | 'center' | 'right' | 'justify';
   lineHeight?: number;      // in points (from w:spacing w:line / 240 * 12)
@@ -27,6 +33,10 @@ export interface ParagraphStyle {
   marginLeft?: number;      // in points (from w:ind w:left in twips / 20)
   marginRight?: number;     // in points
   fontSize?: number;        // in points (from w:sz / 2, half-points)
+  borderTop?: BorderDef;
+  borderBottom?: BorderDef;
+  borderLeft?: BorderDef;
+  borderRight?: BorderDef;
 }
 
 export interface ParagraphAssignment {
@@ -425,7 +435,59 @@ function extractParagraphStyle(
     if (!isNaN(val)) { style.fontSize = val / 2; hasAny = true; }
   }
 
+  // Borders from w:pBdr (direct first, then style)
+  const pBdr = (pPrObj ? pPrObj['w:pBdr'] : undefined) ??
+               (stylePPr ? stylePPr['w:pBdr'] : undefined);
+  if (pBdr && typeof pBdr === 'object') {
+    const bdrObj = pBdr as Record<string, unknown>;
+    const sides = ['top', 'bottom', 'left', 'right'] as const;
+    for (const side of sides) {
+      const border = parseBorder(bdrObj[`w:${side}`]);
+      if (border) {
+        style[`border${side.charAt(0).toUpperCase()}${side.slice(1)}` as keyof ParagraphStyle] = border as any;
+        hasAny = true;
+      }
+    }
+  }
+
   return hasAny ? style : undefined;
+}
+
+/**
+ * Parses a border element (w:top, w:bottom, etc.) into a BorderDef.
+ */
+function parseBorder(borderEl: unknown): BorderDef | null {
+  if (!borderEl || typeof borderEl !== 'object') return null;
+  const obj = borderEl as Record<string, unknown>;
+
+  const val = obj['@_w:val'] as string | undefined;
+  if (!val || val === 'none' || val === 'nil') return null;
+
+  const sz = Number(obj['@_w:sz'] || 0);
+  const color = (obj['@_w:color'] as string) || '000000';
+
+  // w:sz is in eighths of a point
+  const widthPt = Math.max(sz / 8, 0.5);
+
+  // Map OOXML border styles to CSS
+  const styleMap: Record<string, string> = {
+    single: 'solid',
+    thick: 'solid',
+    double: 'double',
+    dotted: 'dotted',
+    dashed: 'dashed',
+    dashSmallGap: 'dashed',
+    dotDash: 'dashed',
+    dotDotDash: 'dotted',
+    triple: 'double',
+    wave: 'solid',
+  };
+
+  return {
+    style: styleMap[val] || 'solid',
+    color: color === 'auto' ? '000000' : color,
+    width: widthPt,
+  };
 }
 
 /**

@@ -55,6 +55,7 @@ export interface ConvertResult {
 export interface ConvertOptions {
   title?: string;
   includeToc?: boolean;
+  includeTitlePage?: boolean;
   embedFonts?: boolean;
   excludeSections?: number[];        // Heading indexes to exclude
   convertSectionBreaks?: boolean;    // Replace section breaks with page breaks
@@ -70,6 +71,9 @@ function runPandoc(inputPath: string, outputPath: string, options?: ConvertOptio
   const args = [inputPath];
   if (options?.includeToc !== false) {
     args.push('--toc', '--toc-depth=3');
+  }
+  if (options?.includeTitlePage === false) {
+    args.push('--epub-title-page=false');
   }
   args.push('--css', cssPath, '-o', outputPath);
   if (options?.title) {

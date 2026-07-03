@@ -127,6 +127,18 @@ function buildStyleMap(
       if (s.marginRight) {
         parts.push(`margin-right: ${s.marginRight}pt`);
       }
+      if (s.borderTop) {
+        parts.push(`border-top: ${s.borderTop.width}pt ${s.borderTop.style} #${s.borderTop.color}`);
+      }
+      if (s.borderBottom) {
+        parts.push(`border-bottom: ${s.borderBottom.width}pt ${s.borderBottom.style} #${s.borderBottom.color}`);
+      }
+      if (s.borderLeft) {
+        parts.push(`border-left: ${s.borderLeft.width}pt ${s.borderLeft.style} #${s.borderLeft.color}`);
+      }
+      if (s.borderRight) {
+        parts.push(`border-right: ${s.borderRight.width}pt ${s.borderRight.style} #${s.borderRight.color}`);
+      }
     }
 
     if (parts.length > 0) {

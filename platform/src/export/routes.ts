@@ -166,13 +166,14 @@ exportRouter.get('/:id/export/epub', async (req, res) => {
     const inputStream = await storage.download(file.s3Key);
     const title = file.name.replace(/\.docx$/i, '');
     const includeToc = req.query.toc !== '0';
+    const includeTitlePage = req.query.titlepage !== '0';
     const embedFonts = req.query.fonts !== '0';
     const convertSectionBreaks = req.query.sections === '1';
     const removeSoftReturns = req.query.softreturns === '0';
     const excludeSections = req.query.exclude
       ? String(req.query.exclude).split(',').map(Number).filter(n => !isNaN(n))
       : [];
-    const result = await convertDocxToEpub(inputStream, { title, includeToc, embedFonts, excludeSections, convertSectionBreaks, removeSoftReturns });
+    const result = await convertDocxToEpub(inputStream, { title, includeToc, includeTitlePage, embedFonts, excludeSections, convertSectionBreaks, removeSoftReturns });
     cleanup = result.cleanup;
 
     const epubName = file.name.replace(/\.docx$/i, '.epub');
