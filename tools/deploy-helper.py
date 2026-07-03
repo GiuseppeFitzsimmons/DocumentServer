@@ -75,6 +75,11 @@ ACTIONS = {
         "targets": ["dev", "prod"],
         "special": "db_shell",
     },
+    "Build Web Apps": {
+        "targets": ["dev", "prod", "prod-proxy"],
+        "special": "local_command",
+        "command": "./tools/build-web-apps.sh",
+    },
 }
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -297,6 +302,10 @@ class DeployHelper:
             self.current_thread = threading.Thread(
                 target=self._run_db_shell, args=(env,), daemon=True
             )
+        elif action.get("special") == "local_command":
+            self.current_thread = threading.Thread(
+                target=self._run_local_command, args=(action["command"],), daemon=True
+            )
         else:
             self.current_thread = threading.Thread(
                 target=self._run_ssh_commands,
@@ -499,6 +508,42 @@ class DeployHelper:
                 self._log(f"  {cmd}\n", "command")
 
             self._set_status("Done", "green")
+
+        except Exception as e:
+            self._log(f"\n✗ Error: {e}\n", "error")
+            self._set_status("Error", "red")
+        finally:
+            self._set_running(False)
+
+    def _run_local_command(self, command):
+        """Run a local command and stream its output."""
+        try:
+            self._set_status("Running local command...", "orange")
+            self._log_cmd(command)
+
+            process = subprocess.Popen(
+                command,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                cwd=REPO_ROOT,
+                text=True,
+            )
+
+            for line in iter(process.stdout.readline, ""):
+                if not self.running:
+                    process.terminate()
+                    self._log("\n⚠ Stopped by user.\n", "error")
+                    break
+                self._log(line)
+
+            process.wait()
+            if process.returncode == 0:
+                self._log("\n✓ Done.\n", "success")
+                self._set_status("Done", "green")
+            else:
+                self._log(f"\n✗ Exited with code {process.returncode}\n", "error")
+                self._set_status("Failed", "red")
 
         except Exception as e:
             self._log(f"\n✗ Error: {e}\n", "error")
