@@ -10,7 +10,7 @@
 
 import AdmZip from 'adm-zip';
 import { writeFileSync } from 'fs';
-import type { FontAssignmentResult, ParagraphAssignment } from './font-assignment-extractor.js';
+import type { FontAssignmentResult, ParagraphAssignment, ParagraphStyle } from './font-assignment-extractor.js';
 
 export interface XhtmlFontInjectorInput {
   epubPath: string;
@@ -27,14 +27,9 @@ export async function injectXhtmlFonts(input: XhtmlFontInjectorInput): Promise<v
 
   if (paragraphs.length === 0) return;
 
-  // Build lookup: paragraphs with non-body fonts (either run-level or para-level)
-  const nonBodyParas = paragraphs.filter(
-    p => p.font !== bodyFont || p.runs.some(r => r.font !== bodyFont)
-  );
-  if (nonBodyParas.length === 0) return;
-
-  // Build a map of normalized text → font for fast lookup
-  const fontMap = buildFontMap(nonBodyParas, bodyFont);
+  // Build style map from all paragraphs
+  const styleMap = buildStyleMap(paragraphs, bodyFont);
+  if (styleMap.size === 0) return;
 
   let zip: AdmZip;
   try {
@@ -56,7 +51,7 @@ export async function injectXhtmlFonts(input: XhtmlFontInjectorInput): Promise<v
     if (!entry) continue;
 
     const content = entry.getData().toString('utf-8');
-    const result = injectFontsIntoXhtml(content, fontMap);
+    const result = injectStylesIntoXhtml(content, styleMap);
 
     if (result.modified) {
       zip.updateFile(entryName, Buffer.from(result.content, 'utf-8'));
@@ -69,34 +64,73 @@ export async function injectXhtmlFonts(input: XhtmlFontInjectorInput): Promise<v
   }
 }
 
-interface FontMapEntry {
-  font: string;
+interface StyleMapEntry {
+  styles: string;  // Full CSS inline style string to inject
 }
 
 /**
- * Builds a map of normalized paragraph text → font for non-body-font paragraphs.
+ * Builds a map of normalized paragraph text → inline CSS styles.
+ * Includes font-family (when different from body) and paragraph styles
+ * (text-align, font-size, line-height, etc.) extracted from the docx.
  */
-function buildFontMap(
-  nonBodyParas: ParagraphAssignment[],
+function buildStyleMap(
+  paragraphs: ParagraphAssignment[],
   bodyFont: string
-): Map<string, FontMapEntry> {
-  const map = new Map<string, FontMapEntry>();
+): Map<string, StyleMapEntry> {
+  const map = new Map<string, StyleMapEntry>();
 
-  for (const para of nonBodyParas) {
+  for (const para of paragraphs) {
     const text = normalizeText(para.runs.map(r => r.text).join(''));
     if (text.length === 0) continue;
 
+    const parts: string[] = [];
+
+    // Font-family (only if different from body)
     const fonts = new Set(para.runs.map(r => r.font));
-    if (fonts.size === 1) {
-      const font = para.runs[0].font;
-      if (font !== bodyFont) {
-        map.set(text, { font });
-        continue;
+    if (fonts.size === 1 && para.runs[0].font !== bodyFont) {
+      parts.push(`font-family: '${para.runs[0].font}'`);
+    } else if (para.font && para.font !== bodyFont) {
+      parts.push(`font-family: '${para.font}'`);
+    }
+
+    // Paragraph style properties
+    if (para.style) {
+      const s = para.style;
+      if (s.textAlign && s.textAlign !== 'justify') {
+        // Only inject non-justify (our CSS default is justify for p)
+        parts.push(`text-align: ${s.textAlign}`);
+      }
+      if (s.fontSize) {
+        parts.push(`font-size: ${s.fontSize}pt`);
+      }
+      if (s.lineHeight) {
+        if (s.lineHeight <= 5) {
+          // Multiplier (e.g., 1.5 = 150%)
+          parts.push(`line-height: ${Math.round(s.lineHeight * 100)}%`);
+        } else {
+          // Absolute value in pt
+          parts.push(`line-height: ${s.lineHeight}pt`);
+        }
+      }
+      if (s.textIndent !== undefined && s.textIndent !== 0) {
+        parts.push(`text-indent: ${s.textIndent}pt`);
+      }
+      if (s.spaceBefore) {
+        parts.push(`margin-top: ${s.spaceBefore}pt`);
+      }
+      if (s.spaceAfter) {
+        parts.push(`margin-bottom: ${s.spaceAfter}pt`);
+      }
+      if (s.marginLeft) {
+        parts.push(`margin-left: ${s.marginLeft}pt`);
+      }
+      if (s.marginRight) {
+        parts.push(`margin-right: ${s.marginRight}pt`);
       }
     }
 
-    if (para.font && para.font !== bodyFont) {
-      map.set(text, { font: para.font });
+    if (parts.length > 0) {
+      map.set(text, { styles: parts.join('; ') });
     }
   }
 
@@ -128,13 +162,11 @@ interface InjectResult {
 
 /**
  * Processes a single XHTML file:
- * 1. Injects font-family styles on elements with non-body fonts
- * 2. Strips pandoc's inline absolute font-size/line-height
- * 3. Converts section break markers into page-break-after styled elements
+ * 1. Injects inline styles (font-family, text-align, font-size, etc.) from docx
  */
-function injectFontsIntoXhtml(
+function injectStylesIntoXhtml(
   content: string,
-  fontMap: Map<string, FontMapEntry>
+  styleMap: Map<string, StyleMapEntry>
 ): InjectResult {
   let modified = false;
 
@@ -142,11 +174,11 @@ function injectFontsIntoXhtml(
     const textContent = normalizeText(stripHtmlTags(inner));
     if (textContent.length === 0) return match;
 
-    const entry = fontMap.get(textContent);
+    const entry = styleMap.get(textContent);
     if (!entry) return match;
 
     modified = true;
-    const styledTag = injectStyleOnTag(openTag, `font-family: '${entry.font}'`);
+    const styledTag = injectStyleOnTag(openTag, entry.styles);
     return styledTag + inner + closeTag;
   });
 

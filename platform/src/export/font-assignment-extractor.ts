@@ -17,10 +17,22 @@ export interface RunAssignment {
   text: string;
 }
 
+export interface ParagraphStyle {
+  textAlign?: 'left' | 'center' | 'right' | 'justify';
+  lineHeight?: number;      // in points (from w:spacing w:line / 240 * 12)
+  spaceBefore?: number;     // in points (from w:spacing w:before in twips / 20)
+  spaceAfter?: number;      // in points
+  textIndent?: number;      // in points (first line indent, from w:ind w:firstLine in twips / 20)
+  marginLeft?: number;      // in points (from w:ind w:left in twips / 20)
+  marginRight?: number;     // in points
+  fontSize?: number;        // in points (from w:sz / 2, half-points)
+}
+
 export interface ParagraphAssignment {
   font: string;
   runs: RunAssignment[];
   headingLevel?: number;  // 1-9 if heading, undefined for body paragraphs
+  style?: ParagraphStyle;
 }
 
 export interface FontAssignmentResult {
@@ -311,7 +323,94 @@ function processParagraph(
   // Skip empty paragraphs (no runs with text)
   if (runs.length === 0) return null;
 
-  return { font: paraFont, runs, headingLevel };
+  // Extract paragraph style properties
+  const style = extractParagraphStyle(pObj);
+
+  return { font: paraFont, runs, headingLevel, style };
+}
+
+/**
+ * Extracts paragraph-level style properties from w:pPr.
+ */
+function extractParagraphStyle(pObj: Record<string, unknown>): ParagraphStyle | undefined {
+  const pPr = pObj['w:pPr'];
+  if (!pPr || typeof pPr !== 'object') return undefined;
+  const pPrObj = pPr as Record<string, unknown>;
+
+  const style: ParagraphStyle = {};
+  let hasAny = false;
+
+  // text-align from w:jc
+  const jc = getPath(pPrObj, ['w:jc', '@_w:val']) as string | undefined;
+  if (jc) {
+    const alignMap: Record<string, ParagraphStyle['textAlign']> = {
+      left: 'left', start: 'left',
+      center: 'center',
+      right: 'right', end: 'right',
+      both: 'justify', distribute: 'justify',
+    };
+    if (alignMap[jc]) { style.textAlign = alignMap[jc]; hasAny = true; }
+  }
+
+  // spacing: line-height, space before/after
+  const spacing = pPrObj['w:spacing'] as Record<string, unknown> | undefined;
+  if (spacing && typeof spacing === 'object') {
+    const line = spacing['@_w:line'];
+    const lineRule = spacing['@_w:lineRule'] as string | undefined;
+    if (line !== undefined) {
+      const lineVal = Number(line);
+      if (!isNaN(lineVal)) {
+        // w:line in 240ths of a line (when lineRule is "auto") or twips
+        if (!lineRule || lineRule === 'auto') {
+          // 240 = single spacing, expressed as multiplier
+          style.lineHeight = Math.round((lineVal / 240) * 100) / 100;
+        } else {
+          // atLeast/exact: value in twips, convert to points
+          style.lineHeight = lineVal / 20;
+        }
+        hasAny = true;
+      }
+    }
+    const before = spacing['@_w:before'];
+    if (before !== undefined) {
+      const val = Number(before);
+      if (!isNaN(val)) { style.spaceBefore = val / 20; hasAny = true; }
+    }
+    const after = spacing['@_w:after'];
+    if (after !== undefined) {
+      const val = Number(after);
+      if (!isNaN(val)) { style.spaceAfter = val / 20; hasAny = true; }
+    }
+  }
+
+  // indentation
+  const ind = pPrObj['w:ind'] as Record<string, unknown> | undefined;
+  if (ind && typeof ind === 'object') {
+    const firstLine = ind['@_w:firstLine'];
+    if (firstLine !== undefined) {
+      const val = Number(firstLine);
+      if (!isNaN(val)) { style.textIndent = val / 20; hasAny = true; }
+    }
+    const left = ind['@_w:left'] ?? ind['@_w:start'];
+    if (left !== undefined) {
+      const val = Number(left);
+      if (!isNaN(val)) { style.marginLeft = val / 20; hasAny = true; }
+    }
+    const right = ind['@_w:right'] ?? ind['@_w:end'];
+    if (right !== undefined) {
+      const val = Number(right);
+      if (!isNaN(val)) { style.marginRight = val / 20; hasAny = true; }
+    }
+  }
+
+  // font-size from pPr/rPr/w:sz (paragraph-level default size)
+  const sz = getPath(pPrObj, ['w:rPr', 'w:sz', '@_w:val']);
+  if (sz !== undefined) {
+    const val = Number(sz);
+    if (!isNaN(val)) { style.fontSize = val / 2; hasAny = true; } // half-points to points
+  }
+
+  return hasAny ? style : undefined;
 }
 
 /**
