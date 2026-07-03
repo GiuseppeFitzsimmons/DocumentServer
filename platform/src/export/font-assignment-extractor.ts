@@ -436,7 +436,9 @@ function extractParagraphStyle(
   }
 
   // Borders from w:pBdr (direct first, then style)
-  const pBdr = (pPrObj ? pPrObj['w:pBdr'] : undefined) ??
+  // Note: fast-xml-parser may produce "" for empty elements like <w:pBdr/>, use || for fallback
+  const directPBdr = pPrObj ? pPrObj['w:pBdr'] : undefined;
+  const pBdr = (directPBdr && typeof directPBdr === 'object') ? directPBdr :
                (stylePPr ? stylePPr['w:pBdr'] : undefined);
   if (pBdr && typeof pBdr === 'object') {
     const bdrObj = pBdr as Record<string, unknown>;
