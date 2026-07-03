@@ -191,11 +191,14 @@ function normalizeText(text: string): string {
 }
 
 /**
- * Strips pandoc-injected absolute font-size and line-height from inline styles.
+ * Strips pandoc-injected inline styles that conflict with our epub CSS.
+ * Removes: font-size (pt/px), line-height (pt/px), text-align.
+ * Our epub-styles.css defines correct values for all elements.
  */
 function stripAbsoluteInlineStyles(content: string): string {
   let result = content.replace(/font-size:\s*[\d.]+(?:pt|px)\s*;?\s*/gi, '');
   result = result.replace(/line-height:\s*[\d.]+(?:pt|px)\s*;?\s*/gi, '');
+  result = result.replace(/text-align:\s*[a-z]+\s*;?\s*/gi, '');
   result = result.replace(/\s*style="\s*;?\s*"/gi, '');
   return result;
 }
