@@ -44,6 +44,7 @@ export interface FontAssignmentResult {
 interface StyleEntry {
   font: string | null;
   parentStyleId: string | null;
+  pPr?: Record<string, unknown>;  // Raw paragraph properties from the style definition
 }
 
 /**
@@ -150,7 +151,10 @@ function buildStyleMap(parsed: unknown, styleMap: Map<string, StyleEntry>): void
     const basedOn = getPath(obj, ['w:basedOn', '@_w:val']);
     const parentStyleId = typeof basedOn === 'string' ? basedOn : null;
 
-    styleMap.set(styleId, { font, parentStyleId });
+    // Store paragraph properties from the style definition
+    const pPr = obj['w:pPr'] as Record<string, unknown> | undefined;
+
+    styleMap.set(styleId, { font, parentStyleId, pPr: pPr || undefined });
   }
 }
 
@@ -323,26 +327,34 @@ function processParagraph(
   // Skip empty paragraphs (no runs with text)
   if (runs.length === 0) return null;
 
-  // Extract paragraph style properties
-  const style = extractParagraphStyle(pObj);
+  // Extract paragraph style properties (including inherited from named style)
+  const style = extractParagraphStyle(pObj, pStyleId, styleMap);
 
   return { font: paraFont, runs, headingLevel, style };
 }
 
 /**
  * Extracts paragraph-level style properties from w:pPr.
+ * Falls back to the named style's pPr for properties not directly set.
  */
-function extractParagraphStyle(pObj: Record<string, unknown>): ParagraphStyle | undefined {
+function extractParagraphStyle(
+  pObj: Record<string, unknown>,
+  pStyleId: string | undefined,
+  styleMap: Map<string, StyleEntry>
+): ParagraphStyle | undefined {
   const pPr = pObj['w:pPr'];
-  if (!pPr || typeof pPr !== 'object') return undefined;
-  const pPrObj = pPr as Record<string, unknown>;
+  const pPrObj = (pPr && typeof pPr === 'object') ? pPr as Record<string, unknown> : undefined;
+
+  // Get the style's pPr as fallback
+  const stylePPr = pStyleId ? resolveStylePPr(pStyleId, styleMap, 0) : undefined;
 
   const style: ParagraphStyle = {};
   let hasAny = false;
 
-  // text-align from w:jc
-  const jc = getPath(pPrObj, ['w:jc', '@_w:val']) as string | undefined;
-  if (jc) {
+  // text-align from w:jc (direct first, then style)
+  const jc = (pPrObj ? getPath(pPrObj, ['w:jc', '@_w:val']) : undefined) ??
+             (stylePPr ? getPath(stylePPr, ['w:jc', '@_w:val']) : undefined);
+  if (jc && typeof jc === 'string') {
     const alignMap: Record<string, ParagraphStyle['textAlign']> = {
       left: 'left', start: 'left',
       center: 'center',
@@ -352,65 +364,83 @@ function extractParagraphStyle(pObj: Record<string, unknown>): ParagraphStyle | 
     if (alignMap[jc]) { style.textAlign = alignMap[jc]; hasAny = true; }
   }
 
-  // spacing: line-height, space before/after
-  const spacing = pPrObj['w:spacing'] as Record<string, unknown> | undefined;
+  // spacing: line-height, space before/after (direct first, then style)
+  const spacing = (pPrObj ? pPrObj['w:spacing'] : undefined) ??
+                  (stylePPr ? stylePPr['w:spacing'] : undefined);
   if (spacing && typeof spacing === 'object') {
-    const line = spacing['@_w:line'];
-    const lineRule = spacing['@_w:lineRule'] as string | undefined;
+    const spacingObj = spacing as Record<string, unknown>;
+    const line = spacingObj['@_w:line'];
+    const lineRule = spacingObj['@_w:lineRule'] as string | undefined;
     if (line !== undefined) {
       const lineVal = Number(line);
       if (!isNaN(lineVal)) {
-        // w:line in 240ths of a line (when lineRule is "auto") or twips
         if (!lineRule || lineRule === 'auto') {
-          // 240 = single spacing, expressed as multiplier
           style.lineHeight = Math.round((lineVal / 240) * 100) / 100;
         } else {
-          // atLeast/exact: value in twips, convert to points
           style.lineHeight = lineVal / 20;
         }
         hasAny = true;
       }
     }
-    const before = spacing['@_w:before'];
+    const before = spacingObj['@_w:before'];
     if (before !== undefined) {
       const val = Number(before);
       if (!isNaN(val)) { style.spaceBefore = val / 20; hasAny = true; }
     }
-    const after = spacing['@_w:after'];
+    const after = spacingObj['@_w:after'];
     if (after !== undefined) {
       const val = Number(after);
       if (!isNaN(val)) { style.spaceAfter = val / 20; hasAny = true; }
     }
   }
 
-  // indentation
-  const ind = pPrObj['w:ind'] as Record<string, unknown> | undefined;
+  // indentation (direct first, then style)
+  const ind = (pPrObj ? pPrObj['w:ind'] : undefined) ??
+              (stylePPr ? stylePPr['w:ind'] : undefined);
   if (ind && typeof ind === 'object') {
-    const firstLine = ind['@_w:firstLine'];
+    const indObj = ind as Record<string, unknown>;
+    const firstLine = indObj['@_w:firstLine'];
     if (firstLine !== undefined) {
       const val = Number(firstLine);
       if (!isNaN(val)) { style.textIndent = val / 20; hasAny = true; }
     }
-    const left = ind['@_w:left'] ?? ind['@_w:start'];
+    const left = indObj['@_w:left'] ?? indObj['@_w:start'];
     if (left !== undefined) {
       const val = Number(left);
       if (!isNaN(val)) { style.marginLeft = val / 20; hasAny = true; }
     }
-    const right = ind['@_w:right'] ?? ind['@_w:end'];
+    const right = indObj['@_w:right'] ?? indObj['@_w:end'];
     if (right !== undefined) {
       const val = Number(right);
       if (!isNaN(val)) { style.marginRight = val / 20; hasAny = true; }
     }
   }
 
-  // font-size from pPr/rPr/w:sz (paragraph-level default size)
-  const sz = getPath(pPrObj, ['w:rPr', 'w:sz', '@_w:val']);
+  // font-size from pPr/rPr/w:sz (direct first, then style)
+  const sz = (pPrObj ? getPath(pPrObj, ['w:rPr', 'w:sz', '@_w:val']) : undefined) ??
+             (stylePPr ? getPath(stylePPr, ['w:rPr', 'w:sz', '@_w:val']) : undefined);
   if (sz !== undefined) {
     const val = Number(sz);
-    if (!isNaN(val)) { style.fontSize = val / 2; hasAny = true; } // half-points to points
+    if (!isNaN(val)) { style.fontSize = val / 2; hasAny = true; }
   }
 
   return hasAny ? style : undefined;
+}
+
+/**
+ * Resolves a style's paragraph properties by traversing the basedOn chain.
+ */
+function resolveStylePPr(
+  styleId: string,
+  styleMap: Map<string, StyleEntry>,
+  depth: number
+): Record<string, unknown> | undefined {
+  if (depth > 10) return undefined;
+  const entry = styleMap.get(styleId);
+  if (!entry) return undefined;
+  if (entry.pPr) return entry.pPr;
+  if (entry.parentStyleId) return resolveStylePPr(entry.parentStyleId, styleMap, depth + 1);
+  return undefined;
 }
 
 /**
