@@ -19,8 +19,6 @@ export interface PreprocessOptions {
 export async function preprocessDocx(options: PreprocessOptions): Promise<void> {
   const { docxPath, convertSectionBreaks, removeSoftReturns } = options;
 
-  if (!convertSectionBreaks && !removeSoftReturns) return;
-
   const zip = new AdmZip(docxPath);
   const docEntry = zip.getEntry('word/document.xml');
   if (!docEntry) {
@@ -30,6 +28,14 @@ export async function preprocessDocx(options: PreprocessOptions): Promise<void> 
 
   let xml = docEntry.getData().toString('utf-8');
   let modified = false;
+
+  // Always preserve empty paragraphs (pandoc strips them otherwise)
+  const preserved = preserveEmptyParagraphs(xml);
+  if (preserved.changed) {
+    xml = preserved.xml;
+    modified = true;
+    console.log(`[docx-preprocessor] Preserved ${preserved.count} empty paragraph(s)`);
+  }
 
   if (convertSectionBreaks) {
     const result = replaceSectionBreaks(xml);
@@ -142,6 +148,38 @@ function removeSoftBreaks(xml: string): TransformResult {
       count++;
       return '<w:t xml:space="preserve"> </w:t>';
     });
+  });
+
+  return { xml: result, changed: count > 0, count };
+}
+
+/**
+ * Preserves empty paragraphs by inserting a non-breaking space.
+ * Pandoc strips empty paragraphs during epub conversion. By adding an nbsp,
+ * the paragraph becomes non-empty and pandoc preserves it as <p>&#160;</p>,
+ * rendering as a blank line in the epub (matching the author's intent).
+ *
+ * An "empty paragraph" is a <w:p> that contains no <w:t> elements.
+ * Paragraphs containing only <w:br/> (spacing breaks) are also treated as empty.
+ */
+function preserveEmptyParagraphs(xml: string): TransformResult {
+  let count = 0;
+
+  const result = xml.replace(/<w:p\b([^>]*)>([\s\S]*?)<\/w:p>/g, (match, attrs: string, inner: string) => {
+    // Skip if paragraph has text content
+    if (/<w:t[\s>]/.test(inner)) return match;
+
+    // Skip if paragraph has no runs at all and no break (just pPr — likely a section/structural para)
+    // We only want to preserve paragraphs that are intentional blank lines
+    if (!/<w:r[\s>]/.test(inner) && !/<w:br/.test(inner)) {
+      // Check if it has pPr (styled empty paragraph — likely intentional spacing)
+      if (!/<w:pPr/.test(inner)) return match;
+    }
+
+    // Insert a non-breaking space run
+    count++;
+    const nbsp = '<w:r><w:t xml:space="preserve">\u00A0</w:t></w:r>';
+    return `<w:p${attrs}>${inner}${nbsp}</w:p>`;
   });
 
   return { xml: result, changed: count > 0, count };

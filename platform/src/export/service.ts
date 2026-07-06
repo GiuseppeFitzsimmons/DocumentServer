@@ -132,26 +132,24 @@ export async function convertDocxToEpub(inputStream: Readable, options?: Convert
     }
   }
 
-  // Pre-pandoc transformations (section breaks → page breaks, soft return removal)
-  if (options?.convertSectionBreaks || options?.removeSoftReturns) {
-    try {
-      await preprocessDocx({
-        docxPath: inputPath,
-        convertSectionBreaks: options.convertSectionBreaks,
-        removeSoftReturns: options.removeSoftReturns,
-      });
+  // Pre-pandoc transformations (preserve empty paragraphs, section breaks, soft returns)
+  try {
+    await preprocessDocx({
+      docxPath: inputPath,
+      convertSectionBreaks: options?.convertSectionBreaks,
+      removeSoftReturns: options?.removeSoftReturns,
+    });
 
-      // Debug: verify the marker was actually inserted
-      if (options.convertSectionBreaks) {
-        const AdmZip = (await import('adm-zip')).default;
-        const debugZip = new AdmZip(inputPath);
-        const debugDoc = debugZip.getEntry('word/document.xml')?.getData().toString('utf-8') ?? '';
-        const markerCount = (debugDoc.match(/\u00AB\u00ABPAGEBREAK\u00BB\u00BB/g) || []).length;
-        console.log(`[docx-preprocessor] Post-process: ${markerCount} page break marker(s) inserted`);
-      }
-    } catch (err) {
-      console.warn('Docx preprocessing failed, proceeding without transformations:', err);
+    // Debug: verify the marker was actually inserted
+    if (options?.convertSectionBreaks) {
+      const AdmZip = (await import('adm-zip')).default;
+      const debugZip = new AdmZip(inputPath);
+      const debugDoc = debugZip.getEntry('word/document.xml')?.getData().toString('utf-8') ?? '';
+      const markerCount = (debugDoc.match(/\u00AB\u00ABPAGEBREAK\u00BB\u00BB/g) || []).length;
+      console.log(`[docx-preprocessor] Post-process: ${markerCount} page break marker(s) inserted`);
     }
+  } catch (err) {
+    console.warn('Docx preprocessing failed, proceeding without transformations:', err);
   }
 
   // Extract and resolve fonts (best-effort)
