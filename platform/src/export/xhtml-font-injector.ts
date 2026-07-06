@@ -112,7 +112,7 @@ function buildStyleMap(
           parts.push(`line-height: ${s.lineHeight}pt`);
         }
       }
-      if (s.textIndent !== undefined && s.textIndent !== 0) {
+      if (s.textIndent !== undefined) {
         parts.push(`text-indent: ${s.textIndent}pt`);
       }
       if (s.spaceBefore) {

@@ -113,29 +113,35 @@ function replaceSectionBreaks(xml: string): TransformResult {
 
 /**
  * Removes soft returns (w:br elements that are line breaks, not page/column breaks).
- * Replaces with a space-containing text run to prevent words from merging.
- *
- * Soft returns in docx:
- *   <w:br/>                           — implicit text wrapping break
- *   <w:br w:type="textWrapping"/>     — explicit text wrapping break
+ * Replaces with a space to prevent words from merging.
+ * 
+ * Only removes breaks inside paragraphs that contain actual text.
+ * Paragraphs that contain ONLY a break (used for visual spacing / hard returns)
+ * are left untouched.
  *
  * NOT removed:
  *   <w:br w:type="page"/>             — page break
  *   <w:br w:type="column"/>           — column break
+ *   <w:br/> in paragraphs with no text content (spacing paragraphs)
  */
 function removeSoftBreaks(xml: string): TransformResult {
   let count = 0;
 
-  // Strategy: match all w:br elements, replace soft returns with a space
-  const result = xml.replace(/<w:br\b([^>]*?)(?:\/>|><\/w:br>)/g, (match, attrs: string) => {
-    // If it has w:type="page" or w:type="column", keep it
-    if (/w:type\s*=\s*"(page|column)"/.test(attrs)) {
-      return match;
+  // Process each paragraph: only replace w:br in paragraphs that contain w:t (text)
+  const result = xml.replace(/<w:p\b[^>]*>[\s\S]*?<\/w:p>/g, (paraMatch) => {
+    // Skip paragraphs with no text content (these are spacing/hard returns)
+    if (!/<w:t[\s>]/.test(paraMatch)) {
+      return paraMatch;
     }
-    // Replace soft return with a space character in a text node
-    // This prevents adjacent words from merging (e.g., "be\nIn" → "be In")
-    count++;
-    return '<w:t xml:space="preserve"> </w:t>';
+
+    // Replace soft breaks in this text-containing paragraph
+    return paraMatch.replace(/<w:br\b([^>]*?)(?:\/>|><\/w:br>)/g, (brMatch, attrs: string) => {
+      if (/w:type\s*=\s*"(page|column)"/.test(attrs)) {
+        return brMatch;
+      }
+      count++;
+      return '<w:t xml:space="preserve"> </w:t>';
+    });
   });
 
   return { xml: result, changed: count > 0, count };
