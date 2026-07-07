@@ -37,6 +37,7 @@ services:
       GENERATE_FONTS: "true"
     volumes:
       - ../fonts:/var/www/euro-office/documentserver/core-fonts/custom
+      - ../deploy/patches/documenteditor-app.js:/var/www/euro-office/documentserver/web-apps/apps/documenteditor/main/app.js:ro
 
 volumes:
   pg_data:
