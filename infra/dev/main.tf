@@ -102,18 +102,16 @@ resource "hcloud_firewall" "db" {
     port       = "22"
     source_ips = ["0.0.0.0/0", "::/0"]
   }
-  # Postgres from app servers only
+  # Allow all traffic from private network
   rule {
     direction  = "in"
     protocol   = "tcp"
-    port       = "5432"
+    port       = "any"
     source_ips = ["10.0.1.0/24"]
   }
-  # Redis from app servers only
   rule {
     direction  = "in"
-    protocol   = "tcp"
-    port       = "6379"
+    protocol   = "icmp"
     source_ips = ["10.0.1.0/24"]
   }
 }
