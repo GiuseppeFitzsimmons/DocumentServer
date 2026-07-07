@@ -8,3 +8,4 @@ platform/node_modules
 .env
 /scripts/dev/
 tools/.venv
+*.sql

@@ -1,0 +1,31 @@
+#cloud-config
+package_update: true
+packages:
+  - postgresql-16
+  - redis-server
+
+write_files:
+  - path: /etc/postgresql/16/main/pg_hba.conf
+    content: |
+      local   all   all                 peer
+      host    all   all   10.0.1.0/24   md5
+      host    all   all   127.0.0.1/32  md5
+    append: false
+
+  - path: /etc/postgresql/16/main/conf.d/listen.conf
+    content: |
+      listen_addresses = '*'
+      max_connections = 100
+
+runcmd:
+  # PostgreSQL setup
+  - systemctl restart postgresql
+  - sudo -u postgres psql -c "CREATE USER portal WITH PASSWORD '${db_password}';"
+  - sudo -u postgres psql -c "CREATE DATABASE portal OWNER portal;"
+
+  # Redis setup - listen on all interfaces, no auth (private network only)
+  - sed -i 's/^bind 127.0.0.1/bind 0.0.0.0/' /etc/redis/redis.conf
+  - sed -i 's/^protected-mode yes/protected-mode no/' /etc/redis/redis.conf
+  - systemctl restart redis-server
+  - systemctl enable redis-server
+  - systemctl enable postgresql
