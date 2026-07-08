@@ -239,6 +239,12 @@ resource "hcloud_server" "dev_app_b" {
   }
 }
 
+resource "hcloud_server_network" "dev_app_b" {
+  server_id  = hcloud_server.dev_app_b.id
+  network_id = hcloud_network.dev.id
+  ip         = "10.0.1.12"
+}
+
 # --- Proxy Server ---
 
 resource "hcloud_server" "dev_proxy" {

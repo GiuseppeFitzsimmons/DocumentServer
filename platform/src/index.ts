@@ -18,6 +18,7 @@ import { supportRouter } from './support/routes.js';
 import { fontsRouter } from './fonts/routes.js';
 import { serveRouter } from './ds/serve.js';
 import { callbackRouter } from './ds/callback.js';
+import { forceSaveRouter } from './ds/forcesave.js';
 import { versionRouter } from './versions/routes.js';
 import { exportRouter, internalExportRouter } from './export/routes.js';
 import { editorRouter } from './pages/editor.js';
@@ -97,6 +98,7 @@ app.get('/health', (_req, res) => {
 // DocumentServer integration (no session auth — JWT-based, must be before fileRouter)
 app.use('/api/files/serve', serveRouter);
 app.use('/api/ds/callback', callbackRouter);
+app.use('/api/internal', forceSaveRouter);
 
 // File storage API
 app.use('/api/files', versionRouter);
