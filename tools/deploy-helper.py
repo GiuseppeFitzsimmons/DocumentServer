@@ -821,7 +821,7 @@ class DeployHelper:
             client = self._get_ssh_client(idle_env)
             commands = [
                 "cd /opt/euro-office/repo && git fetch && git checkout main && git pull",
-                f"cd /opt/euro-office/repo/deploy && docker compose -f {compose_file} up -d --build",
+                f"cd /opt/euro-office/repo/deploy && docker compose -f {compose_file} down && docker compose -f {compose_file} up -d --build",
                 f"cd /opt/euro-office/repo/deploy && docker compose -f {compose_file} exec -T portal node dist/db/migrate.js",
             ]
             for cmd in commands:
