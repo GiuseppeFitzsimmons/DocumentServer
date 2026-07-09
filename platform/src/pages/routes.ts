@@ -80,70 +80,11 @@ pageRouter.get('/register', (req, res) => {
     res.redirect('/');
     return;
   }
-  res.render('register', { title: 'Create account', error: null });
+  res.render('register', { title: 'Create account', error: 'Registration is currently invitation-only. We will open to the public soon.' });
 });
 
 pageRouter.post('/register', async (req, res) => {
-  const parsed = registerSchema.safeParse(req.body);
-  if (!parsed.success) {
-    const msg = parsed.error.issues.map(i => i.message).join(', ');
-    res.render('register', { title: 'Create account', error: msg });
-    return;
-  }
-
-  const { email, displayName } = parsed.data;
-
-  if (isDisposableEmail(email)) {
-    console.info(`Registration rejected: disposable email domain "${email.substring(email.lastIndexOf('@') + 1).toLowerCase()}"`);
-    res.render('register', { title: 'Create account', error: 'Email domain not accepted.' });
-    return;
-  }
-
-  try {
-    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
-    if (existing.rows.length > 0) {
-      res.render('register', { title: 'Create account', error: 'Email already registered.' });
-      return;
-    }
-
-    const tempPassword = generateTempPassword();
-    const passwordHash = await hashPassword(tempPassword);
-
-    await pool.query(
-      'INSERT INTO users (email, password_hash, display_name, is_temp_password) VALUES ($1, $2, $3, $4)',
-      [email, passwordHash, displayName, true]
-    );
-
-    let emailWarning: string | null = null;
-    try {
-      await sendEmail({
-        to: email,
-        subject: 'Welcome to Euro Bureau - Your Temporary Password',
-        text: [
-          `Welcome to Euro Bureau!`,
-          ``,
-          `Your temporary password is: ${tempPassword}`,
-          ``,
-          `Please log in at eurobureau.eu/login using this password.`,
-          `You will be asked to set a permanent password on your first login.`,
-        ].join('\n'),
-        html: [
-          `<p>Welcome to Euro Bureau!</p>`,
-          `<p>Your temporary password is: <strong>${tempPassword}</strong></p>`,
-          `<p>Please log in at <a href="https://eurobureau.eu/login">eurobureau.eu/login</a> using this password.</p>`,
-          `<p>You will be asked to set a permanent password on your first login.</p>`,
-        ].join('\n'),
-      });
-    } catch (emailErr) {
-      console.error('Email send error:', emailErr);
-      emailWarning = 'Your account was created, but we could not send the email. Please contact support.';
-    }
-
-    res.render('register-success', { title: 'Account created', warning: emailWarning });
-  } catch (err) {
-    console.error('Register error:', err);
-    res.render('register', { title: 'Create account', error: 'Something went wrong.' });
-  }
+  res.render('register', { title: 'Create account', error: 'Registration is currently invitation-only. We will open to the public soon.' });
 });
 
 pageRouter.get('/set-password', (req, res) => {

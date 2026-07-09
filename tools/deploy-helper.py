@@ -69,20 +69,17 @@ MULTI_SERVER = {
 # Commands are lists of (description, shell_command) tuples.
 # They run sequentially in a single SSH session.
 ACTIONS = {
-    "Update Server": {
-        "targets": ["dev-app-a", "dev-app-b", "prod"],
-        "commands": [
-            "cd /opt/euro-office/repo && git fetch && git checkout main && git pull",
-            "cd /opt/euro-office/repo/deploy && docker compose -f docker-compose.multi.yml up -d --build",
-            "cd /opt/euro-office/repo/deploy && docker compose -f docker-compose.multi.yml exec portal node dist/db/migrate.js",
-        ],
+    "Blue-Green Deploy (Dev)": {
+        "targets": ["dev-proxy", "dev-app-a", "dev-app-b", "dev-db", "prod", "prod-proxy"],
+        "special": "bluegreen_deploy",
+        "environment": "dev",
     },
-    "Update Fonts": {
-        "targets": ["dev-app-a", "dev-app-b", "prod"],
+    "Update Fonts (Dev)": {
+        "targets": ["dev-app-a", "dev-app-b"],
         "commands": [
-            "cd /opt/euro-office/repo/fonts && git pull",
-            "cd /opt/euro-office/repo/deploy && docker compose build --no-cache documentserver",
-            "cd /opt/euro-office/repo/deploy && docker compose up -d documentserver",
+            "cd /opt/euro-office/repo/fonts && git checkout main && git pull",
+            "cd /opt/euro-office/repo/deploy && docker compose -f docker-compose.multi.yml build --no-cache documentserver",
+            "cd /opt/euro-office/repo/deploy && docker compose -f docker-compose.multi.yml up -d documentserver",
         ],
     },
     "View Logs": {
@@ -90,40 +87,18 @@ ACTIONS = {
         "special": "stream_logs",
         "command": "cd /opt/euro-office/repo/deploy && docker compose -f docker-compose.multi.yml logs portal -t --tail 100 -f",
     },
-    "Update Proxy Config": {
+    "Update Proxy Config (Prod)": {
         "targets": ["prod-proxy"],
         "special": "proxy_update",
     },
-    "Update Nginx Config": {
-        "targets": ["dev-proxy"],
-        "commands": [
-            "cp /opt/euro-office/repo/deploy/nginx/nginx-dev.conf /etc/nginx/sites-available/dev.conf",
-            "certbot --nginx -d dev.eurobureau.eu --non-interactive --agree-tos -m admin@eurobureau.eu",
-        ],
-    },
     "Database Shell": {
-        "targets": ["dev-app-a", "dev-db", "prod"],
+        "targets": ["dev-db", "prod"],
         "special": "db_shell",
     },
     "Build Web Apps": {
         "targets": ["dev-proxy", "dev-app-a", "dev-app-b", "dev-db", "prod", "prod-proxy"],
         "special": "local_command",
         "command": "./tools/build-web-apps.sh",
-    },
-    "Rolling Deploy (Dev)": {
-        "targets": ["dev-proxy", "dev-app-a", "dev-app-b", "dev-db", "prod", "prod-proxy"],
-        "special": "rolling_deploy",
-        "environment": "dev",
-    },
-    "Quick Deploy (Dev)": {
-        "targets": ["dev-proxy", "dev-app-a", "dev-app-b", "dev-db", "prod", "prod-proxy"],
-        "special": "quick_deploy",
-        "environment": "dev",
-    },
-    "Blue-Green Deploy (Dev)": {
-        "targets": ["dev-proxy", "dev-app-a", "dev-app-b", "dev-db", "prod", "prod-proxy"],
-        "special": "bluegreen_deploy",
-        "environment": "dev",
     },
 }
 
@@ -351,14 +326,6 @@ class DeployHelper:
             self.current_thread = threading.Thread(
                 target=self._run_local_command, args=(action["command"],), daemon=True
             )
-        elif action.get("special") == "rolling_deploy":
-            self.current_thread = threading.Thread(
-                target=self._run_rolling_deploy, args=(action["environment"],), daemon=True
-            )
-        elif action.get("special") == "quick_deploy":
-            self.current_thread = threading.Thread(
-                target=self._run_quick_deploy, args=(action["environment"],), daemon=True
-            )
         elif action.get("special") == "bluegreen_deploy":
             self.current_thread = threading.Thread(
                 target=self._run_bluegreen_deploy, args=(action["environment"],), daemon=True
@@ -530,17 +497,22 @@ class DeployHelper:
             self._set_running(False)
 
     def _run_db_shell(self, env):
-        """Open an interactive psql session via SSH in an external terminal."""
+        """Open an interactive psql session on the DB server."""
         try:
             host = env["host"]
             user = env["user"]
-            cmd = f"ssh -t {user}@{host} 'cd /opt/euro-office/repo/deploy && docker compose exec postgres psql -U portal portal'"
+
+            # For multi-server: connect to psql directly on the DB server
+            # For prod (single server): use docker exec
+            if "db" in env.get("label", "").lower():
+                cmd = f"ssh -t {user}@{host} 'sudo -u postgres psql portal'"
+            else:
+                cmd = f"ssh -t {user}@{host} 'cd /opt/euro-office/repo/deploy && docker compose exec postgres psql -U portal portal'"
 
             self._log_header(f"Opening database shell on {env['label']}")
             self._log_cmd(cmd)
             self._log("Launching in external terminal...\n", "info")
 
-            # Try various terminal emulators
             terminals = [
                 ["x-terminal-emulator", "-e"],
                 ["gnome-terminal", "--"],
@@ -560,7 +532,6 @@ class DeployHelper:
                     continue
 
             if not launched:
-                # Fallback: just tell the user the command
                 self._log("Could not find a terminal emulator. Run manually:\n", "error")
                 self._log(f"  {cmd}\n", "command")
 
@@ -607,141 +578,6 @@ class DeployHelper:
             self._set_status("Error", "red")
         finally:
             self._set_running(False)
-
-    def _run_rolling_deploy(self, environment):
-        """Perform a zero-downtime rolling deploy across app servers."""
-        try:
-            topology = MULTI_SERVER.get(environment)
-            if not topology:
-                self._log(f"No multi-server topology defined for '{environment}'\n", "error")
-                self._set_status("Failed", "red")
-                return
-
-            proxy_env = ENVIRONMENTS[topology["proxy"]]
-            app_servers = topology["apps"]
-            compose_file = topology["compose_file"]
-            private_ips = topology["private_ips"]
-
-            self._set_status("Rolling deploy in progress...", "orange")
-
-            for i, app_key in enumerate(app_servers):
-                app_env = ENVIRONMENTS[app_key]
-                app_ip = private_ips[app_key]
-                self._log_header(f"[{i+1}/{len(app_servers)}] Deploying {app_env['label']} ({app_env['host']})")
-
-                # Step 1: Remove from proxy upstream
-                self._log("  → Removing from load balancer...\n", "info")
-                client = self._get_ssh_client(proxy_env)
-                # Comment out this server in nginx config
-                stdin, stdout, stderr = client.exec_command(
-                    f"sed -i 's/server {app_ip}:80;/# server {app_ip}:80; # draining/' "
-                    f"/etc/nginx/sites-available/dev.conf && nginx -s reload"
-                )
-                stdout.channel.recv_exit_status()
-                client.close()
-                self._log("  ✓ Removed from upstream\n", "success")
-
-                if not self.running:
-                    break
-
-                # Step 2: Force save all documents via DS command API
-                self._log("  → Force-saving open documents...\n", "info")
-                client = self._get_ssh_client(app_env)
-                stdin, stdout, stderr = client.exec_command(
-                    f"cd /opt/euro-office/repo/deploy && "
-                    f"docker compose -f {compose_file} exec -T documentserver "
-                    f"curl -s -X POST http://localhost:8000/coauthoring/CommandService.ashx "
-                    f"-H 'Content-Type: application/json' "
-                    f"-d '{{\"c\":\"forcesave\",\"key\":\"all\"}}' || true"
-                )
-                stdout.channel.recv_exit_status()
-                client.close()
-
-                # Brief wait for saves to flush
-                import time
-                time.sleep(3)
-                self._log("  ✓ Force save complete\n", "success")
-
-                if not self.running:
-                    break
-
-                # Step 3: Pull, rebuild, restart
-                self._log("  → Pulling and rebuilding...\n", "info")
-                client = self._get_ssh_client(app_env)
-                commands = [
-                    "cd /opt/euro-office/repo && git fetch && git checkout main && git pull",
-                    f"cd /opt/euro-office/repo/deploy && docker compose -f {compose_file} up -d --build",
-                    f"cd /opt/euro-office/repo/deploy && docker compose -f {compose_file} exec -T portal node dist/db/migrate.js",
-                ]
-                for cmd in commands:
-                    if not self.running:
-                        break
-                    stdin, stdout, stderr = client.exec_command(cmd, get_pty=True)
-                    for line in iter(stdout.readline, ""):
-                        if not self.running:
-                            break
-                        self._log_stream(line)
-                    exit_code = stdout.channel.recv_exit_status()
-                    if exit_code != 0:
-                        err = stderr.read().decode()
-                        self._log(f"  ✗ Command failed (code {exit_code}): {err}\n", "error")
-                        break
-                client.close()
-                self._log("  ✓ Rebuild complete\n", "success")
-
-                if not self.running:
-                    break
-
-                # Step 4: Health check
-                self._log("  → Waiting for health check (up to 120s)...\n", "info")
-                healthy = False
-                for attempt in range(60):
-                    self._log(f"     Poll {attempt}")
-                    time.sleep(2)
-                    try:
-                        client = self._get_ssh_client(app_env)
-                        stdin, stdout, stderr = client.exec_command(
-                            f"cd /opt/euro-office/repo/deploy && "
-                            f"docker compose -f {compose_file} exec -T documentserver "
-                            f"curl -sf http://localhost:80/healthcheck"
-                        )
-                        exit_code = stdout.channel.recv_exit_status()
-                        client.close()
-                        if exit_code == 0:
-                            healthy = True
-                            break
-                    except Exception:
-                        pass
-
-                if not healthy:
-                    self._log("  ✗ Health check failed after 120s!\n", "error")
-                    self._set_status("Deploy failed - health check", "red")
-                    return
-
-                self._log("  ✓ Health check passed\n", "success")
-
-                # Step 5: Add back to proxy upstream
-                self._log("  → Adding back to load balancer...\n", "info")
-                client = self._get_ssh_client(proxy_env)
-                stdin, stdout, stderr = client.exec_command(
-                    f"sed -i 's/# server {app_ip}:80; # draining/server {app_ip}:80;/' "
-                    f"/etc/nginx/sites-available/dev.conf && nginx -s reload"
-                )
-                stdout.channel.recv_exit_status()
-                client.close()
-                self._log("  ✓ Added back to upstream\n", "success")
-
-                self._log(f"\n  ✓ {app_env['label']} deployed successfully.\n\n", "success")
-
-            self._log("\n✓ Rolling deploy complete!\n", "success")
-            self._set_status("Done", "green")
-
-        except Exception as e:
-            self._log(f"\n✗ Error: {e}\n", "error")
-            self._set_status("Error", "red")
-        finally:
-            self._set_running(False)
-
 
     def _run_bluegreen_deploy(self, environment):
         """
@@ -933,104 +769,6 @@ class DeployHelper:
             self._set_status("Error", "red")
         finally:
             self._set_running(False)
-
-    def _run_quick_deploy(self, environment):
-        """Deploy to all app servers simultaneously. Brief disruption but fast."""
-        try:
-            topology = MULTI_SERVER.get(environment)
-            if not topology:
-                self._log(f"No multi-server topology defined for '{environment}'\n", "error")
-                self._set_status("Failed", "red")
-                return
-
-            app_servers = topology["apps"]
-            compose_file = topology["compose_file"]
-
-            self._set_status("Quick deploy in progress...", "orange")
-            self._log_header(f"Quick deploy to {environment} ({len(app_servers)} servers)")
-
-            # Step 1: Force-save on all servers
-            self._log("\n→ Force-saving all open documents...\n", "info")
-            for app_key in app_servers:
-                app_env = ENVIRONMENTS[app_key]
-                try:
-                    client = self._get_ssh_client(app_env)
-                    stdin, stdout, stderr = client.exec_command(
-                        f"cd /opt/euro-office/repo/deploy && "
-                        f"docker compose -f {compose_file} exec -T documentserver "
-                        f"curl -s -X POST http://localhost:8000/coauthoring/CommandService.ashx "
-                        f"-H 'Content-Type: application/json' "
-                        f"-d '{{\"c\":\"forcesave\",\"key\":\"all\"}}' || true"
-                    )
-                    stdout.channel.recv_exit_status()
-                    client.close()
-                    self._log(f"  ✓ {app_env['label']} saved\n", "success")
-                except Exception as e:
-                    self._log(f"  ⚠ {app_env['label']}: {e}\n", "error")
-
-            import time
-            time.sleep(3)
-
-            if not self.running:
-                return
-
-            # Step 2: Pull and rebuild on all servers
-            self._log("\n→ Pulling and rebuilding all servers...\n", "info")
-            for app_key in app_servers:
-                app_env = ENVIRONMENTS[app_key]
-                self._log(f"\n  [{app_env['label']}]\n", "info")
-                try:
-                    client = self._get_ssh_client(app_env)
-                    commands = [
-                        "cd /opt/euro-office/repo && git fetch && git checkout main && git pull",
-                        f"cd /opt/euro-office/repo/deploy && docker compose -f {compose_file} up -d --build",
-                    ]
-                    for cmd in commands:
-                        if not self.running:
-                            break
-                        self._log_cmd(cmd)
-                        stdin, stdout, stderr = client.exec_command(cmd, get_pty=True)
-                        for line in iter(stdout.readline, ""):
-                            if not self.running:
-                                break
-                            self._log_stream(line)
-                        exit_code = stdout.channel.recv_exit_status()
-                        if exit_code != 0:
-                            self._log(f"  ✗ Failed (code {exit_code})\n", "error")
-                            break
-
-                    client.close()
-                except Exception as e:
-                    self._log(f"  ✗ Error: {e}\n", "error")
-
-            if not self.running:
-                return
-
-            # Step 3: Run migrations on first server only
-            self._log("\n→ Running migrations...\n", "info")
-            first_app = ENVIRONMENTS[app_servers[0]]
-            try:
-                client = self._get_ssh_client(first_app)
-                cmd = f"cd /opt/euro-office/repo/deploy && docker compose -f {compose_file} exec -T portal node dist/db/migrate.js"
-                self._log_cmd(cmd)
-                stdin, stdout, stderr = client.exec_command(cmd, get_pty=True)
-                for line in iter(stdout.readline, ""):
-                    self._log_stream(line)
-                stdout.channel.recv_exit_status()
-                client.close()
-                self._log("  ✓ Migrations complete\n", "success")
-            except Exception as e:
-                self._log(f"  ✗ Migration error: {e}\n", "error")
-
-            self._log("\n✓ Quick deploy complete! Users will auto-reconnect.\n", "success")
-            self._set_status("Done", "green")
-
-        except Exception as e:
-            self._log(f"\n✗ Error: {e}\n", "error")
-            self._set_status("Error", "red")
-        finally:
-            self._set_running(False)
-
 
 def main():
     root = tk.Tk()
