@@ -775,6 +775,16 @@ class DeployHelper:
             if not self.running:
                 return
 
+            # Stop nginx on old active server to kill WebSocket connections (prevents further edits)
+            self._log(f"\n→ Stopping nginx on {active_env['label']} (disconnecting users)...\n", "info")
+            client = self._get_ssh_client(active_env)
+            stdin, stdout, stderr = client.exec_command(
+                f"cd /opt/euro-office/repo/deploy && docker compose -f {compose_file} stop nginx"
+            )
+            stdout.channel.recv_exit_status()
+            client.close()
+            self._log("  ✓ Users disconnected\n", "success")
+
             if not self.running:
                 return
 

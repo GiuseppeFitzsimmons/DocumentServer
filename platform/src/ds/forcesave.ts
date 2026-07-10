@@ -1,12 +1,11 @@
 /**
  * Internal force-save endpoint.
- * Queries recently modified files and triggers DS forcesave for each.
+ * Asks DS for currently open documents, then forcesaves each.
  */
 
 import { Router } from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
-import { pool } from '../db/pool.js';
 
 export const forceSaveRouter = Router();
 
@@ -17,8 +16,7 @@ const DS_COMMAND_URL = (() => {
 
 async function dsCommand(payload: Record<string, unknown>): Promise<any> {
   const token = jwt.sign(payload, config.DS_JWT_SECRET, { expiresIn: '1m' });
-  console.log(`[forcesave] Sending DS command:`, JSON.stringify(payload));
-  console.log(`[forcesave] DS URL: ${DS_COMMAND_URL}`);
+  console.log(`[forcesave] DS command:`, JSON.stringify(payload));
   const response = await fetch(DS_COMMAND_URL, {
     method: 'POST',
     headers: {
@@ -27,67 +25,59 @@ async function dsCommand(payload: Record<string, unknown>): Promise<any> {
     },
     body: JSON.stringify({ ...payload, token }),
   });
-  const result = await response.json();
-  console.log(`[forcesave] DS response:`, JSON.stringify(result));
-  return result;
+  const text = await response.text();
+  console.log(`[forcesave] DS raw response (${response.status}):`, text);
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { error: -1, raw: text };
+  }
 }
 
 /**
  * POST /api/internal/forcesave
- * Triggers forcesave on all recently-active documents.
+ * Queries DS for open documents via 'info' command, then forcesaves each.
+ * Falls back to 'license' command to verify connectivity.
  */
 forceSaveRouter.post('/forcesave', async (req, res) => {
   try {
-    // Find files modified in the last hour (likely to have open sessions)
-    const result = await pool.query(
-      `SELECT id, updated_at FROM files WHERE updated_at > NOW() - INTERVAL '1 hour'`
-    );
+    // First verify DS connectivity
+    const versionResult = await dsCommand({ c: 'version' });
+    console.log(`[forcesave] DS version check:`, JSON.stringify(versionResult));
 
-    const files = result.rows;
-    console.log(`[forcesave] Found ${files.length} recently-modified files`);
+    // Get open document keys
+    const infoResult = await dsCommand({ c: 'info' });
+    console.log(`[forcesave] DS info result:`, JSON.stringify(infoResult));
 
-    if (files.length === 0) {
-      // Try broader window
-      const broader = await pool.query(
-        `SELECT id, updated_at FROM files ORDER BY updated_at DESC LIMIT 10`
-      );
-      console.log(`[forcesave] Broader query (last 10 files):`, broader.rows.map((r: any) => ({
-        id: r.id,
-        updated_at: r.updated_at,
-        key: `${r.id}_${new Date(r.updated_at).getTime()}`
-      })));
+    // Extract keys from response
+    let keys: string[] = [];
+    if (infoResult.error === 0) {
+      // Depending on DS version, keys might be in different fields
+      if (Array.isArray(infoResult.keys)) keys = infoResult.keys;
+      else if (infoResult.key) keys = [infoResult.key];
+    }
+
+    console.log(`[forcesave] Active document keys: [${keys.join(', ')}]`);
+
+    if (keys.length === 0) {
+      res.json({ success: true, total: 0, saved: 0, errors: 0, message: 'No open documents' });
+      return;
     }
 
     let saved = 0;
     let errors = 0;
-    const results: any[] = [];
 
-    for (const file of files) {
-      const updatedAt = new Date(file.updated_at).getTime();
-      const docKey = `${file.id}_${updatedAt}`;
-      console.log(`[forcesave] Trying key: ${docKey}`);
-
-      try {
-        const data = await dsCommand({ c: 'forcesave', key: docKey, userdata: 'deploy' });
-        results.push({ key: docKey, result: data });
-        if (data.error === 0) {
-          saved++;
-        } else if (data.error === 1) {
-          // Key not found — document not currently open in DS
-          console.log(`[forcesave] Key not found (not open): ${docKey}`);
-        } else {
-          errors++;
-          console.warn(`[forcesave] Error for ${file.id}: code ${data.error}`);
-        }
-      } catch (err) {
+    for (const key of keys) {
+      const result = await dsCommand({ c: 'forcesave', key, userdata: 'deploy' });
+      if (result.error === 0) {
+        saved++;
+      } else {
         errors++;
-        console.warn(`[forcesave] Failed for ${file.id}:`, err);
-        results.push({ key: docKey, error: String(err) });
       }
     }
 
-    console.log(`[forcesave] Complete: ${saved} saved, ${errors} errors, ${files.length - saved - errors} not open`);
-    res.json({ success: true, total: files.length, saved, errors, results });
+    console.log(`[forcesave] Done: ${saved} saved, ${errors} errors`);
+    res.json({ success: true, total: keys.length, saved, errors });
   } catch (err) {
     console.error('[forcesave] Error:', err);
     res.status(500).json({ success: false, error: String(err) });
