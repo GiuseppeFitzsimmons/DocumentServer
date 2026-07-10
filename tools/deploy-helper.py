@@ -39,15 +39,25 @@ ENVIRONMENTS = {
         "user": "root",
         "label": "Dev DB",
     },
-    "prod": {
+    "prod-proxy": {
         "host": "188.245.126.65",
         "user": "root",
-        "label": "Prod Server",
+        "label": "Prod Proxy",
     },
-    "prod-proxy": {
+    "prod-app-a": {
+        "host": "138.201.244.235",
+        "user": "root",
+        "label": "Prod App A",
+    },
+    "prod-app-b": {
+        "host": "167.233.236.127",
+        "user": "root",
+        "label": "Prod App B",
+    },
+    "prod-db": {
         "host": "162.55.44.102",
         "user": "root",
-        "label": "Prod Proxy",
+        "label": "Prod DB",
     },
 }
 
@@ -63,6 +73,19 @@ MULTI_SERVER = {
         },
         "compose_file": "docker-compose.multi.yml",
         "nginx_upstream": "app_backends",
+        "nginx_conf": "/etc/nginx/sites-available/dev.conf",
+    },
+    "prod": {
+        "proxy": "prod-proxy",
+        "apps": ["prod-app-a", "prod-app-b"],
+        "db": "prod-db",
+        "private_ips": {
+            "prod-app-a": "10.0.0.11",
+            "prod-app-b": "10.0.0.12",
+        },
+        "compose_file": "docker-compose.multi.yml",
+        "nginx_upstream": "app_backends",
+        "nginx_conf": "/etc/nginx/sites-available/eurobureau.conf",
     },
 }
 
@@ -70,9 +93,14 @@ MULTI_SERVER = {
 # They run sequentially in a single SSH session.
 ACTIONS = {
     "Blue-Green Deploy (Dev)": {
-        "targets": ["dev-proxy", "dev-app-a", "dev-app-b", "dev-db", "prod", "prod-proxy"],
+        "targets": ["dev-proxy", "dev-app-a", "dev-app-b", "dev-db", "prod-proxy", "prod-app-a", "prod-app-b", "prod-db"],
         "special": "bluegreen_deploy",
         "environment": "dev",
+    },
+    "Blue-Green Deploy (Prod)": {
+        "targets": ["dev-proxy", "dev-app-a", "dev-app-b", "dev-db", "prod-proxy", "prod-app-a", "prod-app-b", "prod-db"],
+        "special": "bluegreen_deploy",
+        "environment": "prod",
     },
     "Update Fonts (Dev)": {
         "targets": ["dev-app-a", "dev-app-b"],
@@ -82,8 +110,16 @@ ACTIONS = {
             "cd /opt/euro-office/repo/deploy && docker compose -f docker-compose.multi.yml up -d documentserver",
         ],
     },
+    "Update Fonts (Prod)": {
+        "targets": ["prod-app-a", "prod-app-b"],
+        "commands": [
+            "cd /opt/euro-office/repo/fonts && git checkout main && git pull",
+            "cd /opt/euro-office/repo/deploy && docker compose -f docker-compose.multi.yml build --no-cache documentserver",
+            "cd /opt/euro-office/repo/deploy && docker compose -f docker-compose.multi.yml up -d documentserver",
+        ],
+    },
     "View Logs": {
-        "targets": ["dev-app-a", "dev-app-b", "prod"],
+        "targets": ["dev-app-a", "dev-app-b", "prod-app-a", "prod-app-b"],
         "special": "stream_logs",
         "command": "cd /opt/euro-office/repo/deploy && docker compose -f docker-compose.multi.yml logs portal -t --tail 100 -f",
     },
@@ -92,7 +128,7 @@ ACTIONS = {
         "special": "proxy_update",
     },
     "Database Shell": {
-        "targets": ["dev-db", "prod"],
+        "targets": ["dev-db", "prod-db"],
         "special": "db_shell",
     },
     "Build Web Apps": {
@@ -602,6 +638,7 @@ class DeployHelper:
             app_keys = topology["apps"]
             compose_file = topology["compose_file"]
             private_ips = topology["private_ips"]
+            nginx_conf = topology["nginx_conf"]
 
             self._set_status("Blue-green deploy in progress...", "orange")
             self._log_header(f"Blue-green deploy to {environment}")
@@ -609,8 +646,8 @@ class DeployHelper:
             # Determine which server is currently active by checking nginx config
             self._log("→ Detecting active server...\n", "info")
             client = self._get_ssh_client(proxy_env)
-            stdin, stdout, stderr = client.exec_command("cat /etc/nginx/sites-available/dev.conf")
-            nginx_conf = stdout.read().decode()
+            stdin, stdout, stderr = client.exec_command(f"cat {nginx_conf}")
+            nginx_content = stdout.read().decode()
             client.close()
 
             # Find which servers are NOT commented out
@@ -619,7 +656,7 @@ class DeployHelper:
             for app_key in app_keys:
                 ip = private_ips[app_key]
                 # If the line is commented, this server is idle
-                if f"# server {ip}" in nginx_conf:
+                if f"# server {ip}" in nginx_content:
                     idle_key = app_key
                 else:
                     active_key = app_key
@@ -635,7 +672,7 @@ class DeployHelper:
                 client = self._get_ssh_client(proxy_env)
                 stdin, stdout, stderr = client.exec_command(
                     f"sed -i 's|server {idle_ip_init}:80;|# server {idle_ip_init}:80; # draining|' "
-                    f"/etc/nginx/sites-available/dev.conf && nginx -s reload"
+                    f"{nginx_conf} && nginx -s reload"
                 )
                 stdout.channel.recv_exit_status()
                 client.close()
@@ -656,7 +693,7 @@ class DeployHelper:
             self._log(f"\n→ Upgrading idle server ({idle_env['label']})...\n", "info")
             client = self._get_ssh_client(idle_env)
             commands = [
-                "cd /opt/euro-office/repo && git fetch && git checkout main && git pull",
+                "cd /opt/euro-office/repo && git fetch && git checkout main && git pull && git submodule update --init fonts",
                 f"cd /opt/euro-office/repo/deploy && docker compose -f {compose_file} down && docker compose -f {compose_file} up -d --build",
                 f"cd /opt/euro-office/repo/deploy && docker compose -f {compose_file} exec -T portal node dist/db/migrate.js",
             ]
@@ -706,7 +743,23 @@ class DeployHelper:
             if not self.running:
                 return
 
-            # Step 3: Force-save on the active server
+            # Step 3: Flip proxy — cut traffic first (prevents new edits) — remove active, ensure idle is active
+            self._log(f"\n→ Flipping proxy: {active_env['label']} → {idle_env['label']}...\n", "info")
+            client = self._get_ssh_client(proxy_env)
+            # Ensure idle is uncommented and active is commented
+            flip_cmd = (
+                f"sed -i "
+                f"'s|server {idle_ip}:80;|server {idle_ip}:80;|; "
+                f"s|# server {idle_ip}:80; # draining|server {idle_ip}:80;|; "
+                f"s|server {active_ip}:80;|# server {active_ip}:80; # draining|' "
+                f"{nginx_conf} && nginx -s reload"
+            )
+            stdin, stdout, stderr = client.exec_command(flip_cmd)
+            stdout.channel.recv_exit_status()
+            client.close()
+            self._log(f"  ✓ Traffic now going to {idle_env['label']}\n", "success")
+
+            # Step 4: Force-save (now unreachable — no new edits possible)
             self._log(f"\n→ Force-saving documents on {active_env['label']}...\n", "info")
             client = self._get_ssh_client(active_env)
             stdin, stdout, stderr = client.exec_command(
@@ -721,22 +774,6 @@ class DeployHelper:
 
             if not self.running:
                 return
-
-            # Step 4: Flip proxy — remove active, ensure idle is active
-            self._log(f"\n→ Flipping proxy: {active_env['label']} → {idle_env['label']}...\n", "info")
-            client = self._get_ssh_client(proxy_env)
-            # Ensure idle is uncommented and active is commented
-            flip_cmd = (
-                f"sed -i "
-                f"'s|server {idle_ip}:80;|server {idle_ip}:80;|; "
-                f"s|# server {idle_ip}:80; # draining|server {idle_ip}:80;|; "
-                f"s|server {active_ip}:80;|# server {active_ip}:80; # draining|' "
-                f"/etc/nginx/sites-available/dev.conf && nginx -s reload"
-            )
-            stdin, stdout, stderr = client.exec_command(flip_cmd)
-            stdout.channel.recv_exit_status()
-            client.close()
-            self._log(f"  ✓ Traffic now going to {idle_env['label']}\n", "success")
 
             if not self.running:
                 return

@@ -1,0 +1,51 @@
+#cloud-config
+package_update: true
+packages:
+  - nginx
+  - certbot
+  - python3-certbot-nginx
+
+write_files:
+  - path: /etc/nginx/sites-available/eurobureau.conf
+    content: |
+      upstream app_backends {
+          ip_hash;
+          server ${app_a_ip}:80;
+          server ${app_b_ip}:80;
+      }
+
+      server {
+          listen 80;
+          server_name ${domain};
+
+          location / {
+              proxy_pass http://app_backends;
+              proxy_set_header Host $http_host;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-Proto $scheme;
+              proxy_http_version 1.1;
+              proxy_set_header Upgrade $http_upgrade;
+              proxy_set_header Connection "upgrade";
+              proxy_connect_timeout 5s;
+              proxy_read_timeout 60s;
+              client_max_body_size 10m;
+          }
+      }
+
+runcmd:
+  # Ensure private network interface is configured
+  - |
+    if ! grep -q "enp7s0" /etc/netplan/50-cloud-init.yaml 2>/dev/null; then
+      cat >> /etc/netplan/50-cloud-init.yaml <<EOF
+        enp7s0:
+          dhcp4: true
+    EOF
+      netplan apply
+    fi
+
+  - rm -f /etc/nginx/sites-enabled/default
+  - ln -sf /etc/nginx/sites-available/eurobureau.conf /etc/nginx/sites-enabled/eurobureau.conf
+  - nginx -t && systemctl reload nginx
+  # Certbot will fail if DNS isn't pointed yet — run manually after DNS update
+  - certbot --nginx -d ${domain} --non-interactive --agree-tos -m admin@eurobureau.eu || true

@@ -1,0 +1,37 @@
+#cloud-config
+package_update: true
+packages:
+  - postgresql-16
+  - postgresql-client-16
+  - redis-server
+
+runcmd:
+  # Fix Postgres cluster if needed
+  - pg_lsclusters | grep -q "down" && (pg_dropcluster 16 main --stop 2>/dev/null; rm -rf /etc/postgresql/16/main /var/lib/postgresql/16/main; pg_createcluster 16 main --start) || true
+  - systemctl start postgresql@16-main || true
+
+  # Configure Postgres for network access
+  - sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/16/main/postgresql.conf
+  - echo "host all all 10.0.0.0/24 md5" >> /etc/postgresql/16/main/pg_hba.conf
+  - systemctl restart postgresql@16-main
+
+  # Create user and database
+  - sudo -u postgres psql -c "CREATE USER portal WITH PASSWORD '${db_password}';" || true
+  - sudo -u postgres psql -c "CREATE DATABASE portal OWNER portal;" || true
+
+  # Configure Redis for network access
+  - sed -i 's/^bind 127.0.0.1.*/bind 0.0.0.0/' /etc/redis/redis.conf
+  - sed -i 's/^protected-mode yes/protected-mode no/' /etc/redis/redis.conf
+  - systemctl restart redis-server
+  - systemctl enable redis-server
+  - systemctl enable postgresql
+
+  # Ensure private network interface is configured
+  - |
+    if ! grep -q "enp7s0" /etc/netplan/50-cloud-init.yaml 2>/dev/null; then
+      cat >> /etc/netplan/50-cloud-init.yaml <<EOF
+        enp7s0:
+          dhcp4: true
+    EOF
+      netplan apply
+    fi

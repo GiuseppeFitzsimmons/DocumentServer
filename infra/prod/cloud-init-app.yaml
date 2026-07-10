@@ -6,15 +6,15 @@ packages:
   - git
 
 write_files:
-  - path: /opt/euro-office/deploy/.env
+  - path: /opt/euro-office/.env
     content: |
       JWT_SECRET=${jwt_secret}
       DB_PASSWORD=${db_password}
       SESSION_SECRET=${session_secret}
       DATABASE_URL=postgres://portal:${db_password}@${db_host}:5432/portal
       REDIS_URL=redis://${redis_host}:6379
-      DS_URL=https://${dev_domain}
-      PLATFORM_BASE_URL=https://${dev_domain}
+      DS_URL=https://${domain}
+      PLATFORM_BASE_URL=http://nginx:80
       STORAGE_BACKEND=s3
       OVH_S3_ENDPOINT=${s3_endpoint}
       OVH_S3_BUCKET=${s3_bucket}
@@ -27,9 +27,10 @@ write_files:
       SMTP_PASS=${smtp_pass}
       MAIL_DOMAIN=eurobureau.eu
       NODE_ENV=production
+      TRUST_PROXY=true
 
 runcmd:
-  # Install Docker from official repo (Ubuntu 24.04 doesn't have docker-compose-plugin in default repos)
+  # Install Docker from official repo
   - install -m 0755 -d /etc/apt/keyrings
   - curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
   - chmod a+r /etc/apt/keyrings/docker.asc
@@ -38,10 +39,22 @@ runcmd:
   - apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
   - systemctl enable docker
   - systemctl start docker
-  # Clone and deploy
+
+  # Ensure private network interface is configured
+  - |
+    if ! grep -q "enp7s0" /etc/netplan/50-cloud-init.yaml 2>/dev/null; then
+      cat >> /etc/netplan/50-cloud-init.yaml <<EOF
+        enp7s0:
+          dhcp4: true
+    EOF
+      netplan apply
+    fi
+
+  # Clone repo and deploy
   - mkdir -p /opt/euro-office
   - git clone ${repo_url} /opt/euro-office/repo
   - cd /opt/euro-office/repo && git submodule update --init fonts
-  - cp /opt/euro-office/deploy/.env /opt/euro-office/repo/deploy/.env
-  - cd /opt/euro-office/repo/deploy && docker compose -f docker-compose.multi.yml up -d --build
-  - cd /opt/euro-office/repo/deploy && docker compose -f docker-compose.multi.yml exec portal node dist/db/migrate.js
+  - ln -sf /opt/euro-office/.env /opt/euro-office/repo/deploy/.env
+  - cd /opt/euro-office/repo/deploy && docker compose -f docker-compose.multi.yml down 2>/dev/null; docker compose -f docker-compose.multi.yml up -d --build
+  - sleep 10
+  - cd /opt/euro-office/repo/deploy && docker compose -f docker-compose.multi.yml exec -T portal node dist/db/migrate.js || true
