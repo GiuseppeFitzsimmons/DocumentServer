@@ -14,7 +14,7 @@ import re
 from datetime import datetime
 
 # Regex to strip ANSI escape sequences
-ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b[^[\]](.|$)")
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b[()][A-Z0-9]|\x1b[#=<>]")
 
 # === Configuration ===
 
