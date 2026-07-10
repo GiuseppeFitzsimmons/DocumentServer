@@ -701,7 +701,7 @@ class DeployHelper:
                 if not self.running:
                     break
                 self._log_cmd(cmd)
-                stdin, stdout, stderr = client.exec_command(cmd, get_pty=True)
+                stdin, stdout, stderr = client.exec_command(cmd)
                 for line in iter(stdout.readline, ""):
                     if not self.running:
                         break
@@ -763,7 +763,7 @@ class DeployHelper:
             self._log(f"\n→ Force-saving documents on {active_env['label']}...\n", "info")
             client = self._get_ssh_client(active_env)
             stdin, stdout, stderr = client.exec_command(
-                "curl -s -X POST http://localhost:80/api/internal/forcesave"
+                "curl -s -X POST 'http://localhost:80/api/internal/forcesave?strategy=both&concurrency=10'"
             )
             result = stdout.read().decode()
             stdout.channel.recv_exit_status()
@@ -795,7 +795,7 @@ class DeployHelper:
                 if not self.running:
                     break
                 self._log_cmd(cmd)
-                stdin, stdout, stderr = client.exec_command(cmd, get_pty=True)
+                stdin, stdout, stderr = client.exec_command(cmd)
                 for line in iter(stdout.readline, ""):
                     if not self.running:
                         break

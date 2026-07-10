@@ -6,6 +6,7 @@ import * as storage from '../storage/s3.js';
 import * as metadata from '../storage/metadata.js';
 import * as versionRepo from '../versions/repository.js';
 import { getAccountUsage, ACCOUNT_QUOTA_BYTES } from '../storage/quota.js';
+import { markDocumentClosed } from './active-documents.js';
 import path from 'path';
 
 export const callbackRouter = Router();
@@ -150,6 +151,12 @@ callbackRouter.post('/', async (req, res) => {
 
     // Only process status 2 (document ready for saving) and status 6 (force save)
     if (payload.status !== 2 && payload.status !== 6) {
+      // Status 4 = document closed with no changes — clear active tracking
+      if (payload.status === 4) {
+        markDocumentClosed(fileId).catch((err) =>
+          console.error('[callback] Failed to mark document closed:', err)
+        );
+      }
       res.json({ error: 0 });
       return;
     }
@@ -253,6 +260,13 @@ callbackRouter.post('/', async (req, res) => {
 
     // Update metadata
     await metadata.updateFile(file.id, { sizeBytes: buffer.length });
+
+    // Status 2 = closed after saving — clear active tracking
+    if (payload.status === 2) {
+      markDocumentClosed(fileId).catch((err) =>
+        console.error('[callback] Failed to mark document closed:', err)
+      );
+    }
 
     res.json({ error: 0 });
   } catch (err) {
