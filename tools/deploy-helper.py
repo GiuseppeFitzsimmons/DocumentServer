@@ -743,7 +743,22 @@ class DeployHelper:
             if not self.running:
                 return
 
-            # Step 3: Flip proxy — cut traffic first (prevents new edits) — remove active, ensure idle is active
+            # Step 3: Force-save BEFORE flipping (callback URL still resolves to this server)
+            self._log(f"\n→ Force-saving documents on {active_env['label']} (pre-flip)...\n", "info")
+            client = self._get_ssh_client(active_env)
+            stdin, stdout, stderr = client.exec_command(
+                "curl -s -X POST 'http://localhost:80/api/internal/forcesave?strategy=both&concurrency=10'"
+            )
+            result = stdout.read().decode()
+            stdout.channel.recv_exit_status()
+            client.close()
+            self._log(f"  Response: {result}\n")
+            self._log("  ✓ Force save complete\n", "success")
+
+            if not self.running:
+                return
+
+            # Step 4: Flip proxy — now safe because all edits are persisted
             self._log(f"\n→ Flipping proxy: {active_env['label']} → {idle_env['label']}...\n", "info")
             client = self._get_ssh_client(proxy_env)
             # Ensure idle is uncommented and active is commented
@@ -759,19 +774,6 @@ class DeployHelper:
             client.close()
             self._log(f"  ✓ Traffic now going to {idle_env['label']}\n", "success")
 
-            # Step 4: Force-save (now unreachable — no new edits possible)
-            self._log(f"\n→ Force-saving documents on {active_env['label']}...\n", "info")
-            client = self._get_ssh_client(active_env)
-            stdin, stdout, stderr = client.exec_command(
-                "curl -s -X POST 'http://localhost:80/api/internal/forcesave?strategy=both&concurrency=10'"
-            )
-            result = stdout.read().decode()
-            stdout.channel.recv_exit_status()
-            client.close()
-            self._log(f"  Response: {result}\n")
-            time.sleep(3)
-            self._log("  ✓ Force save complete\n", "success")
-
             if not self.running:
                 return
 
@@ -784,6 +786,20 @@ class DeployHelper:
             stdout.channel.recv_exit_status()
             client.close()
             self._log("  ✓ Users disconnected\n", "success")
+
+            # Second forcesave — DS flushes when websockets disconnect, hit portal directly
+            self._log(f"\n→ Final force-save on {active_env['label']} (post-disconnect)...\n", "info")
+            client = self._get_ssh_client(active_env)
+            stdin, stdout, stderr = client.exec_command(
+                f"cd /opt/euro-office/repo/deploy && "
+                f"docker compose -f {compose_file} exec -T portal "
+                f"node -e \"fetch('http://localhost:3000/api/internal/forcesave?strategy=both&concurrency=10', {{method:'POST'}}).then(r=>r.json()).then(d=>console.log(JSON.stringify(d))).catch(e=>console.error(e))\""
+            )
+            result2 = stdout.read().decode()
+            stdout.channel.recv_exit_status()
+            client.close()
+            self._log(f"  Response: {result2}\n")
+            self._log("  ✓ Final force save complete\n", "success")
 
             if not self.running:
                 return

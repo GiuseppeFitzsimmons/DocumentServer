@@ -86,7 +86,7 @@ export function buildEditorConfig(params: EditorConfigParams): object {
     },
     editorConfig: {
       mode,
-      callbackUrl: `${platformBaseUrl}/api/ds/callback?fileId=${file.id}`,
+      callbackUrl: `http://portal:3000/api/ds/callback?fileId=${file.id}`,
       user: {
         id: user.id,
         name: user.name,

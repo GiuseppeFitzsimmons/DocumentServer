@@ -9,11 +9,16 @@
  * The forcesave command is idempotent — if a document isn't actually open in DS,
  * the command returns error 3 (no changes) or error 2 (unknown key), both harmless.
  * This means we can safely over-shoot and attempt all documents.
+ *
+ * IMPORTANT: DS's forcesave command is ASYNCHRONOUS. DS returns error:0 immediately
+ * but the actual callback (which persists the file to S3) happens separately.
+ * We must wait for callbacks to complete before returning success.
  */
 
 import { Router } from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
+import { pool } from '../db/pool.js';
 import { getDocumentsToForceSave, getActiveDocuments } from './active-documents.js';
 
 export const forceSaveRouter = Router();
@@ -44,12 +49,37 @@ async function dsCommand(payload: Record<string, unknown>): Promise<any> {
 }
 
 // DS forcesave error codes that are non-fatal:
-// 0 = success
 // 1 = document key missing/unknown (not open)
-// 2 = callback url couldn't be reached (transient)
 // 3 = no changes to save
-// 4 = command error (generic)
 const NON_FATAL_ERRORS = new Set([1, 3]);
+
+/**
+ * Wait for a file's updated_at to change from its current value.
+ * This confirms the callback actually completed and persisted to DB.
+ */
+async function waitForSaveConfirmation(
+  fileId: string,
+  previousUpdatedAt: Date,
+  timeoutMs: number = 15000
+): Promise<boolean> {
+  const start = Date.now();
+  const pollInterval = 500;
+
+  while (Date.now() - start < timeoutMs) {
+    const { rows } = await pool.query(
+      'SELECT updated_at FROM files WHERE id = $1',
+      [fileId]
+    );
+    if (rows.length > 0) {
+      const currentUpdatedAt = new Date(rows[0].updated_at);
+      if (currentUpdatedAt.getTime() > previousUpdatedAt.getTime()) {
+        return true; // Callback completed, file was saved
+      }
+    }
+    await new Promise(resolve => setTimeout(resolve, pollInterval));
+  }
+  return false; // Timed out
+}
 
 /**
  * POST /api/internal/forcesave
@@ -60,6 +90,7 @@ const NON_FATAL_ERRORS = new Set([1, 3]);
  *     - all: force-save every document in the DB (safe but slower)
  *     - both: merge both sources (recommended for blue-green deploys)
  *   concurrency = number (default: 5) - how many forcesaves to run in parallel
+ *   wait = 'true' | 'false' (default: 'true') - wait for callbacks to complete
  */
 forceSaveRouter.post('/forcesave', async (req, res) => {
   try {
@@ -69,8 +100,9 @@ forceSaveRouter.post('/forcesave', async (req, res) => {
 
     const strategy = (req.query.strategy as 'tracked' | 'all' | 'both') || 'both';
     const concurrency = Math.min(Math.max(Number(req.query.concurrency) || 5, 1), 20);
+    const shouldWait = req.query.wait !== 'false';
 
-    console.log(`[forcesave] Strategy: ${strategy}, concurrency: ${concurrency}`);
+    console.log(`[forcesave] Strategy: ${strategy}, concurrency: ${concurrency}, wait: ${shouldWait}`);
 
     // Get document keys to forcesave
     const documents = await getDocumentsToForceSave(strategy);
@@ -89,10 +121,25 @@ forceSaveRouter.post('/forcesave', async (req, res) => {
       return;
     }
 
+    // Snapshot current updated_at values for documents we'll attempt to save
+    const timestamps = new Map<string, Date>();
+    if (shouldWait) {
+      const { rows } = await pool.query(
+        'SELECT id, updated_at FROM files WHERE id = ANY($1)',
+        [documents.map(d => d.fileId)]
+      );
+      for (const row of rows) {
+        timestamps.set(row.id as string, new Date(row.updated_at));
+      }
+    }
+
     let saved = 0;
     let skipped = 0;
     let errors = 0;
-    const errorDetails: Array<{ fileId: string; key: string; error: number }> = [];
+    let confirmed = 0;
+    let unconfirmed = 0;
+    const errorDetails: Array<{ fileId: string; key: string; error: number; detail?: string }> = [];
+    const pendingConfirmations: Array<{ fileId: string; previousUpdatedAt: Date }> = [];
 
     // Process in batches for controlled concurrency
     for (let i = 0; i < documents.length; i += concurrency) {
@@ -108,7 +155,6 @@ forceSaveRouter.post('/forcesave', async (req, res) => {
           if (result.error === 0) {
             return { status: 'saved' as const, fileId, key: documentKey };
           } else if (NON_FATAL_ERRORS.has(result.error)) {
-            // Document not open or no changes — this is expected
             return { status: 'skipped' as const, fileId, key: documentKey };
           } else {
             return { status: 'error' as const, fileId, key: documentKey, error: result.error };
@@ -119,9 +165,17 @@ forceSaveRouter.post('/forcesave', async (req, res) => {
       for (const result of results) {
         if (result.status === 'fulfilled') {
           const val = result.value;
-          if (val.status === 'saved') saved++;
-          else if (val.status === 'skipped') skipped++;
-          else {
+          if (val.status === 'saved') {
+            saved++;
+            if (shouldWait) {
+              const prevTs = timestamps.get(val.fileId);
+              if (prevTs) {
+                pendingConfirmations.push({ fileId: val.fileId, previousUpdatedAt: prevTs });
+              }
+            }
+          } else if (val.status === 'skipped') {
+            skipped++;
+          } else {
             errors++;
             errorDetails.push({ fileId: val.fileId, key: val.key, error: val.error });
           }
@@ -131,15 +185,49 @@ forceSaveRouter.post('/forcesave', async (req, res) => {
       }
     }
 
+    // Wait for callbacks to actually complete (file persisted to S3 + DB updated)
+    if (shouldWait && pendingConfirmations.length > 0) {
+      console.log(`[forcesave] Waiting for ${pendingConfirmations.length} callback(s) to complete...`);
+
+      const confirmResults = await Promise.allSettled(
+        pendingConfirmations.map(async ({ fileId, previousUpdatedAt }) => {
+          const ok = await waitForSaveConfirmation(fileId, previousUpdatedAt);
+          return { fileId, ok };
+        })
+      );
+
+      for (const result of confirmResults) {
+        if (result.status === 'fulfilled') {
+          if (result.value.ok) {
+            confirmed++;
+          } else {
+            unconfirmed++;
+            errorDetails.push({
+              fileId: result.value.fileId,
+              key: '',
+              error: -2,
+              detail: 'Forcesave command accepted but callback did not complete within timeout',
+            });
+          }
+        } else {
+          unconfirmed++;
+        }
+      }
+
+      console.log(`[forcesave] Confirmations: ${confirmed} confirmed, ${unconfirmed} unconfirmed`);
+    }
+
     console.log(
       `[forcesave] Done: ${saved} saved, ${skipped} skipped (not open/no changes), ${errors} errors`
     );
 
     res.json({
-      success: errors === 0,
+      success: errors === 0 && unconfirmed === 0,
       strategy,
       total: documents.length,
       saved,
+      confirmed,
+      unconfirmed,
       skipped,
       errors,
       ...(errorDetails.length > 0 ? { errorDetails } : {}),
