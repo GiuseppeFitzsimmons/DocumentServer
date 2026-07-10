@@ -788,18 +788,18 @@ class DeployHelper:
             self._log("  ✓ Users disconnected\n", "success")
 
             # Second forcesave — DS flushes when websockets disconnect, hit portal directly
-            self._log(f"\n→ Final force-save on {active_env['label']} (post-disconnect)...\n", "info")
-            client = self._get_ssh_client(active_env)
-            stdin, stdout, stderr = client.exec_command(
-                f"cd /opt/euro-office/repo/deploy && "
-                f"docker compose -f {compose_file} exec -T portal "
-                f"node -e \"fetch('http://localhost:3000/api/internal/forcesave?strategy=both&concurrency=10', {{method:'POST'}}).then(r=>r.json()).then(d=>console.log(JSON.stringify(d))).catch(e=>console.error(e))\""
-            )
-            result2 = stdout.read().decode()
-            stdout.channel.recv_exit_status()
-            client.close()
-            self._log(f"  Response: {result2}\n")
-            self._log("  ✓ Final force save complete\n", "success")
+            # self._log(f"\n→ Final force-save on {active_env['label']} (post-disconnect)...\n", "info")
+            # client = self._get_ssh_client(active_env)
+            # stdin, stdout, stderr = client.exec_command(
+            #     f"cd /opt/euro-office/repo/deploy && "
+            #     f"docker compose -f {compose_file} exec -T portal "
+            #     f"node -e \"fetch('http://localhost:3000/api/internal/forcesave?strategy=both&concurrency=10', {{method:'POST'}}).then(r=>r.json()).then(d=>console.log(JSON.stringify(d))).catch(e=>console.error(e))\""
+            # )
+            # result2 = stdout.read().decode()
+            # stdout.channel.recv_exit_status()
+            # client.close()
+            # self._log(f"  Response: {result2}\n")
+            # self._log("  ✓ Final force save complete\n", "success")
 
             if not self.running:
                 return
