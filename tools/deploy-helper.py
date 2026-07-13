@@ -159,7 +159,7 @@ class DeployHelper:
         top_frame.pack(fill=tk.X)
 
         ttk.Label(top_frame, text="Environment:").pack(side=tk.LEFT, padx=(0, 5))
-        self.env_var = tk.StringVar(value="dev")
+        self.env_var = tk.StringVar(value="dev-proxy")
         env_menu = ttk.Combobox(
             top_frame,
             textvariable=self.env_var,
