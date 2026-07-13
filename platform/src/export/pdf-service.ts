@@ -70,6 +70,7 @@ export async function convertDocxToPdf(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
     body: JSON.stringify({ ...payload, token }),
@@ -81,7 +82,16 @@ export async function convertDocxToPdf(
   try {
     result = JSON.parse(text);
   } catch {
-    throw new PdfConvertError(-1, `ConvertService returned non-JSON: ${text.slice(0, 200)}`);
+    // DS may return XML — parse FileUrl from it
+    const urlMatch = text.match(/<FileUrl>(.*?)<\/FileUrl>/);
+    const errMatch = text.match(/<Error>(.*?)<\/Error>/);
+    if (errMatch) {
+      throw new PdfConvertError(parseInt(errMatch[1]) || -1, `ConvertService error: ${errMatch[1]}`);
+    }
+    if (urlMatch) {
+      return { pdfUrl: urlMatch[1] };
+    }
+    throw new PdfConvertError(-1, `ConvertService returned unexpected response: ${text.slice(0, 300)}`);
   }
 
   if (result.error) {
