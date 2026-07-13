@@ -7,12 +7,7 @@ COPY src ./src
 RUN npm run build
 
 FROM node:22-alpine
-RUN apk add --no-cache \
-    pandoc \
-    texlive-xetex \
-    texmf-dist-latexextra \
-    texmf-dist-fontsextra \
-    fontconfig
+RUN apk add --no-cache pandoc
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev
@@ -21,8 +16,6 @@ COPY src/views ./dist/views
 COPY src/db/migrations ./dist/db/migrations
 COPY public ./public
 COPY config ./config
-# fontconfig conf so xelatex finds custom fonts at runtime
-RUN printf '<?xml version="1.0"?>\n<!DOCTYPE fontconfig SYSTEM "fonts.dtd">\n<fontconfig>\n  <dir>/data/fonts</dir>\n  <dir>/data/core-fonts</dir>\n</fontconfig>\n' > /etc/fonts/local.conf
 ENV NODE_ENV=production
 EXPOSE 3000
 CMD ["node", "dist/index.js"]

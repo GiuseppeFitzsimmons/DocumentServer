@@ -10,7 +10,7 @@ import * as metadata from '../storage/metadata.js';
 import * as storage from '../storage/s3.js';
 import { getShare } from '../sharing/service.js';
 import { convertDocxToEpub, PandocError, PandocTimeoutError } from './service.js';
-import { convertDocxToPdf, PandocPdfError } from './pdf-service.js';
+import { convertAndDownloadPdf, PdfConvertError } from './pdf-service.js';
 import { extractHeadings } from './heading-extractor.js';
 
 const DOCX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -221,7 +221,7 @@ exportRouter.get('/:id/export/epub', async (req, res) => {
   }
 });
 
-// GET /api/files/:id/export/pdf — export docx to PDF via pandoc+xelatex
+// GET /api/files/:id/export/pdf — export docx to PDF via DS ConvertService (print mode)
 exportRouter.get('/:id/export/pdf', async (req, res) => {
   let cleanup: (() => Promise<void>) | undefined;
 
@@ -248,22 +248,17 @@ exportRouter.get('/:id/export/pdf', async (req, res) => {
       }
     }
 
-    const inputStream = await storage.download(file.s3Key);
-    const title = file.name.replace(/\.docx$/i, '');
-    const includeToc = req.query.toc === '1';
-    const convertSectionBreaks = req.query.sections === '1';
-    const removeSoftReturns = req.query.softreturns === '0';
-    const pageSize = req.query.pagesize as string | undefined;
-    const margin = req.query.margin as string | undefined;
+    // Build a serve URL that DS can use to download the file
+    const jwt = await import('jsonwebtoken');
+    const serveToken = jwt.default.sign(
+      { fileId: file.id },
+      (await import('../config.js')).config.DS_JWT_SECRET,
+      { expiresIn: '5m' }
+    );
+    const fileUrl = `http://portal:3000/api/files/serve/${serveToken}`;
+    const documentKey = `${file.id}_${file.updatedAt.getTime()}`;
 
-    const result = await convertDocxToPdf(inputStream, {
-      title,
-      includeToc,
-      convertSectionBreaks,
-      removeSoftReturns,
-      pageSize,
-      margin,
-    });
+    const result = await convertAndDownloadPdf(fileUrl, documentKey);
     cleanup = result.cleanup;
 
     const pdfName = file.name.replace(/\.docx$/i, '.pdf');
@@ -286,8 +281,8 @@ exportRouter.get('/:id/export/pdf', async (req, res) => {
       res.on('close', resolve);
     });
   } catch (err) {
-    if (err instanceof PandocPdfError) {
-      console.error('PDF export error:', err.stderr);
+    if (err instanceof PdfConvertError) {
+      console.error('PDF export error:', err.message);
       if (!res.headersSent) {
         res.status(500).json({ error: 'PDF conversion failed', detail: err.message });
       }
