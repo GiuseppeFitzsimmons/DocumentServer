@@ -68,8 +68,10 @@ function buildFilteredAllFonts(source: string, allowedFonts: Set<string>): strin
   return filtered;
 }
 
-// Pre-built filtered response (rebuilt on preference save)
-let currentFilteredResponse: string | null = null;
+// Per-user filtered response cache (keyed by userId)
+const userFilteredCache = new Map<string, string>();
+// Default fonts response (for unauthenticated/sessionless requests)
+let defaultFilteredResponse: string | null = null;
 
 // --- Public API endpoints ---
 
@@ -106,8 +108,9 @@ fontsRouter.post('/preferences', requireAuth, async (req, res) => {
     // Rebuild the filtered AllFonts.js immediately
     const upstream = await fetchUpstreamAllFonts();
     const fontsToServe = parsed.data.fonts.length > 0 ? parsed.data.fonts : DEFAULT_FONTS;
-    currentFilteredResponse = buildFilteredAllFonts(upstream, new Set(fontsToServe));
-    console.log(`[fonts] Rebuilt AllFonts.js with ${fontsToServe.length} fonts after preference save`);
+    const filtered = buildFilteredAllFonts(upstream, new Set(fontsToServe));
+    userFilteredCache.set(userId, filtered);
+    console.log(`[fonts] Rebuilt AllFonts.js for user ${userId} with ${fontsToServe.length} fonts`);
 
     res.json({ success: true, count: parsed.data.fonts.length });
   } catch (err) {
@@ -119,21 +122,36 @@ fontsRouter.post('/preferences', requireAuth, async (req, res) => {
 // GET /api/fonts/AllFonts.js — filtered font manifest (per-user)
 fontsRouter.get('/AllFonts.js', async (req, res) => {
   try {
-    if (!currentFilteredResponse) {
-      const userId = req.session?.userId;
-      let fontList: string[] = DEFAULT_FONTS;
-      if (userId) {
-        const userFonts = await getUserFonts(userId);
-        if (userFonts.length > 0) fontList = userFonts;
+    const userId = req.session?.userId;
+    let fontList: string[] = DEFAULT_FONTS;
+
+    if (userId) {
+      // Check per-user cache
+      const cached = userFilteredCache.get(userId);
+      if (cached) {
+        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store');
+        res.send(cached);
+        return;
       }
-      const upstream = await fetchUpstreamAllFonts();
-      currentFilteredResponse = buildFilteredAllFonts(upstream, new Set(fontList));
-      console.log(`[fonts] Built initial AllFonts.js with ${fontList.length} fonts`);
+
+      const userFonts = await getUserFonts(userId);
+      if (userFonts.length > 0) fontList = userFonts;
+    }
+
+    const upstream = await fetchUpstreamAllFonts();
+    const filtered = buildFilteredAllFonts(upstream, new Set(fontList));
+
+    // Cache per-user, or cache the default
+    if (userId) {
+      userFilteredCache.set(userId, filtered);
+    } else {
+      defaultFilteredResponse = filtered;
     }
 
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
-    res.send(currentFilteredResponse);
+    res.send(filtered);
   } catch (err) {
     console.error('[fonts] AllFonts.js proxy error:', err);
     res.status(502).send('// AllFonts.js proxy error');
@@ -143,6 +161,7 @@ fontsRouter.get('/AllFonts.js', async (req, res) => {
 // POST /api/fonts/invalidate-cache
 fontsRouter.post('/invalidate-cache', requireAuth, (_req, res) => {
   cachedUpstream = null;
-  currentFilteredResponse = null;
+  userFilteredCache.clear();
+  defaultFilteredResponse = null;
   res.json({ success: true });
 });
