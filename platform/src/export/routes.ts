@@ -264,7 +264,7 @@ exportRouter.get('/:id/export/pdf', async (req, res) => {
     const pdfName = file.name.replace(/\.docx$/i, '.pdf');
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(pdfName)}"`');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(pdfName)}"`);
     const outputStream = createReadStream(result.outputPath);
     outputStream.pipe(res);
 
