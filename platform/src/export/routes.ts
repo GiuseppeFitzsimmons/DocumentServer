@@ -10,6 +10,7 @@ import * as metadata from '../storage/metadata.js';
 import * as storage from '../storage/s3.js';
 import { getShare } from '../sharing/service.js';
 import { convertDocxToEpub, PandocError, PandocTimeoutError } from './service.js';
+import { convertDocxToPdf, PandocPdfError } from './pdf-service.js';
 import { extractHeadings } from './heading-extractor.js';
 
 const DOCX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -209,6 +210,89 @@ exportRouter.get('/:id/export/epub', async (req, res) => {
       }
     } else {
       console.error('EPUB export error:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Storage error' });
+      }
+    }
+  } finally {
+    if (cleanup) {
+      await cleanup();
+    }
+  }
+});
+
+// GET /api/files/:id/export/pdf — export docx to PDF via pandoc+xelatex
+exportRouter.get('/:id/export/pdf', async (req, res) => {
+  let cleanup: (() => Promise<void>) | undefined;
+
+  try {
+    const userId = req.session.userId!;
+    const file = await metadata.getFile(req.params.id);
+
+    if (!file) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+
+    if (file.mimeType !== DOCX_MIME_TYPE) {
+      res.status(400).json({ error: 'Only .docx files can be exported to PDF' });
+      return;
+    }
+
+    // Authorization: owner or shared with download permission
+    if (file.userId !== userId) {
+      const share = await getShare(file.id, userId);
+      if (!share || !share.permissions.download) {
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+      }
+    }
+
+    const inputStream = await storage.download(file.s3Key);
+    const title = file.name.replace(/\.docx$/i, '');
+    const includeToc = req.query.toc === '1';
+    const convertSectionBreaks = req.query.sections === '1';
+    const removeSoftReturns = req.query.softreturns === '0';
+    const pageSize = req.query.pagesize as string | undefined;
+    const margin = req.query.margin as string | undefined;
+
+    const result = await convertDocxToPdf(inputStream, {
+      title,
+      includeToc,
+      convertSectionBreaks,
+      removeSoftReturns,
+      pageSize,
+      margin,
+    });
+    cleanup = result.cleanup;
+
+    const pdfName = file.name.replace(/\.docx$/i, '.pdf');
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(pdfName)}"`);
+
+    const outputStream = createReadStream(result.outputPath);
+    outputStream.pipe(res);
+
+    outputStream.on('error', (err) => {
+      console.error('PDF stream error:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Storage error' });
+      }
+    });
+
+    await new Promise<void>((resolve) => {
+      res.on('finish', resolve);
+      res.on('close', resolve);
+    });
+  } catch (err) {
+    if (err instanceof PandocPdfError) {
+      console.error('PDF export error:', err.stderr);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'PDF conversion failed', detail: err.message });
+      }
+    } else {
+      console.error('PDF export error:', err);
       if (!res.headersSent) {
         res.status(500).json({ error: 'Storage error' });
       }
