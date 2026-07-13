@@ -9,3 +9,4 @@ platform/node_modules
 /scripts/dev/
 tools/.venv
 *.sql
+/deploy/scripts/*.env

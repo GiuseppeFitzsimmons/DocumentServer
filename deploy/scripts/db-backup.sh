@@ -1,34 +1,40 @@
 #!/bin/bash
 # Nightly PostgreSQL backup to S3
-# Installs as a cron job. Requires: aws-cli (or s3cmd), docker.
+# Runs directly on the DB server (no Docker dependency).
 #
-# Usage: ./db-backup.sh
-# Cron:  0 3 * * * /opt/euro-office/repo/deploy/scripts/db-backup.sh >> /var/log/db-backup.log 2>&1
+# Usage: ./db-backup.sh [dev|prod]
+# Cron:  0 3 * * * /opt/euro-office/scripts/db-backup.sh >> /var/log/db-backup.log 2>&1
+#
+# Requires: aws-cli, postgresql-client
+# Install: apt install awscli postgresql-client-16
 
 set -e
 
+ENV="${1:-prod}"
 TIMESTAMP=$(date +%Y-%m-%d_%H%M%S)
-BACKUP_FILE="/tmp/eurobureau-db-backup-${TIMESTAMP}.sql.gz"
-S3_PATH="s3://${OVH_S3_BUCKET:-euro-office-replica}/backups/db/${TIMESTAMP}.sql.gz"
+BACKUP_FILE="/tmp/eurobureau-${ENV}-db-backup-${TIMESTAMP}.sql.gz"
 
-# Source env vars if running from cron
-if [ -f /opt/euro-office/repo/deploy/.env ]; then
+# Source env vars (placed on DB server during provisioning)
+ENV_FILE="/opt/euro-office/db-backup.env"
+if [ -f "$ENV_FILE" ]; then
     set -a
-    source /opt/euro-office/repo/deploy/.env
+    source "$ENV_FILE"
     set +a
+else
+    echo "[$(date)] ERROR: $ENV_FILE not found. Create it with S3 credentials."
+    exit 1
 fi
 
-echo "[$(date)] Starting database backup..."
+S3_PREFIX="backups/${ENV}/db"
+S3_PATH="s3://${OVH_S3_BUCKET}/${S3_PREFIX}/${TIMESTAMP}.sql.gz"
 
-# Dump from Docker postgres container
-docker compose -f /opt/euro-office/repo/deploy/docker-compose.yml exec -T postgres \
-    pg_dump -U portal portal | gzip > "$BACKUP_FILE"
+echo "[$(date)] Starting ${ENV} database backup..."
 
-# For multi-server (external DB), use direct connection:
-# PGPASSWORD="$DB_PASSWORD" pg_dump -h 10.0.1.10 -U portal portal | gzip > "$BACKUP_FILE"
+# Dump directly (running on the DB server itself)
+sudo -u postgres pg_dump portal | gzip > "$BACKUP_FILE"
 
 FILESIZE=$(stat --printf="%s" "$BACKUP_FILE")
-echo "[$(date)] Dump complete: ${FILESIZE} bytes"
+echo "[$(date)] Dump complete: ${FILESIZE} bytes ($(numfmt --to=iec $FILESIZE))"
 
 # Upload to S3
 if [ -n "$OVH_S3_ENDPOINT" ] && [ -n "$OVH_S3_ACCESS_KEY" ]; then
@@ -39,31 +45,33 @@ if [ -n "$OVH_S3_ENDPOINT" ] && [ -n "$OVH_S3_ACCESS_KEY" ]; then
         --region "${OVH_S3_REGION:-eu-west-par}"
     echo "[$(date)] Uploaded to $S3_PATH"
 else
-    echo "[$(date)] WARNING: S3 credentials not configured, backup kept locally only"
+    echo "[$(date)] ERROR: S3 credentials not configured"
+    rm -f "$BACKUP_FILE"
+    exit 1
 fi
 
 # Clean up local file
 rm -f "$BACKUP_FILE"
 
 # Delete backups older than 30 days from S3
-if [ -n "$OVH_S3_ENDPOINT" ] && [ -n "$OVH_S3_ACCESS_KEY" ]; then
-    CUTOFF=$(date -d '30 days ago' +%Y-%m-%d 2>/dev/null || date -v-30d +%Y-%m-%d)
-    AWS_ACCESS_KEY_ID="$OVH_S3_ACCESS_KEY" \
-    AWS_SECRET_ACCESS_KEY="$OVH_S3_SECRET_KEY" \
-    aws s3 ls "s3://${OVH_S3_BUCKET}/backups/db/" \
-        --endpoint-url "$OVH_S3_ENDPOINT" \
-        --region "${OVH_S3_REGION:-eu-west-par}" | while read -r line; do
-        FILE_DATE=$(echo "$line" | awk '{print $1}')
-        FILE_NAME=$(echo "$line" | awk '{print $4}')
-        if [[ "$FILE_DATE" < "$CUTOFF" ]] && [ -n "$FILE_NAME" ]; then
-            AWS_ACCESS_KEY_ID="$OVH_S3_ACCESS_KEY" \
-            AWS_SECRET_ACCESS_KEY="$OVH_S3_SECRET_KEY" \
-            aws s3 rm "s3://${OVH_S3_BUCKET}/backups/db/$FILE_NAME" \
-                --endpoint-url "$OVH_S3_ENDPOINT" \
-                --region "${OVH_S3_REGION:-eu-west-par}"
-            echo "[$(date)] Deleted old backup: $FILE_NAME"
-        fi
-    done
-fi
+CUTOFF=$(date -d '30 days ago' +%Y-%m-%d)
+echo "[$(date)] Pruning backups older than $CUTOFF..."
+
+AWS_ACCESS_KEY_ID="$OVH_S3_ACCESS_KEY" \
+AWS_SECRET_ACCESS_KEY="$OVH_S3_SECRET_KEY" \
+aws s3 ls "s3://${OVH_S3_BUCKET}/${S3_PREFIX}/" \
+    --endpoint-url "$OVH_S3_ENDPOINT" \
+    --region "${OVH_S3_REGION:-eu-west-par}" 2>/dev/null | while read -r line; do
+    FILE_DATE=$(echo "$line" | awk '{print $1}')
+    FILE_NAME=$(echo "$line" | awk '{print $4}')
+    if [[ -n "$FILE_NAME" && "$FILE_DATE" < "$CUTOFF" ]]; then
+        AWS_ACCESS_KEY_ID="$OVH_S3_ACCESS_KEY" \
+        AWS_SECRET_ACCESS_KEY="$OVH_S3_SECRET_KEY" \
+        aws s3 rm "s3://${OVH_S3_BUCKET}/${S3_PREFIX}/$FILE_NAME" \
+            --endpoint-url "$OVH_S3_ENDPOINT" \
+            --region "${OVH_S3_REGION:-eu-west-par}"
+        echo "[$(date)] Deleted old backup: $FILE_NAME"
+    fi
+done
 
 echo "[$(date)] Backup complete."
