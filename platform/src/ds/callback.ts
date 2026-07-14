@@ -7,6 +7,7 @@ import * as metadata from '../storage/metadata.js';
 import * as versionRepo from '../versions/repository.js';
 import { getAccountUsage, ACCOUNT_QUOTA_BYTES } from '../storage/quota.js';
 import { markDocumentClosed } from './active-documents.js';
+import { notifySaveComplete } from './save-events.js';
 import path from 'path';
 
 export const callbackRouter = Router();
@@ -260,6 +261,9 @@ callbackRouter.post('/', async (req, res) => {
 
     // Update metadata
     await metadata.updateFile(file.id, { sizeBytes: buffer.length });
+
+    // Notify any waiting export routes that this file is persisted
+    notifySaveComplete(fileId);
 
     // Status 2 = closed after saving — clear active tracking
     if (payload.status === 2) {

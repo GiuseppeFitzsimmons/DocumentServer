@@ -12,6 +12,7 @@ import { getShare } from '../sharing/service.js';
 import { convertDocxToEpub, PandocError, PandocTimeoutError } from './service.js';
 import { convertAndDownloadPdf, PdfConvertError } from './pdf-service.js';
 import { extractHeadings } from './heading-extractor.js';
+import { waitForSave } from '../ds/save-events.js';
 
 const DOCX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
@@ -175,12 +176,17 @@ exportRouter.get('/:id/export/epub', async (req, res) => {
     const fsPayload = { c: 'forcesave', key: documentKey, userdata: 'epub-export' };
     const fsToken = jwtLib.default.sign(fsPayload, config.DS_JWT_SECRET, { expiresIn: '1m' });
     try {
-      await fetch(dsCommandUrl, {
+      const fsResponse = await fetch(dsCommandUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${fsToken}` },
         body: JSON.stringify({ ...fsPayload, token: fsToken }),
       });
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const fsResult = await fsResponse.json();
+      // error 0 = forcesave accepted, wait for callback to persist to S3
+      if (fsResult.error === 0) {
+        await waitForSave(file.id);
+      }
+      // error 1/3 = no changes or doc not open, S3 already current
     } catch (err) {
       console.warn('[epub-export] Forcesave before export failed (non-fatal):', err);
     }
@@ -280,13 +286,15 @@ exportRouter.get('/:id/export/pdf', async (req, res) => {
     const fsPayload = { c: 'forcesave', key: documentKey, userdata: 'pdf-export' };
     const fsToken = jwtLib.default.sign(fsPayload, config.DS_JWT_SECRET, { expiresIn: '1m' });
     try {
-      await fetch(dsCommandUrl, {
+      const fsResponse = await fetch(dsCommandUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${fsToken}` },
         body: JSON.stringify({ ...fsPayload, token: fsToken }),
       });
-      // Brief wait for the callback to persist to S3
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const fsResult = await fsResponse.json();
+      if (fsResult.error === 0) {
+        await waitForSave(file.id);
+      }
     } catch (err) {
       console.warn('[pdf-export] Forcesave before export failed (non-fatal):', err);
     }
