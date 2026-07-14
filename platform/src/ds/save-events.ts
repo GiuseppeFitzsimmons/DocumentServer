@@ -19,6 +19,7 @@ emitter.setMaxListeners(200);
  * Called by the DS callback handler after upload completes.
  */
 export function notifySaveComplete(fileId: string): void {
+  console.log(`[save-events] Emitting save complete for file=${fileId}`);
   emitter.emit(`saved:${fileId}`);
 }
 

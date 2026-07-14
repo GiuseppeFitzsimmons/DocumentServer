@@ -28,7 +28,10 @@ const DS_COMMAND_URL = config.DS_INTERNAL_URL
  * returns "no changes" (error 3) — which can happen if an auto-save is mid-flight.
  */
 async function ensureSavedToS3(fileId: string, documentKey: string): Promise<void> {
+  console.log(`[export:save] Starting ensureSavedToS3 for file=${fileId}, key=${documentKey}`);
+
   for (let attempt = 0; attempt < 2; attempt++) {
+    console.log(`[export:save] Attempt ${attempt + 1}: sending forcesave command`);
     const payload = { c: 'forcesave', key: documentKey, userdata: 'export' };
     const token = jwt.sign(payload, config.DS_JWT_SECRET, { expiresIn: '1m' });
 
@@ -38,35 +41,45 @@ async function ensureSavedToS3(fileId: string, documentKey: string): Promise<voi
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ ...payload, token }),
       });
-      const result = await response.json();
+      const responseText = await response.text();
+      console.log(`[export:save] DS response (${response.status}): ${responseText}`);
+
+      let result: any;
+      try {
+        result = JSON.parse(responseText);
+      } catch {
+        console.warn(`[export:save] Could not parse DS response as JSON`);
+        return;
+      }
 
       if (result.error === 0) {
         // Forcesave accepted — wait for callback to complete S3 upload
+        console.log(`[export:save] Forcesave accepted (error=0), waiting for save event...`);
         const saved = await waitForSave(fileId);
-        if (saved) return;
-        // Timed out but proceed anyway
-        console.warn(`[export] waitForSave timed out for ${fileId}, proceeding`);
+        console.log(`[export:save] waitForSave resolved: ${saved ? 'CONFIRMED' : 'TIMED OUT'}`);
         return;
       }
 
       if (result.error === 1 || result.error === 3) {
         if (attempt === 0 && result.error === 3) {
           // "No changes" — might be a race with auto-save. Wait briefly and retry.
+          console.log(`[export:save] Got error=3 (no changes), waiting 1s before retry`);
           await new Promise(resolve => setTimeout(resolve, 1000));
           continue;
         }
-        // Doc not open (1) or genuinely no changes (3) — S3 is current
+        console.log(`[export:save] Got error=${result.error} (${result.error === 1 ? 'doc not open' : 'no changes'}), S3 should be current`);
         return;
       }
 
       // Other errors — proceed with whatever's in S3
-      console.warn(`[export] Forcesave returned error ${result.error}, proceeding`);
+      console.warn(`[export:save] Forcesave returned unexpected error=${result.error}, proceeding`);
       return;
     } catch (err) {
-      console.warn('[export] Forcesave request failed (non-fatal):', err);
+      console.warn('[export:save] Forcesave request failed:', err);
       return;
     }
   }
+  console.log(`[export:save] Exhausted retries, proceeding with current S3 content`);
 }
 
 export const exportRouter = Router();
@@ -220,7 +233,9 @@ exportRouter.get('/:id/export/epub', async (req, res) => {
 
     // Force-save to ensure S3 has the latest version before exporting
     const documentKey = `${file.id}_${file.updatedAt.getTime()}`;
+    console.log(`[epub-export] Starting export for file=${file.id}, name="${file.name}", updatedAt=${file.updatedAt.toISOString()}`);
     await ensureSavedToS3(file.id, documentKey);
+    console.log(`[epub-export] ensureSavedToS3 complete, downloading from S3`);
 
     const inputStream = await storage.download(file.s3Key);
     const title = file.name.replace(/\.docx$/i, '');
@@ -308,6 +323,7 @@ exportRouter.get('/:id/export/pdf', async (req, res) => {
 
     // Force-save to ensure S3 has the latest version before converting
     const documentKey = `${file.id}_${file.updatedAt.getTime()}`;
+    console.log(`[pdf-export] Starting export for file=${file.id}, name="${file.name}", updatedAt=${file.updatedAt.toISOString()}`);
     await ensureSavedToS3(file.id, documentKey);
 
     // Build a serve URL pointing to the now-current S3 version
