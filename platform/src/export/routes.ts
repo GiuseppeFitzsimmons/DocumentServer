@@ -13,8 +13,61 @@ import { convertDocxToEpub, PandocError, PandocTimeoutError } from './service.js
 import { convertAndDownloadPdf, PdfConvertError } from './pdf-service.js';
 import { extractHeadings } from './heading-extractor.js';
 import { waitForSave } from '../ds/save-events.js';
+import { config } from '../config.js';
+import jwt from 'jsonwebtoken';
 
 const DOCX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+const DS_COMMAND_URL = config.DS_INTERNAL_URL
+  ? `${config.DS_INTERNAL_URL}/coauthoring/CommandService.ashx`
+  : 'http://documentserver:8000/coauthoring/CommandService.ashx';
+
+/**
+ * Ensures the document is saved to S3 before export.
+ * Sends a forcesave, waits for the callback event. Retries once if DS
+ * returns "no changes" (error 3) — which can happen if an auto-save is mid-flight.
+ */
+async function ensureSavedToS3(fileId: string, documentKey: string): Promise<void> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const payload = { c: 'forcesave', key: documentKey, userdata: 'export' };
+    const token = jwt.sign(payload, config.DS_JWT_SECRET, { expiresIn: '1m' });
+
+    try {
+      const response = await fetch(DS_COMMAND_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ ...payload, token }),
+      });
+      const result = await response.json();
+
+      if (result.error === 0) {
+        // Forcesave accepted — wait for callback to complete S3 upload
+        const saved = await waitForSave(fileId);
+        if (saved) return;
+        // Timed out but proceed anyway
+        console.warn(`[export] waitForSave timed out for ${fileId}, proceeding`);
+        return;
+      }
+
+      if (result.error === 1 || result.error === 3) {
+        if (attempt === 0 && result.error === 3) {
+          // "No changes" — might be a race with auto-save. Wait briefly and retry.
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          continue;
+        }
+        // Doc not open (1) or genuinely no changes (3) — S3 is current
+        return;
+      }
+
+      // Other errors — proceed with whatever's in S3
+      console.warn(`[export] Forcesave returned error ${result.error}, proceeding`);
+      return;
+    } catch (err) {
+      console.warn('[export] Forcesave request failed (non-fatal):', err);
+      return;
+    }
+  }
+}
 
 export const exportRouter = Router();
 export const internalExportRouter = Router();
@@ -166,30 +219,8 @@ exportRouter.get('/:id/export/epub', async (req, res) => {
     }
 
     // Force-save to ensure S3 has the latest version before exporting
-    const { config } = await import('../config.js');
-    const jwtLib = await import('jsonwebtoken');
     const documentKey = `${file.id}_${file.updatedAt.getTime()}`;
-    const dsCommandUrl = config.DS_INTERNAL_URL
-      ? `${config.DS_INTERNAL_URL}/coauthoring/CommandService.ashx`
-      : 'http://documentserver:8000/coauthoring/CommandService.ashx';
-
-    const fsPayload = { c: 'forcesave', key: documentKey, userdata: 'epub-export' };
-    const fsToken = jwtLib.default.sign(fsPayload, config.DS_JWT_SECRET, { expiresIn: '1m' });
-    try {
-      const fsResponse = await fetch(dsCommandUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${fsToken}` },
-        body: JSON.stringify({ ...fsPayload, token: fsToken }),
-      });
-      const fsResult = await fsResponse.json();
-      // error 0 = forcesave accepted, wait for callback to persist to S3
-      if (fsResult.error === 0) {
-        await waitForSave(file.id);
-      }
-      // error 1/3 = no changes or doc not open, S3 already current
-    } catch (err) {
-      console.warn('[epub-export] Forcesave before export failed (non-fatal):', err);
-    }
+    await ensureSavedToS3(file.id, documentKey);
 
     const inputStream = await storage.download(file.s3Key);
     const title = file.name.replace(/\.docx$/i, '');
@@ -276,31 +307,11 @@ exportRouter.get('/:id/export/pdf', async (req, res) => {
     }
 
     // Force-save to ensure S3 has the latest version before converting
-    const { config } = await import('../config.js');
-    const jwtLib = await import('jsonwebtoken');
     const documentKey = `${file.id}_${file.updatedAt.getTime()}`;
-    const dsCommandUrl = config.DS_INTERNAL_URL
-      ? `${config.DS_INTERNAL_URL}/coauthoring/CommandService.ashx`
-      : 'http://documentserver:8000/coauthoring/CommandService.ashx';
-
-    const fsPayload = { c: 'forcesave', key: documentKey, userdata: 'pdf-export' };
-    const fsToken = jwtLib.default.sign(fsPayload, config.DS_JWT_SECRET, { expiresIn: '1m' });
-    try {
-      const fsResponse = await fetch(dsCommandUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${fsToken}` },
-        body: JSON.stringify({ ...fsPayload, token: fsToken }),
-      });
-      const fsResult = await fsResponse.json();
-      if (fsResult.error === 0) {
-        await waitForSave(file.id);
-      }
-    } catch (err) {
-      console.warn('[pdf-export] Forcesave before export failed (non-fatal):', err);
-    }
+    await ensureSavedToS3(file.id, documentKey);
 
     // Build a serve URL pointing to the now-current S3 version
-    const serveToken = jwtLib.default.sign(
+    const serveToken = jwt.sign(
       { fileId: file.id },
       config.DS_JWT_SECRET,
       { expiresIn: '5m' }
