@@ -16,13 +16,10 @@ RUN apk add --no-cache \
     icu-libs \
     harfbuzz \
     freetype \
-    graphite2 \
-    curl
-# soul.sty not in any Alpine package — fetch directly from CTAN
-RUN mkdir -p /usr/share/texmf-dist/tex/generic/soul && \
-    curl -sL -o /usr/share/texmf-dist/tex/generic/soul/soul.sty \
-    "https://raw.githubusercontent.com/latex3/soul/main/soul.sty" && \
-    mktexlsr
+    graphite2
+# soul.sty not in Alpine's texmf-dist — vendored from CTAN (LPPL license)
+COPY config/soul.sty /usr/share/texmf-dist/tex/generic/soul/soul.sty
+RUN mktexlsr
 # Font directories for custom fonts
 RUN printf '<?xml version="1.0"?>\n<!DOCTYPE fontconfig SYSTEM "fonts.dtd">\n<fontconfig>\n  <dir>/data/fonts</dir>\n  <dir>/data/core-fonts</dir>\n</fontconfig>\n' > /etc/fonts/local.conf
 WORKDIR /app
