@@ -11,14 +11,13 @@ RUN apk add --no-cache \
     pandoc \
     texlive-xetex \
     texmf-dist \
-    texmf-dist-latexextra \
     fontconfig \
     icu-libs \
     harfbuzz \
     freetype \
     graphite2
-# soul.sty not in Alpine's texmf-dist — vendored from CTAN (LPPL license)
-COPY config/soul.sty /usr/share/texmf-dist/tex/generic/soul/soul.sty
+# Vendored LaTeX packages not in Alpine's texmf-dist (all LPPL licensed)
+COPY config/texmf-extra/ /usr/share/texmf-dist/
 RUN mktexlsr
 # Font directories for custom fonts
 RUN printf '<?xml version="1.0"?>\n<!DOCTYPE fontconfig SYSTEM "fonts.dtd">\n<fontconfig>\n  <dir>/data/fonts</dir>\n  <dir>/data/core-fonts</dir>\n</fontconfig>\n' > /etc/fonts/local.conf
