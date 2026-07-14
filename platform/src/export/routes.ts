@@ -164,6 +164,27 @@ exportRouter.get('/:id/export/epub', async (req, res) => {
       }
     }
 
+    // Force-save to ensure S3 has the latest version before exporting
+    const { config } = await import('../config.js');
+    const jwtLib = await import('jsonwebtoken');
+    const documentKey = `${file.id}_${file.updatedAt.getTime()}`;
+    const dsCommandUrl = config.DS_INTERNAL_URL
+      ? `${config.DS_INTERNAL_URL}/coauthoring/CommandService.ashx`
+      : 'http://documentserver:8000/coauthoring/CommandService.ashx';
+
+    const fsPayload = { c: 'forcesave', key: documentKey, userdata: 'epub-export' };
+    const fsToken = jwtLib.default.sign(fsPayload, config.DS_JWT_SECRET, { expiresIn: '1m' });
+    try {
+      await fetch(dsCommandUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${fsToken}` },
+        body: JSON.stringify({ ...fsPayload, token: fsToken }),
+      });
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    } catch (err) {
+      console.warn('[epub-export] Forcesave before export failed (non-fatal):', err);
+    }
+
     const inputStream = await storage.download(file.s3Key);
     const title = file.name.replace(/\.docx$/i, '');
     const includeToc = req.query.toc !== '0';
@@ -248,17 +269,42 @@ exportRouter.get('/:id/export/pdf', async (req, res) => {
       }
     }
 
+    // Force-save to ensure S3 has the latest version before converting
+    const { config } = await import('../config.js');
+    const jwtLib = await import('jsonwebtoken');
+    const documentKey = `${file.id}_${file.updatedAt.getTime()}`;
+    const dsCommandUrl = config.DS_INTERNAL_URL
+      ? `${config.DS_INTERNAL_URL}/coauthoring/CommandService.ashx`
+      : 'http://documentserver:8000/coauthoring/CommandService.ashx';
+
+    const fsPayload = { c: 'forcesave', key: documentKey, userdata: 'pdf-export' };
+    const fsToken = jwtLib.default.sign(fsPayload, config.DS_JWT_SECRET, { expiresIn: '1m' });
+    try {
+      await fetch(dsCommandUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${fsToken}` },
+        body: JSON.stringify({ ...fsPayload, token: fsToken }),
+      });
+      // Brief wait for the callback to persist to S3
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    } catch (err) {
+      console.warn('[pdf-export] Forcesave before export failed (non-fatal):', err);
+    }
+
+    // Re-fetch file metadata (updated_at may have changed after forcesave)
+    const freshFile = await metadata.getFile(req.params.id);
+    const fileForExport = freshFile || file;
+
     // Build a serve URL that DS can use to download the file
-    const jwt = await import('jsonwebtoken');
-    const serveToken = jwt.default.sign(
-      { fileId: file.id },
-      (await import('../config.js')).config.DS_JWT_SECRET,
+    const serveToken = jwtLib.default.sign(
+      { fileId: fileForExport.id },
+      config.DS_JWT_SECRET,
       { expiresIn: '5m' }
     );
     const fileUrl = `http://portal:3000/api/files/serve/${serveToken}`;
-    const documentKey = `${file.id}_${file.updatedAt.getTime()}`;
+    const freshKey = `${fileForExport.id}_${fileForExport.updatedAt.getTime()}`;
 
-    const result = await convertAndDownloadPdf(fileUrl, documentKey);
+    const result = await convertAndDownloadPdf(fileUrl, freshKey);
     cleanup = result.cleanup;
 
     const pdfName = file.name.replace(/\.docx$/i, '.pdf');
