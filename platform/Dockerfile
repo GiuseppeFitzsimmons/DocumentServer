@@ -12,6 +12,7 @@ RUN apk add --no-cache \
     texlive-xetex \
     texmf-dist \
     texmf-dist-latexextra \
+    texmf-dist-genericextra \
     fontconfig \
     icu-libs \
     harfbuzz \
