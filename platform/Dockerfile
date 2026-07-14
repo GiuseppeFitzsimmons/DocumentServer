@@ -7,7 +7,13 @@ COPY src ./src
 RUN npm run build
 
 FROM node:22-alpine
-RUN apk add --no-cache pandoc
+RUN apk add --no-cache \
+    pandoc \
+    libreoffice-writer \
+    fontconfig \
+    ttf-dejavu
+# Register custom font directories with fontconfig
+RUN printf '<?xml version="1.0"?>\n<!DOCTYPE fontconfig SYSTEM "fonts.dtd">\n<fontconfig>\n  <dir>/data/fonts</dir>\n  <dir>/data/core-fonts</dir>\n</fontconfig>\n' > /etc/fonts/local.conf
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev
