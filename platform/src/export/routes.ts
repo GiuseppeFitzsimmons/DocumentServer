@@ -299,20 +299,17 @@ exportRouter.get('/:id/export/pdf', async (req, res) => {
       console.warn('[pdf-export] Forcesave before export failed (non-fatal):', err);
     }
 
-    // Re-fetch file metadata (updated_at may have changed after forcesave)
-    const freshFile = await metadata.getFile(req.params.id);
-    const fileForExport = freshFile || file;
-
-    // Build a serve URL that DS can use to download the file
+    // Build a serve URL pointing to the now-current S3 version
     const serveToken = jwtLib.default.sign(
-      { fileId: fileForExport.id },
+      { fileId: file.id },
       config.DS_JWT_SECRET,
       { expiresIn: '5m' }
     );
     const fileUrl = `http://portal:3000/api/files/serve/${serveToken}`;
-    const freshKey = `${fileForExport.id}_${fileForExport.updatedAt.getTime()}`;
+    // Use a unique key so DS doesn't confuse this with the open editing session
+    const convertKey = `pdf_${file.id}_${Date.now()}`;
 
-    const result = await convertAndDownloadPdf(fileUrl, freshKey);
+    const result = await convertAndDownloadPdf(fileUrl, convertKey);
     cleanup = result.cleanup;
 
     const pdfName = file.name.replace(/\.docx$/i, '.pdf');
