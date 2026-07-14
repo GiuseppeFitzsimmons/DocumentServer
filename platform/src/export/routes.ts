@@ -10,7 +10,7 @@ import * as metadata from '../storage/metadata.js';
 import * as storage from '../storage/s3.js';
 import { getShare } from '../sharing/service.js';
 import { convertDocxToEpub, PandocError, PandocTimeoutError } from './service.js';
-import { convertAndDownloadPdf, PdfConvertError } from './pdf-service.js';
+import { convertDocxToPdf, PandocPdfError } from './pdf-service.js';
 import { extractHeadings } from './heading-extractor.js';
 import { waitForSave } from '../ds/save-events.js';
 import { getActiveDocumentKey } from '../ds/active-documents.js';
@@ -331,23 +331,26 @@ exportRouter.get('/:id/export/pdf', async (req, res) => {
     console.log(`[pdf-export] Starting export for file=${file.id}, name="${file.name}", updatedAt=${file.updatedAt.toISOString()}`);
     await ensureSavedToS3(file.id, documentKey);
 
-    // Build a serve URL pointing to the now-current S3 version
-    const serveToken = jwt.sign(
-      { fileId: file.id },
-      config.DS_JWT_SECRET,
-      { expiresIn: '5m' }
-    );
-    const fileUrl = `http://portal:3000/api/files/serve/${serveToken}`;
-    // Use a unique key so DS doesn't confuse this with the open editing session
-    const convertKey = `pdf_${file.id}_${Date.now()}`;
+    // Download from S3 and convert
+    const inputStream = await storage.download(file.s3Key);
+    const title = file.name.replace(/\.docx$/i, '');
+    const includeToc = req.query.toc === '1';
+    const convertSectionBreaks = req.query.sections === '1';
+    const removeSoftReturns = req.query.softreturns === '0';
 
-    const result = await convertAndDownloadPdf(fileUrl, convertKey);
+    const result = await convertDocxToPdf(inputStream, {
+      title,
+      includeToc,
+      convertSectionBreaks,
+      removeSoftReturns,
+    });
     cleanup = result.cleanup;
 
     const pdfName = file.name.replace(/\.docx$/i, '.pdf');
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(pdfName)}"`);
+
     const outputStream = createReadStream(result.outputPath);
     outputStream.pipe(res);
 
@@ -363,8 +366,8 @@ exportRouter.get('/:id/export/pdf', async (req, res) => {
       res.on('close', resolve);
     });
   } catch (err) {
-    if (err instanceof PdfConvertError) {
-      console.error('PDF export error:', err.message);
+    if (err instanceof PandocPdfError) {
+      console.error('PDF export error:', err.stderr);
       if (!res.headersSent) {
         res.status(500).json({ error: 'PDF conversion failed', detail: err.message });
       }
