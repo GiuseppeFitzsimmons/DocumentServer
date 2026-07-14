@@ -11,6 +11,7 @@ RUN apk add --no-cache \
     pandoc \
     texlive-xetex \
     texmf-dist \
+    texmf-dist-latexextra \
     fontconfig \
     icu-libs \
     harfbuzz \
