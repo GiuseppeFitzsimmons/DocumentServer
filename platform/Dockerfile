@@ -7,20 +7,7 @@ COPY src ./src
 RUN npm run build
 
 FROM node:22-alpine
-RUN apk add --no-cache \
-    pandoc \
-    texlive-xetex \
-    texmf-dist \
-    fontconfig \
-    icu-libs \
-    harfbuzz \
-    freetype \
-    graphite2
-# Vendored LaTeX packages not in Alpine's texmf-dist (all LPPL licensed)
-COPY config/texmf-extra/ /usr/share/texmf-dist/
-RUN mktexlsr
-# Font directories for custom fonts
-RUN printf '<?xml version="1.0"?>\n<!DOCTYPE fontconfig SYSTEM "fonts.dtd">\n<fontconfig>\n  <dir>/data/fonts</dir>\n  <dir>/data/core-fonts</dir>\n</fontconfig>\n' > /etc/fonts/local.conf
+RUN apk add --no-cache pandoc
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev
