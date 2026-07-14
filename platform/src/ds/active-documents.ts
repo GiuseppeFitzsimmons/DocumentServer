@@ -45,6 +45,16 @@ export async function markDocumentClosed(fileId: string): Promise<void> {
 }
 
 /**
+ * Get the active document key for a specific file (if currently open).
+ * Returns null if the file isn't tracked as active.
+ */
+export async function getActiveDocumentKey(fileId: string): Promise<string | null> {
+  const r = getRedis();
+  const key = await r.hget(ACTIVE_DOCS_KEY, fileId);
+  return key || null;
+}
+
+/**
  * Get all currently active document keys from Redis tracking.
  * Returns an array of { fileId, documentKey } objects.
  */

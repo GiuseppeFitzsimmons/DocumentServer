@@ -13,6 +13,7 @@ import { convertDocxToEpub, PandocError, PandocTimeoutError } from './service.js
 import { convertAndDownloadPdf, PdfConvertError } from './pdf-service.js';
 import { extractHeadings } from './heading-extractor.js';
 import { waitForSave } from '../ds/save-events.js';
+import { getActiveDocumentKey } from '../ds/active-documents.js';
 import { config } from '../config.js';
 import jwt from 'jsonwebtoken';
 
@@ -28,11 +29,15 @@ const DS_COMMAND_URL = config.DS_INTERNAL_URL
  * returns "no changes" (error 3) — which can happen if an auto-save is mid-flight.
  */
 async function ensureSavedToS3(fileId: string, documentKey: string): Promise<void> {
-  console.log(`[export:save] Starting ensureSavedToS3 for file=${fileId}, key=${documentKey}`);
+  // The document key DS has might differ from what's in the DB (updated_at changes on save).
+  // Check Redis for the actual key DS is using for this open session.
+  const activeKey = await getActiveDocumentKey(fileId);
+  const effectiveKey = activeKey || documentKey;
+  console.log(`[export:save] Starting ensureSavedToS3 for file=${fileId}, dbKey=${documentKey}, activeKey=${activeKey || 'none'}, using=${effectiveKey}`);
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    console.log(`[export:save] Attempt ${attempt + 1}: sending forcesave command`);
-    const payload = { c: 'forcesave', key: documentKey, userdata: 'export' };
+    console.log(`[export:save] Attempt ${attempt + 1}: sending forcesave command with key=${effectiveKey}`);
+    const payload = { c: 'forcesave', key: effectiveKey, userdata: 'export' };
     const token = jwt.sign(payload, config.DS_JWT_SECRET, { expiresIn: '1m' });
 
     try {
