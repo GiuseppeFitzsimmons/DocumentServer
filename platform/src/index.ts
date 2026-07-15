@@ -127,7 +127,7 @@ app.use('/api/fonts', fontsRouter);
 app.use(editorRouter);
 
 // PDF cleaning proxy — intercepts DS /downloadas/ responses and runs Ghostscript
-app.use(/\/\d+\.\d+\.\d+-[a-f0-9]+\/downloadas\//, async (req, res) => {
+app.all(/^\/\d+\.\d+\.\d+-[a-f0-9]+\/downloadas\//, async (req, res) => {
   const { cleanPdf } = await import('./export/pdf-service.js');
   const { Readable } = await import('stream');
 

@@ -139,6 +139,10 @@ ACTIONS = {
         "targets": ["prod-proxy"],
         "special": "proxy_update",
     },
+    "Update Proxy Config (Dev)": {
+        "targets": ["dev-proxy"],
+        "special": "proxy_update",
+    },
     "Database Shell": {
         "targets": ["dev-db", "prod-db"],
         "special": "db_shell",
