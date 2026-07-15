@@ -131,11 +131,11 @@ app.all(/^\/\d+\.\d+\.\d+-[a-f0-9]+\/downloadas\//, async (req, res) => {
   const { cleanPdf } = await import('./export/pdf-service.js');
   const { Readable } = await import('stream');
 
-  // Forward the request to DS
-  const dsUrl = config.DS_INTERNAL_URL || 'http://documentserver:8000';
+  // Forward the request to DS (port 80 = DS's internal nginx)
+  const dsUrl = config.DS_INTERNAL_URL || 'http://documentserver';
   const targetUrl = `${dsUrl}${req.originalUrl}`;
 
-  console.log(`[pdf-proxy] Proxying downloadas request to DS`);
+  console.log(`[pdf-proxy] Proxying downloadas request to DS: ${targetUrl.slice(0, 120)}`);
 
   try {
     const dsResponse = await fetch(targetUrl, {
