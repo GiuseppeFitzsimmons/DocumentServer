@@ -7,7 +7,7 @@ USER root
 COPY deploy/patches/documenteditor-app.js /var/www/euro-office/documentserver/web-apps/apps/documenteditor/main/app.js
 
 # Inject custom book page sizes into sdkjs (using sed — no node dependency)
-RUN SIZES=',{name:"Trade Paperback (small)",w_mm:139.7,h_mm:215.9,w_tw:7920,h_tw:12240},{name:"Trade Paperback (Large)",w_mm:152.4,h_mm:228.6,w_tw:8640,h_tw:12960},{name:"6.14x9.21",w_mm:156,h_mm:233.9,w_tw:8845,h_tw:13262},{name:"7x10",w_mm:177.8,h_mm:254,w_tw:10080,h_tw:14400},{name:"8.25x11",w_mm:209.5,h_mm:279.4,w_tw:11880,h_tw:15840},{name:"Mass-Market Paperback",w_mm:107.95,h_mm:174.5,w_tw:6120,h_tw:9893},{name:"A Format",w_mm:110,h_mm:178,w_tw:6237,h_tw:10093},{name:"Penguin",w_mm:111,h_mm:181,w_tw:6293,h_tw:10260},{name:"B Format",w_mm:138,h_mm:216,w_tw:7825,h_tw:12240}' && \
+RUN SIZES=',{name:"Trade Paperback (small)",w_mm:139.7,h_mm:215.9,w_tw:7920,h_tw:12240},{name:"Trade Paperback (Large)",w_mm:152.4,h_mm:228.6,w_tw:8640,h_tw:12960},{name:"6.14x9.21",w_mm:155.956,h_mm:233.934,w_tw:8845,h_tw:13262},{name:"7x10",w_mm:177.8,h_mm:254,w_tw:10080,h_tw:14400},{name:"8.25x11",w_mm:209.55,h_mm:279.4,w_tw:11880,h_tw:15840},{name:"Mass-Market Paperback",w_mm:107.95,h_mm:174.625,w_tw:6120,h_tw:9893},{name:"A Format",w_mm:110,h_mm:178,w_tw:6237,h_tw:10093},{name:"Penguin",w_mm:111,h_mm:181,w_tw:6293,h_tw:10260},{name:"B Format",w_mm:138,h_mm:215.9,w_tw:7825,h_tw:12240}' && \
     sed -i "s/\"Envelope Coukei 3\"/\"Envelope Coukei 3\"/;s/\(\"Envelope Coukei 3\"[^}]*}\)/\1${SIZES}/" \
       /var/www/euro-office/documentserver/sdkjs/word/sdk-all.js \
       /var/www/euro-office/documentserver/sdkjs/word/sdk-all-min.js

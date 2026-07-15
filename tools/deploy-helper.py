@@ -92,15 +92,27 @@ MULTI_SERVER = {
 # Commands are lists of (description, shell_command) tuples.
 # They run sequentially in a single SSH session.
 ACTIONS = {
-    "Blue-Green Deploy (Dev)": {
+    "Blue-Green (Dev)": {
         "targets": ["dev-proxy", "dev-app-a", "dev-app-b", "dev-db", "prod-proxy", "prod-app-a", "prod-app-b", "prod-db"],
         "special": "bluegreen_deploy",
         "environment": "dev",
     },
-    "Blue-Green Deploy (Prod)": {
+    "Blue-Green (Prod)": {
         "targets": ["dev-proxy", "dev-app-a", "dev-app-b", "dev-db", "prod-proxy", "prod-app-a", "prod-app-b", "prod-db"],
         "special": "bluegreen_deploy",
         "environment": "prod",
+    },
+    "Blue-Green no cache (Dev)": {
+        "targets": ["dev-proxy", "dev-app-a", "dev-app-b", "dev-db", "prod-proxy", "prod-app-a", "prod-app-b", "prod-db"],
+        "special": "bluegreen_deploy",
+        "environment": "dev",
+        "no_cache": True,
+    },
+    "Blue-Green no cache (Prod)": {
+        "targets": ["dev-proxy", "dev-app-a", "dev-app-b", "dev-db", "prod-proxy", "prod-app-a", "prod-app-b", "prod-db"],
+        "special": "bluegreen_deploy",
+        "environment": "prod",
+        "no_cache": True,
     },
     "Update Fonts (Dev)": {
         "targets": ["dev-app-a", "dev-app-b"],
@@ -364,7 +376,7 @@ class DeployHelper:
             )
         elif action.get("special") == "bluegreen_deploy":
             self.current_thread = threading.Thread(
-                target=self._run_bluegreen_deploy, args=(action["environment"],), daemon=True
+                target=self._run_bluegreen_deploy, args=(action["environment"], action.get("no_cache", False)), daemon=True
             )
         else:
             self.current_thread = threading.Thread(
@@ -615,7 +627,7 @@ class DeployHelper:
         finally:
             self._set_running(False)
 
-    def _run_bluegreen_deploy(self, environment):
+    def _run_bluegreen_deploy(self, environment, no_cache=False):
         """
         Blue-green deploy:
         1. Determine which server is currently active (receiving traffic)
@@ -692,9 +704,16 @@ class DeployHelper:
             # Step 1: Upgrade the idle server
             self._log(f"\n→ Upgrading idle server ({idle_env['label']})...\n", "info")
             client = self._get_ssh_client(idle_env)
+            build_cmd = (
+                f"cd /opt/euro-office/repo/deploy && docker compose -f {compose_file} build --no-cache && "
+                f"docker compose -f {compose_file} up -d"
+            ) if no_cache else (
+                f"cd /opt/euro-office/repo/deploy && docker compose -f {compose_file} down && "
+                f"docker compose -f {compose_file} up -d --build"
+            )
             commands = [
                 "cd /opt/euro-office/repo && git fetch && git checkout main && git pull && git submodule update --init fonts",
-                f"cd /opt/euro-office/repo/deploy && docker compose -f {compose_file} down && docker compose -f {compose_file} up -d --build",
+                build_cmd,
                 f"cd /opt/euro-office/repo/deploy && docker compose -f {compose_file} exec -T portal node dist/db/migrate.js",
             ]
             for cmd in commands:
