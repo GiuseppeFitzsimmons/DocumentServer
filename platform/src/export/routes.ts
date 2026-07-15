@@ -308,21 +308,27 @@ exportRouter.post('/clean-pdf', async (req, res) => {
 
   try {
     const { url } = req.body;
+    console.log(`[pdf-clean] Received clean request, url=${url ? url.slice(0, 100) : 'none'}`);
+
     if (!url || typeof url !== 'string') {
       res.status(400).json({ error: 'URL is required' });
       return;
     }
 
     // Download the PDF from the provided URL (DS-generated)
+    console.log(`[pdf-clean] Fetching PDF from DS...`);
     const pdfResponse = await fetch(url);
     if (!pdfResponse.ok || !pdfResponse.body) {
+      console.error(`[pdf-clean] Failed to fetch PDF: ${pdfResponse.status}`);
       res.status(502).json({ error: `Failed to fetch PDF: ${pdfResponse.status}` });
       return;
     }
+    console.log(`[pdf-clean] PDF fetched (${pdfResponse.status}), running Ghostscript...`);
 
     const nodeStream = Readable.fromWeb(pdfResponse.body as any);
     const result = await cleanPdf(nodeStream);
     cleanup = result.cleanup;
+    console.log(`[pdf-clean] Ghostscript complete, sending cleaned PDF`);
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'attachment; filename="document.pdf"');
