@@ -362,9 +362,13 @@ function extractParagraphStyle(
   const style: ParagraphStyle = {};
   let hasAny = false;
 
-  // text-align from w:jc (direct first, then style)
-  const jc = (pPrObj ? getPath(pPrObj, ['w:jc', '@_w:val']) : undefined) ??
-             (stylePPr ? getPath(stylePPr, ['w:jc', '@_w:val']) : undefined);
+  // text-align from w:jc (direct first, then style chain)
+  const jcDirect = pPrObj ? getPath(pPrObj, ['w:jc', '@_w:val']) : undefined;
+  let jc = jcDirect;
+  if (!jc && pStyleId) {
+    // Traverse the full basedOn chain for w:jc
+    jc = resolveStyleProperty(pStyleId, styleMap, ['w:jc', '@_w:val'], 0);
+  }
   if (jc && typeof jc === 'string') {
     const alignMap: Record<string, ParagraphStyle['textAlign']> = {
       left: 'left', start: 'left',
@@ -490,6 +494,33 @@ function parseBorder(borderEl: unknown): BorderDef | null {
     color: color === 'auto' ? '000000' : color,
     width: widthPt,
   };
+}
+
+/**
+ * Resolves a specific property from a style's pPr by traversing the basedOn chain.
+ * Unlike resolveStylePPr which stops at the first pPr found, this looks for a
+ * specific property path within pPr through the entire chain.
+ */
+function resolveStyleProperty(
+  styleId: string,
+  styleMap: Map<string, StyleEntry>,
+  propertyPath: string[],
+  depth: number
+): unknown {
+  if (depth > 10) return undefined;
+  const entry = styleMap.get(styleId);
+  if (!entry) return undefined;
+
+  if (entry.pPr) {
+    const value = getPath(entry.pPr, propertyPath);
+    if (value !== undefined) return value;
+  }
+
+  if (entry.parentStyleId) {
+    return resolveStyleProperty(entry.parentStyleId, styleMap, propertyPath, depth + 1);
+  }
+
+  return undefined;
 }
 
 /**
