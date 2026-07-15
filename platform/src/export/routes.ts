@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { Readable } from 'stream';
 import { createReadStream, createWriteStream } from 'fs';
 import { mkdir } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -10,6 +11,7 @@ import * as metadata from '../storage/metadata.js';
 import * as storage from '../storage/s3.js';
 import { getShare } from '../sharing/service.js';
 import { convertDocxToEpub, PandocError, PandocTimeoutError } from './service.js';
+import { cleanPdf, GhostscriptError } from './pdf-service.js';
 import { extractHeadings } from './heading-extractor.js';
 import { waitForSave } from '../ds/save-events.js';
 import { getActiveDocumentKey } from '../ds/active-documents.js';
@@ -299,3 +301,61 @@ exportRouter.get('/:id/export/epub', async (req, res) => {
 });
 
 
+
+// POST /api/files/clean-pdf — accepts a PDF URL, runs Ghostscript, returns cleaned PDF
+exportRouter.post('/clean-pdf', async (req, res) => {
+  let cleanup: (() => Promise<void>) | undefined;
+
+  try {
+    const { url } = req.body;
+    if (!url || typeof url !== 'string') {
+      res.status(400).json({ error: 'URL is required' });
+      return;
+    }
+
+    // Download the PDF from the provided URL (DS-generated)
+    const pdfResponse = await fetch(url);
+    if (!pdfResponse.ok || !pdfResponse.body) {
+      res.status(502).json({ error: `Failed to fetch PDF: ${pdfResponse.status}` });
+      return;
+    }
+
+    const nodeStream = Readable.fromWeb(pdfResponse.body as any);
+    const result = await cleanPdf(nodeStream);
+    cleanup = result.cleanup;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="document.pdf"');
+
+    const outputStream = createReadStream(result.outputPath);
+    outputStream.pipe(res);
+
+    outputStream.on('error', (err) => {
+      console.error('PDF clean stream error:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Storage error' });
+      }
+    });
+
+    await new Promise<void>((resolve) => {
+      res.on('finish', resolve);
+      res.on('close', resolve);
+    });
+  } catch (err) {
+    if (err instanceof GhostscriptError) {
+      console.error('PDF clean error:', err.stderr);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'PDF cleaning failed', detail: err.message });
+      }
+    } else {
+      console.error('PDF clean error:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Storage error' });
+      }
+    }
+  } finally {
+    if (cleanup) {
+      await cleanup();
+    }
+  }
+});

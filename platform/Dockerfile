@@ -7,7 +7,7 @@ COPY src ./src
 RUN npm run build
 
 FROM node:22-alpine
-RUN apk add --no-cache pandoc
+RUN apk add --no-cache pandoc ghostscript
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev
