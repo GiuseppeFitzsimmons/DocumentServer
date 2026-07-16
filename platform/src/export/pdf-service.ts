@@ -60,9 +60,9 @@ export async function cleanPdf(inputStream: Readable): Promise<CleanPdfResult> {
         '-dNOPAUSE', '-dBATCH', '-dQUIET',
         '-sDEVICE=pdfwrite',
         '-dCompatibilityLevel=1.7',
+        `-sOutputFile=${outputPath}`,
         '-c', '[ /Producer () /Creator () /DOCINFO pdfmark',
         '-f', inputPath,
-        `-sOutputFile=${outputPath}`,
       ],
       { timeout: GS_TIMEOUT_MS },
       (error, _stdout, stderr) => {
