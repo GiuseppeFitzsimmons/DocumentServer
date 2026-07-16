@@ -212,6 +212,20 @@ export function processContentFile(
       return match;
     }
 
+    // Skip the pandoc-generated title-page <h1 class="unnumbered"> — this is
+    // synthesized from --metadata title and has no docx body counterpart.
+    // The actual title paragraph from the docx appears later as a <p> element.
+    if (/^<h1\b[^>]*\bclass="[^"]*\bunnumbered\b/i.test(openTag)) {
+      return match;
+    }
+
+    // DEBUG: log assignment text vs XHTML text for alignment checking
+    const assignText = assignments[cursor.index].runs.map(r => r.text).join('').slice(0, 40);
+    const blockText = inner.replace(/<[^>]+>/g, '').trim().slice(0, 40);
+    if (assignText.replace(/\s+/g, ' ').toLowerCase() !== blockText.replace(/\s+/g, ' ').toLowerCase()) {
+      console.log(`[xhtml-inject] MISMATCH at cursor=${cursor.index}: assign="${assignText}" vs block="${blockText}"`);
+    }
+
     // Build inline styles for the assignment at the current cursor position
     const style = buildInlineStyles(assignments[cursor.index], bodyFont);
     cursor.index++;
