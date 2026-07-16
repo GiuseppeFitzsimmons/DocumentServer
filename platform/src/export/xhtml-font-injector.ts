@@ -86,7 +86,8 @@ function findXhtmlFiles(zip: AdmZip): string[] {
  * Determines if a block element's inner HTML is empty or contains only
  * whitespace/non-breaking space characters. Empty blocks are skipped entirely
  * by the positional cursor (no cursor advancement, no styling) because the
- * font-assignment-extractor produces no entries for empty paragraphs.
+ * font-assignment-extractor runs before the preprocessor and produces no
+ * entries for empty paragraphs.
  */
 export function isEmptyBlock(innerHtml: string): boolean {
   // Strip HTML tags
@@ -203,12 +204,12 @@ export function processContentFile(
       return match;
     }
 
-    // Empty blocks (whitespace/nbsp only) advance the cursor without styling.
-    // The font-assignment-extractor DOES produce entries for nbsp-preserved
-    // paragraphs (the preprocessor inserts nbsp into empty paragraphs), so
-    // we must advance the cursor to maintain alignment.
+    // Empty blocks (whitespace/nbsp only) do NOT advance the cursor.
+    // The font-assignment-extractor runs BEFORE the docx-preprocessor, so it
+    // sees truly empty paragraphs (no runs) and skips them (returns null).
+    // The preprocessor then inserts nbsp to preserve them in the EPUB output.
+    // Result: no assignment list entry exists for these blocks.
     if (isEmptyBlock(inner)) {
-      cursor.index++;
       return match;
     }
 
