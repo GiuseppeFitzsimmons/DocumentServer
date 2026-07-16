@@ -84,8 +84,9 @@ function findXhtmlFiles(zip: AdmZip): string[] {
 
 /**
  * Determines if a block element's inner HTML is empty or contains only
- * whitespace/non-breaking space characters. Used by the positional cursor
- * to decide whether to skip styling a block while still advancing the cursor.
+ * whitespace/non-breaking space characters. Empty blocks are skipped entirely
+ * by the positional cursor (no cursor advancement, no styling) because the
+ * font-assignment-extractor produces no entries for empty paragraphs.
  */
 export function isEmptyBlock(innerHtml: string): boolean {
   // Strip HTML tags
@@ -174,9 +175,10 @@ export function buildInlineStyles(assignment: ParagraphAssignment, bodyFont: str
  * Walks block elements in document order and applies the corresponding style
  * from the assignments array at the current cursor position.
  *
- * The cursor is advanced for every block element encountered (including empty blocks),
- * maintaining alignment with the ordered assignment list. Empty blocks advance the
- * cursor without receiving styles.
+ * Empty/whitespace-only blocks are SKIPPED without advancing the cursor,
+ * because the font-assignment-extractor does not produce entries for empty
+ * paragraphs (it returns null for paragraphs with no text runs). The cursor
+ * only advances for non-empty blocks that have a corresponding assignment.
  *
  * @param content - The XHTML file content as a string
  * @param assignments - Ordered array of paragraph assignments from the docx
@@ -201,9 +203,16 @@ export function processContentFile(
       return match;
     }
 
-    // If block is empty, advance cursor without styling
+    // Empty blocks (whitespace/nbsp only) have no corresponding entry in the
+    // assignment list — the extractor skips empty paragraphs. Do NOT advance cursor.
     if (isEmptyBlock(inner)) {
-      cursor.index++;
+      return match;
+    }
+
+    // Skip the pandoc-generated title-page <h1 class="unnumbered"> — this is
+    // synthesized from --metadata title and has no docx body counterpart.
+    // The actual title paragraph from the docx appears later as a <p> element.
+    if (/^<h1\b[^>]*\bclass="[^"]*\bunnumbered\b/i.test(openTag)) {
       return match;
     }
 
