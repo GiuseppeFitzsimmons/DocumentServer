@@ -203,16 +203,12 @@ export function processContentFile(
       return match;
     }
 
-    // Empty blocks (whitespace/nbsp only) have no corresponding entry in the
-    // assignment list — the extractor skips empty paragraphs. Do NOT advance cursor.
+    // Empty blocks (whitespace/nbsp only) advance the cursor without styling.
+    // The font-assignment-extractor DOES produce entries for nbsp-preserved
+    // paragraphs (the preprocessor inserts nbsp into empty paragraphs), so
+    // we must advance the cursor to maintain alignment.
     if (isEmptyBlock(inner)) {
-      return match;
-    }
-
-    // Skip the pandoc-generated title-page <h1 class="unnumbered"> — this is
-    // synthesized from --metadata title and has no docx body counterpart.
-    // The actual title paragraph from the docx appears later as a <p> element.
-    if (/^<h1\b[^>]*\bclass="[^"]*\bunnumbered\b/i.test(openTag)) {
+      cursor.index++;
       return match;
     }
 
