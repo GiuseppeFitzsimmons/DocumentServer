@@ -142,7 +142,22 @@ function buildStyleMap(
     }
 
     if (parts.length > 0) {
-      map.set(text, { styles: parts.join('; ') });
+      const newStyles = parts.join('; ');
+      const existing = map.get(text);
+      // Debug: log collisions for heading-like text
+      if (existing) {
+        console.log(`[style-map] COLLISION: "${text.slice(0, 40)}" existing="${existing.styles.slice(0, 60)}" new="${newStyles.slice(0, 60)}"`);
+      }
+      if (existing) {
+        // Prefer the entry with center alignment (body headings over ToC/title page variants)
+        const newHasCenter = newStyles.includes('text-align: center');
+        const existingHasCenter = existing.styles.includes('text-align: center');
+        if (newHasCenter || !existingHasCenter) {
+          map.set(text, { styles: newStyles });
+        }
+      } else {
+        map.set(text, { styles: newStyles });
+      }
     }
   }
 
@@ -187,7 +202,13 @@ function injectStylesIntoXhtml(
     if (textContent.length === 0) return match;
 
     const entry = styleMap.get(textContent);
-    if (!entry) return match;
+    if (!entry) {
+      // Debug: log unmatched headings
+      if (/<h[12]/i.test(openTag)) {
+        console.log(`[xhtml-inject] UNMATCHED H1/H2: "${textContent.slice(0, 50)}"`);
+      }
+      return match;
+    }
 
     modified = true;
     const styledTag = injectStyleOnTag(openTag, entry.styles);
