@@ -58,3 +58,6 @@ runcmd:
   - cd /opt/euro-office/repo/deploy && docker compose -f docker-compose.multi.yml down 2>/dev/null; docker compose -f docker-compose.multi.yml up -d --build
   - sleep 10
   - cd /opt/euro-office/repo/deploy && docker compose -f docker-compose.multi.yml exec -T portal node dist/db/migrate.js || true
+
+  # Weekly cron to refresh disposable email domain blocklist
+  - echo "30 4 * * 0 /opt/euro-office/repo/deploy/scripts/refresh-disposable-emails.sh >> /var/log/disposable-emails-refresh.log 2>&1" | crontab -

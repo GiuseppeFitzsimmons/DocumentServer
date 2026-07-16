@@ -341,6 +341,12 @@ function processParagraph(
   // Extract paragraph style properties (including inherited from named style)
   const style = extractParagraphStyle(pObj, pStyleId, styleMap);
 
+  // Debug: log heading style resolution
+  if (headingLevel) {
+    const text = runs.map(r => r.text).join('').slice(0, 40);
+    console.log(`[font-assign] H${headingLevel} "${text}": textAlign=${style?.textAlign || 'NONE'}, pStyleId=${pStyleId}`);
+  }
+
   return { font: paraFont, runs, headingLevel, style };
 }
 

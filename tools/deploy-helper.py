@@ -138,10 +138,14 @@ ACTIONS = {
     "Update Proxy Config (Prod)": {
         "targets": ["prod-proxy"],
         "special": "proxy_update",
+        "nginx_conf": "deploy/nginx/nginx-proxy-prod.conf",
+        "nginx_dest": "/etc/nginx/sites-available/eurobureau.conf",
     },
     "Update Proxy Config (Dev)": {
         "targets": ["dev-proxy"],
         "special": "proxy_update",
+        "nginx_conf": "deploy/nginx/nginx-proxy-dev.conf",
+        "nginx_dest": "/etc/nginx/sites-available/dev.conf",
     },
     "Database Shell": {
         "targets": ["dev-db", "prod-db"],
@@ -362,7 +366,7 @@ class DeployHelper:
 
         if action.get("special") == "proxy_update":
             self.current_thread = threading.Thread(
-                target=self._run_proxy_update, args=(env,), daemon=True
+                target=self._run_proxy_update, args=(env, action.get("nginx_conf"), action.get("nginx_dest")), daemon=True
             )
         elif action.get("special") == "stream_logs":
             self.current_thread = threading.Thread(
@@ -453,34 +457,46 @@ class DeployHelper:
         finally:
             self._set_running(False)
 
-    def _run_proxy_update(self, env):
+    def _run_proxy_update(self, env, nginx_conf_rel=None, nginx_dest=None):
         """Handle proxy config update: SCP files then reload nginx."""
         try:
             self._set_status("Uploading config files...", "orange")
 
-            nginx_src = os.path.join(REPO_ROOT, "deploy", "nginx", "nginx.conf")
+            nginx_src = os.path.join(REPO_ROOT, nginx_conf_rel) if nginx_conf_rel else os.path.join(REPO_ROOT, "deploy", "nginx", "nginx.conf")
+            dest_path = nginx_dest or "/etc/nginx/sites-available/eurobureau.conf"
+            refresh_script_src = os.path.join(REPO_ROOT, "deploy", "scripts", "refresh-cidrs-nginx.sh")
             host = env["host"]
             user = env["user"]
 
-            # SCP nginx.conf
-            self._log_cmd(
-                f"scp {nginx_src} {user}@{host}:/etc/nginx/sites-available/eurobureau.conf"
-            )
             client = self._get_ssh_client(env)
             sftp = client.open_sftp()
 
-            sftp.put(nginx_src, "/etc/nginx/sites-available/eurobureau.conf")
+            # SCP nginx.conf
+            self._log_cmd(
+                f"scp {nginx_src} {user}@{host}:{dest_path}"
+            )
+            sftp.put(nginx_src, dest_path)
             self._log("✓ Uploaded nginx.conf\n", "success")
+
+            # SCP refresh-cidrs-nginx.sh
+            self._log_cmd(
+                f"scp {refresh_script_src} {user}@{host}:/usr/local/bin/refresh-cidrs-nginx.sh"
+            )
+            sftp.put(refresh_script_src, "/usr/local/bin/refresh-cidrs-nginx.sh")
+            self._log("✓ Uploaded refresh-cidrs-nginx.sh\n", "success")
 
             sftp.close()
 
-            # Test and reload nginx
+            # Make script executable and run it (creates /etc/nginx/geo-whitelist.conf)
             if self.running:
-                self._log_cmd("nginx -t && nginx -s reload")
+                self._log_cmd("chmod +x /usr/local/bin/refresh-cidrs-nginx.sh && /usr/local/bin/refresh-cidrs-nginx.sh")
                 stdin, stdout, stderr = client.exec_command(
-                    "nginx -t && nginx -s reload", get_pty=True
+                    "chmod +x /usr/local/bin/refresh-cidrs-nginx.sh && /usr/local/bin/refresh-cidrs-nginx.sh",
+                    get_pty=True
                 )
                 for line in iter(stdout.readline, ""):
+                    if not self.running:
+                        break
                     self._log_stream(line)
                 err = stderr.read().decode()
                 if err.strip():
@@ -488,11 +504,24 @@ class DeployHelper:
 
                 exit_code = stdout.channel.recv_exit_status()
                 if exit_code == 0:
-                    self._log("\n✓ Nginx reloaded successfully.\n", "success")
+                    self._log("✓ Geo-whitelist refreshed and nginx reloaded\n", "success")
                     self._set_status("Done", "green")
                 else:
-                    self._log(f"\n✗ Nginx reload failed (code {exit_code})\n", "error")
-                    self._set_status("Failed", "red")
+                    self._log(f"\n✗ Refresh script failed (code {exit_code})\n", "error")
+                    # Try a plain nginx reload in case the whitelist already exists
+                    self._log_cmd("nginx -t && nginx -s reload")
+                    stdin, stdout, stderr = client.exec_command(
+                        "nginx -t && nginx -s reload", get_pty=True
+                    )
+                    for line in iter(stdout.readline, ""):
+                        self._log_stream(line)
+                    reload_exit = stdout.channel.recv_exit_status()
+                    if reload_exit == 0:
+                        self._log("\n✓ Nginx reloaded (whitelist script failed but config is valid).\n", "success")
+                        self._set_status("Done (with warnings)", "orange")
+                    else:
+                        self._log(f"\n✗ Nginx reload also failed (code {reload_exit})\n", "error")
+                        self._set_status("Failed", "red")
 
             client.close()
 
@@ -719,6 +748,8 @@ class DeployHelper:
                 "cd /opt/euro-office/repo && git fetch && git checkout main && git pull && git submodule update --init fonts",
                 build_cmd,
                 f"cd /opt/euro-office/repo/deploy && docker compose -f {compose_file} exec -T portal node dist/db/migrate.js",
+                # Ensure disposable email refresh cron is set up
+                "(crontab -l 2>/dev/null | grep -q refresh-disposable-emails) || (crontab -l 2>/dev/null; echo '30 4 * * 0 /opt/euro-office/repo/deploy/scripts/refresh-disposable-emails.sh >> /var/log/disposable-emails-refresh.log 2>&1') | crontab -",
             ]
             for cmd in commands:
                 if not self.running:

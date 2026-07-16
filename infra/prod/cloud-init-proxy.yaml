@@ -46,6 +46,15 @@ runcmd:
 
   - rm -f /etc/nginx/sites-enabled/default
   - ln -sf /etc/nginx/sites-available/eurobureau.conf /etc/nginx/sites-enabled/eurobureau.conf
+
+  # Set up geo-whitelist refresh script and run initial population
+  - curl -sSf -o /usr/local/bin/refresh-cidrs-nginx.sh https://raw.githubusercontent.com/Euro-Office/DocumentServer/main/deploy/scripts/refresh-cidrs-nginx.sh || true
+  - chmod +x /usr/local/bin/refresh-cidrs-nginx.sh
+  - /usr/local/bin/refresh-cidrs-nginx.sh || touch /etc/nginx/geo-whitelist.conf
+
   - nginx -t && systemctl reload nginx
   # Certbot will fail if DNS isn't pointed yet — run manually after DNS update
   - certbot --nginx -d ${domain} --non-interactive --agree-tos -m admin@eurobureau.eu || true
+
+  # Weekly cron to refresh geo-whitelist CIDRs
+  - echo "0 4 * * 0 /usr/local/bin/refresh-cidrs-nginx.sh >> /var/log/cidrs-refresh.log 2>&1" | crontab -
