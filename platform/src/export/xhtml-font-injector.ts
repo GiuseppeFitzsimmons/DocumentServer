@@ -122,6 +122,11 @@ export function buildInlineStyles(assignment: ParagraphAssignment, bodyFont: str
     const s = assignment.style;
     if (s.textAlign && s.textAlign !== 'justify') {
       parts.push(`text-align: ${s.textAlign}`);
+      // Override the stylesheet's default text-indent for non-justify alignment,
+      // since centered/right-aligned text should not be indented unless explicitly set.
+      if (s.textIndent === undefined) {
+        parts.push('text-indent: 0pt');
+      }
     }
     if (s.fontSize) {
       parts.push(`font-size: ${s.fontSize}pt`);
@@ -220,11 +225,12 @@ export function processContentFile(
       return match;
     }
 
-    // Skip the pandoc-generated title-page <h1 class="unnumbered"> — this is
-    // synthesized from --metadata title and has no docx body counterpart.
-    // The actual title paragraph from the docx appears later as a <p> element.
+    // Remove the pandoc-generated title-page <h1 class="unnumbered"> entirely.
+    // This is synthesized from --metadata title and has no docx body counterpart.
+    // The actual title from the docx appears as a styled <p> element below it.
     if (/^<h1\b[^>]*\bclass="[^"]*\bunnumbered\b/i.test(openTag)) {
-      return match;
+      modified = true;
+      return '';
     }
 
     // Build inline styles for the assignment at the current cursor position
