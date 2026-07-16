@@ -50,15 +50,19 @@ export async function cleanPdf(inputStream: Readable): Promise<CleanPdfResult> {
   const writeStream = createWriteStream(inputPath);
   await pipeline(inputStream, writeStream);
 
-  // Run Ghostscript
+  console.log(`[pdf-clean] Running Ghostscript on ${inputPath}`);
+
+  // Run Ghostscript — preserve original Producer/Creator metadata
   await new Promise<void>((resolve, reject) => {
     execFile(
       'gs',
       [
         '-dNOPAUSE', '-dBATCH', '-dQUIET',
         '-sDEVICE=pdfwrite',
+        '-dCompatibilityLevel=1.7',
+        '-c', '[ /Producer () /Creator () /DOCINFO pdfmark',
+        '-f', inputPath,
         `-sOutputFile=${outputPath}`,
-        inputPath,
       ],
       { timeout: GS_TIMEOUT_MS },
       (error, _stdout, stderr) => {
@@ -73,6 +77,7 @@ export async function cleanPdf(inputStream: Readable): Promise<CleanPdfResult> {
           }
           return;
         }
+        console.log(`[pdf-clean] Ghostscript complete`);
         resolve();
       },
     );

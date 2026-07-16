@@ -126,6 +126,52 @@ app.use('/api/fonts', fontsRouter);
 // Editor page (authenticated)
 app.use(editorRouter);
 
+// PDF cleaning proxy — intercepts /cache/*.pdf requests routed here by nginx
+app.all(/^\/cache\/.*\.pdf/, async (req, res) => {
+  const { cleanPdf } = await import('./export/pdf-service.js');
+  const { Readable } = await import('stream');
+  const { createReadStream } = await import('fs');
+  const { stat } = await import('fs/promises');
+
+  const dsUrl = config.DS_INTERNAL_URL || 'http://documentserver';
+  const targetUrl = `${dsUrl}${req.originalUrl}`;
+
+  console.log(`[pdf-clean] Intercepted cache PDF request: ${req.originalUrl.slice(0, 100)}`);
+
+  try {
+    const dsResponse = await fetch(targetUrl);
+    console.log(`[pdf-clean] DS response: ${dsResponse.status}`);
+
+    if (!dsResponse.ok || !dsResponse.body) {
+      res.status(dsResponse.status).send('PDF not found');
+      return;
+    }
+
+    const nodeStream = Readable.fromWeb(dsResponse.body as any);
+    const result = await cleanPdf(nodeStream);
+
+    const stats = await stat(result.outputPath);
+    console.log(`[pdf-clean] Ghostscript complete, sending ${stats.size} bytes`);
+
+    // Preserve content-disposition from DS if present
+    const disposition = dsResponse.headers.get('content-disposition');
+    if (disposition) res.setHeader('Content-Disposition', disposition);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Length', stats.size);
+
+    const outputStream = createReadStream(result.outputPath);
+    outputStream.pipe(res);
+
+    res.on('finish', () => result.cleanup());
+    res.on('close', () => result.cleanup());
+  } catch (err) {
+    console.error('[pdf-clean] Error:', err);
+    if (!res.headersSent) {
+      res.status(502).send('PDF cleaning failed');
+    }
+  }
+});
+
 // Proxy /example to DocumentServer (authenticated)
 app.use('/example', requireAuth, createProxyMiddleware({
   target: config.DS_URL,
