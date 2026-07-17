@@ -114,15 +114,6 @@ export async function convertDocxToEpub(inputStream: Readable, options?: Convert
   const writeStream = createWriteStream(inputPath);
   await pipeline(inputStream, writeStream);
 
-  // Extract per-element font/style assignments BEFORE any docx modifications
-  // (section removal and preprocessing can alter text content)
-  let assignmentResult: FontAssignmentResult | null = null;
-  try {
-    assignmentResult = await extractFontAssignments(inputPath);
-  } catch (err) {
-    console.warn('Font assignment extraction failed, proceeding without per-element styling:', err);
-  }
-
   // Remove excluded sections from docx (pre-pandoc)
   if (options?.excludeSections && options.excludeSections.length > 0) {
     try {
@@ -130,6 +121,17 @@ export async function convertDocxToEpub(inputStream: Readable, options?: Convert
     } catch (err) {
       console.warn('Section removal failed, proceeding with full document:', err);
     }
+  }
+
+  // Extract per-element font/style assignments AFTER section removal but BEFORE
+  // preprocessing. Section removal alters which paragraphs exist, and the positional
+  // cursor needs the assignment list to match only the paragraphs that will appear
+  // in the final EPUB. Preprocessing adds nbsp/markers that should NOT be in the list.
+  let assignmentResult: FontAssignmentResult | null = null;
+  try {
+    assignmentResult = await extractFontAssignments(inputPath);
+  } catch (err) {
+    console.warn('Font assignment extraction failed, proceeding without per-element styling:', err);
   }
 
   // Pre-pandoc transformations (preserve empty paragraphs, section breaks, soft returns)

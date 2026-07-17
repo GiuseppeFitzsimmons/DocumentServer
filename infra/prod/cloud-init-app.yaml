@@ -61,3 +61,8 @@ runcmd:
 
   # Weekly cron to refresh disposable email domain blocklist
   - echo "30 4 * * 0 /opt/euro-office/repo/deploy/scripts/refresh-disposable-emails.sh >> /var/log/disposable-emails-refresh.log 2>&1" | crontab -
+
+  # Nightly backup email cron (runs at 00:05 UTC daily)
+  - |
+    echo '5 0 * * * root cd /opt/euro-office/repo/deploy && docker compose -f docker-compose.multi.yml exec -T portal node dist/jobs/nightly-backup.js >> /var/log/euro-office-nightly-backup.log 2>&1' > /etc/cron.d/euro-office-nightly-backup
+    chmod 644 /etc/cron.d/euro-office-nightly-backup
