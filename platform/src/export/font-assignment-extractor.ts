@@ -92,6 +92,19 @@ export async function extractFontAssignments(docxPath: string): Promise<FontAssi
     }
   }
 
+  // Extract document default font size (from w:docDefaults/w:rPrDefault/w:rPr/w:sz)
+  let docDefaultFontSize: number | undefined;
+  if (stylesXml) {
+    const parsed = parseXml(stylesXml);
+    if (parsed) {
+      const szVal = getPath(parsed, ['w:styles', 'w:docDefaults', 'w:rPrDefault', 'w:rPr', 'w:sz', '@_w:val']);
+      if (szVal !== undefined) {
+        const val = Number(szVal);
+        if (!isNaN(val)) docDefaultFontSize = val / 2; // half-points to points
+      }
+    }
+  }
+
   // Build heading style map (styleId → heading level)
   const headingStyleMap = buildHeadingStyleMap(styleMap, stylesXml);
 
@@ -108,7 +121,7 @@ export async function extractFontAssignments(docxPath: string): Promise<FontAssi
     return { bodyFont, paragraphs: [], headingFonts: new Map() };
   }
 
-  const paragraphs = extractParagraphs(docParsed, styleMap, docDefaultFont, bodyFont, headingStyleMap);
+  const paragraphs = extractParagraphs(docParsed, styleMap, docDefaultFont, bodyFont, headingStyleMap, docDefaultFontSize);
 
   // Compute per-level heading fonts
   const headingFonts = computeHeadingFonts(paragraphs);
@@ -233,13 +246,14 @@ function extractParagraphs(
   styleMap: Map<string, StyleEntry>,
   docDefault: string,
   bodyFont: string,
-  headingStyleMap: Map<string, number>
+  headingStyleMap: Map<string, number>,
+  docDefaultFontSize?: number
 ): ParagraphAssignment[] {
   const body = getPath(parsed, ['w:document', 'w:body']);
   if (!body || typeof body !== 'object') return [];
 
   const paragraphs: ParagraphAssignment[] = [];
-  collectParagraphs(body, styleMap, docDefault, bodyFont, headingStyleMap, paragraphs);
+  collectParagraphs(body, styleMap, docDefault, bodyFont, headingStyleMap, paragraphs, docDefaultFontSize);
   return paragraphs;
 }
 
@@ -252,7 +266,8 @@ function collectParagraphs(
   docDefault: string,
   bodyFont: string,
   headingStyleMap: Map<string, number>,
-  out: ParagraphAssignment[]
+  out: ParagraphAssignment[],
+  docDefaultFontSize?: number
 ): void {
   if (!node || typeof node !== 'object') return;
   const obj = node as Record<string, unknown>;
@@ -260,7 +275,7 @@ function collectParagraphs(
   if ('w:p' in obj) {
     const paras = ensureArray(obj['w:p']);
     for (const p of paras) {
-      const assignment = processParagraph(p, styleMap, docDefault, bodyFont, headingStyleMap);
+      const assignment = processParagraph(p, styleMap, docDefault, bodyFont, headingStyleMap, docDefaultFontSize);
       if (assignment) out.push(assignment);
     }
   }
@@ -270,10 +285,10 @@ function collectParagraphs(
     if (key === 'w:p') continue; // Already processed
     if (Array.isArray(value)) {
       for (const item of value) {
-        collectParagraphs(item, styleMap, docDefault, bodyFont, headingStyleMap, out);
+        collectParagraphs(item, styleMap, docDefault, bodyFont, headingStyleMap, out, docDefaultFontSize);
       }
     } else if (typeof value === 'object' && value !== null) {
-      collectParagraphs(value, styleMap, docDefault, bodyFont, headingStyleMap, out);
+      collectParagraphs(value, styleMap, docDefault, bodyFont, headingStyleMap, out, docDefaultFontSize);
     }
   }
 }
@@ -287,7 +302,8 @@ function processParagraph(
   styleMap: Map<string, StyleEntry>,
   docDefault: string,
   bodyFont: string,
-  headingStyleMap: Map<string, number>
+  headingStyleMap: Map<string, number>,
+  docDefaultFontSize?: number
 ): ParagraphAssignment | null {
   if (!p || typeof p !== 'object') return null;
   const pObj = p as Record<string, unknown>;
@@ -339,7 +355,7 @@ function processParagraph(
   if (runs.length === 0) return null;
 
   // Extract paragraph style properties (including inherited from named style)
-  const style = extractParagraphStyle(pObj, pStyleId, styleMap);
+  const style = extractParagraphStyle(pObj, pStyleId, styleMap, docDefaultFontSize);
 
   // Debug: log heading style resolution
   if (headingLevel) {
@@ -357,7 +373,8 @@ function processParagraph(
 function extractParagraphStyle(
   pObj: Record<string, unknown>,
   pStyleId: string | undefined,
-  styleMap: Map<string, StyleEntry>
+  styleMap: Map<string, StyleEntry>,
+  docDefaultFontSize?: number
 ): ParagraphStyle | undefined {
   const pPr = pObj['w:pPr'];
   const pPrObj = (pPr && typeof pPr === 'object') ? pPr as Record<string, unknown> : undefined;
@@ -437,12 +454,18 @@ function extractParagraphStyle(
     }
   }
 
-  // font-size from pPr/rPr/w:sz (direct first, then style)
-  const sz = (pPrObj ? getPath(pPrObj, ['w:rPr', 'w:sz', '@_w:val']) : undefined) ??
-             (stylePPr ? getPath(stylePPr, ['w:rPr', 'w:sz', '@_w:val']) : undefined);
+  // font-size: direct pPr/rPr/w:sz → style chain rPr/w:sz → document default
+  let sz = pPrObj ? getPath(pPrObj, ['w:rPr', 'w:sz', '@_w:val']) : undefined;
+  if (sz === undefined && pStyleId) {
+    // Traverse the full basedOn chain for w:sz (in rPr, not pPr/rPr)
+    sz = resolveStyleProperty(pStyleId, styleMap, ['w:rPr', 'w:sz', '@_w:val'], 0);
+  }
   if (sz !== undefined) {
     const val = Number(sz);
     if (!isNaN(val)) { style.fontSize = val / 2; hasAny = true; }
+  } else if (docDefaultFontSize !== undefined) {
+    style.fontSize = docDefaultFontSize;
+    hasAny = true;
   }
 
   // Borders from w:pBdr (direct first, then style)

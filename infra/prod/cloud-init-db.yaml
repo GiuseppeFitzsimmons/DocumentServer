@@ -26,6 +26,44 @@ runcmd:
   - systemctl enable redis-server
   - systemctl enable postgresql
 
+  # Install Node.js for scheduled jobs (nightly backup, disposable email refresh)
+  - curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+  - apt-get install -y nodejs git
+
+  # Clone repo and build platform
+  - git clone ${repo_url} /opt/euro-office/repo
+  - cd /opt/euro-office/repo/platform && npm install && npm run build
+
+  # Environment for jobs
+  - |
+    cat > /opt/euro-office/jobs.env << 'ENVEOF'
+    DATABASE_URL=postgres://portal:${db_password}@localhost:5432/portal
+    REDIS_URL=redis://localhost:6379
+    STORAGE_BACKEND=s3
+    OVH_S3_ENDPOINT=${s3_endpoint}
+    OVH_S3_BUCKET=${s3_bucket}
+    OVH_S3_ACCESS_KEY=${s3_access_key}
+    OVH_S3_SECRET_KEY=${s3_secret_key}
+    OVH_S3_REGION=${s3_region}
+    SMTP_HOST=${smtp_host}
+    SMTP_PORT=${smtp_port}
+    SMTP_USER=${smtp_user}
+    SMTP_PASS=${smtp_pass}
+    MAIL_DOMAIN=eurobureau.eu
+    DS_JWT_SECRET=${jwt_secret}
+    DS_URL=https://${domain}
+    PLATFORM_BASE_URL=https://${domain}
+    SESSION_SECRET=${session_secret}
+    ENVEOF
+
+  # Nightly backup email cron (00:05 UTC daily)
+  - echo '5 0 * * * root cd /opt/euro-office/repo/platform && env $(cat /opt/euro-office/jobs.env | xargs) node dist/jobs/nightly-backup.js >> /var/log/nightly-backup.log 2>&1' > /etc/cron.d/euro-office-nightly-backup
+  - chmod 644 /etc/cron.d/euro-office-nightly-backup
+
+  # Weekly disposable email refresh
+  - echo '30 4 * * 0 root /opt/euro-office/repo/deploy/scripts/refresh-disposable-emails.sh >> /var/log/disposable-emails-refresh.log 2>&1' > /etc/cron.d/euro-office-disposable-refresh
+  - chmod 644 /etc/cron.d/euro-office-disposable-refresh
+
   # Ensure private network interface is configured
   - |
     if ! grep -q "enp7s0" /etc/netplan/50-cloud-init.yaml 2>/dev/null; then
