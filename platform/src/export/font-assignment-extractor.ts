@@ -453,7 +453,6 @@ function extractParagraphStyle(
 
   // font-size: direct pPr/rPr/w:sz → style chain rPr/w:sz (no document default fallback)
   let sz = pPrObj ? getPath(pPrObj, ['w:rPr', 'w:sz', '@_w:val']) : undefined;
-  const szSource = sz !== undefined ? 'direct' : undefined;
   if (sz === undefined && pStyleId) {
     sz = resolveStyleProperty(pStyleId, styleMap, ['w:rPr', 'w:sz', '@_w:val'], 0);
     if (sz !== undefined) {
@@ -467,7 +466,6 @@ function extractParagraphStyle(
     if (!isNaN(val)) {
       style.fontSize = val / 2;
       hasAny = true;
-      console.log(`[font-size] Found: ${val / 2}pt, pStyleId=${pStyleId || 'none'}, source=${szSource || 'style-chain'}`);
     }
   }
 
@@ -629,8 +627,6 @@ function extractRunText(run: Record<string, unknown>): string {
   if (hasBr && text.length > 0) return text + ' ';
 
   return text;
-
-  return '';
 }
 
 /**
