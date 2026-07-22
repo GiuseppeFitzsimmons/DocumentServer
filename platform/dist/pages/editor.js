@@ -6,7 +6,6 @@ import { getShare, listSharesForFile } from '../sharing/service.js';
 import { pool } from '../db/pool.js';
 import { getLatestVersionNumber } from '../versions/repository.js';
 import { config } from '../config.js';
-import { markDocumentOpen } from '../ds/active-documents.js';
 export function summarizePermissions(p) {
     if (p.edit && p.download && p.print && p.copy && p.comment && p.review && p.chat && p.fillForms) {
         return 'Full Access';
@@ -66,9 +65,6 @@ editorRouter.get('/editor/:fileId', requireAuth, async (req, res) => {
                 isOwner,
                 hasVersions,
             });
-            // Track this document as actively open for forcesave
-            const documentKey = `${file.id}_${file.updatedAt.getTime()}`;
-            markDocumentOpen(fileId, documentKey).catch((err) => console.error('[editor] Failed to mark document open:', err));
             res.render('editor', {
                 title: file.name,
                 editorConfig,
@@ -89,9 +85,6 @@ editorRouter.get('/editor/:fileId', requireAuth, async (req, res) => {
             isOwner,
             hasVersions,
         });
-        // Track this document as actively open for forcesave
-        const documentKey = `${file.id}_${file.updatedAt.getTime()}`;
-        markDocumentOpen(fileId, documentKey).catch((err) => console.error('[editor] Failed to mark document open:', err));
         res.render('editor', {
             title: file.name,
             editorConfig,
