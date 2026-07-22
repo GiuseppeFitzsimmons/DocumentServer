@@ -3,35 +3,33 @@
  * to inject per-element font-family inline styles based on font assignments
  * extracted from the source docx.
  *
- * Uses positional cursor matching to correlate docx paragraphs to XHTML block
- * elements sequentially across all content files. The cursor carries across
- * file boundaries, maintaining 1:1 alignment with the ordered assignment list.
+ * Uses text-content matching to correlate docx paragraphs to XHTML block
+ * elements, which is robust against pandoc inserting synthetic pages (ToC,
+ * title page) that have no docx counterpart.
  */
 
 import AdmZip from 'adm-zip';
 import { writeFileSync } from 'fs';
-import type { FontAssignmentResult, ParagraphAssignment } from './font-assignment-extractor.js';
+import type { FontAssignmentResult, ParagraphAssignment, ParagraphStyle } from './font-assignment-extractor.js';
 
 export interface XhtmlFontInjectorInput {
   epubPath: string;
   assignments: FontAssignmentResult;
 }
 
-export interface CursorState {
-  index: number;
-}
-
 /**
  * Injects font-family inline styles into XHTML content files within the epub.
- * Uses positional cursor matching to correlate paragraphs to XHTML block elements.
- * A single cursor walks through the ordered ParagraphAssignment[] array in sync
- * with block elements encountered sequentially across all content files.
+ * Uses text-content matching to correlate paragraphs to XHTML elements.
  */
 export async function injectXhtmlFonts(input: XhtmlFontInjectorInput): Promise<void> {
   const { epubPath, assignments } = input;
   const { bodyFont, paragraphs } = assignments;
 
   if (paragraphs.length === 0) return;
+
+  // Build style map from all paragraphs
+  const styleMap = buildStyleMap(paragraphs, bodyFont);
+  if (styleMap.size === 0) return;
 
   let zip: AdmZip;
   try {
@@ -46,7 +44,6 @@ export async function injectXhtmlFonts(input: XhtmlFontInjectorInput): Promise<v
     return;
   }
 
-  const cursor: CursorState = { index: 0 };
   let modified = false;
 
   for (const entryName of xhtmlEntries) {
@@ -54,7 +51,7 @@ export async function injectXhtmlFonts(input: XhtmlFontInjectorInput): Promise<v
     if (!entry) continue;
 
     const content = entry.getData().toString('utf-8');
-    const result = processContentFile(content, paragraphs, cursor, bodyFont);
+    const result = injectStylesIntoXhtml(content, styleMap);
 
     if (result.modified) {
       zip.updateFile(entryName, Buffer.from(result.content, 'utf-8'));
@@ -65,6 +62,91 @@ export async function injectXhtmlFonts(input: XhtmlFontInjectorInput): Promise<v
   if (modified) {
     writeFileSync(epubPath, zip.toBuffer());
   }
+}
+
+interface StyleMapEntry {
+  styles: string;  // Full CSS inline style string to inject
+}
+
+/**
+ * Builds a map of normalized paragraph text → inline CSS styles.
+ * Includes font-family (when different from body) and paragraph styles
+ * (text-align, font-size, line-height, etc.) extracted from the docx.
+ */
+function buildStyleMap(
+  paragraphs: ParagraphAssignment[],
+  bodyFont: string
+): Map<string, StyleMapEntry> {
+  const map = new Map<string, StyleMapEntry>();
+
+  for (const para of paragraphs) {
+    const text = normalizeText(para.runs.map(r => r.text).join(''));
+    if (text.length === 0) continue;
+
+    const parts: string[] = [];
+
+    // Font-family (only if different from body)
+    const fonts = new Set(para.runs.map(r => r.font));
+    if (fonts.size === 1 && para.runs[0].font !== bodyFont) {
+      parts.push(`font-family: '${para.runs[0].font}'`);
+    } else if (para.font && para.font !== bodyFont) {
+      parts.push(`font-family: '${para.font}'`);
+    }
+
+    // Paragraph style properties
+    if (para.style) {
+      const s = para.style;
+      if (s.textAlign && s.textAlign !== 'justify') {
+        // Only inject non-justify (our CSS default is justify for p)
+        parts.push(`text-align: ${s.textAlign}`);
+      }
+      if (s.fontSize) {
+        parts.push(`font-size: ${s.fontSize}pt`);
+      }
+      if (s.lineHeight) {
+        if (s.lineHeight <= 5) {
+          // Multiplier (e.g., 1.5 = 150%)
+          parts.push(`line-height: ${Math.round(s.lineHeight * 100)}%`);
+        } else {
+          // Absolute value in pt
+          parts.push(`line-height: ${s.lineHeight}pt`);
+        }
+      }
+      if (s.textIndent !== undefined) {
+        parts.push(`text-indent: ${s.textIndent}pt`);
+      }
+      if (s.spaceBefore) {
+        parts.push(`margin-top: ${s.spaceBefore}pt`);
+      }
+      if (s.spaceAfter) {
+        parts.push(`margin-bottom: ${s.spaceAfter}pt`);
+      }
+      if (s.marginLeft) {
+        parts.push(`margin-left: ${s.marginLeft}pt`);
+      }
+      if (s.marginRight) {
+        parts.push(`margin-right: ${s.marginRight}pt`);
+      }
+      if (s.borderTop) {
+        parts.push(`border-top: ${s.borderTop.width}pt ${s.borderTop.style} #${s.borderTop.color}`);
+      }
+      if (s.borderBottom) {
+        parts.push(`border-bottom: ${s.borderBottom.width}pt ${s.borderBottom.style} #${s.borderBottom.color}`);
+      }
+      if (s.borderLeft) {
+        parts.push(`border-left: ${s.borderLeft.width}pt ${s.borderLeft.style} #${s.borderLeft.color}`);
+      }
+      if (s.borderRight) {
+        parts.push(`border-right: ${s.borderRight.width}pt ${s.borderRight.style} #${s.borderRight.color}`);
+      }
+    }
+
+    if (parts.length > 0) {
+      map.set(text, { styles: parts.join('; ') });
+    }
+  }
+
+  return map;
 }
 
 /**
@@ -82,169 +164,33 @@ function findXhtmlFiles(zip: AdmZip): string[] {
     .sort();
 }
 
-/**
- * Determines if a block element's inner HTML is empty or contains only
- * whitespace/non-breaking space characters. Empty blocks are skipped entirely
- * by the positional cursor (no cursor advancement, no styling) because the
- * font-assignment-extractor runs before the preprocessor and produces no
- * entries for empty paragraphs.
- */
-export function isEmptyBlock(innerHtml: string): boolean {
-  // Strip HTML tags
-  const textOnly = innerHtml.replace(/<[^>]+>/g, '');
-  // Remove non-breaking space entities and unicode equivalent
-  const stripped = textOnly
-    .replace(/&nbsp;/gi, '')
-    .replace(/&#160;/g, '')
-    .replace(/\u00A0/g, '');
-  // Check if only whitespace remains
-  return stripped.trim().length === 0;
+// Matches block-level elements in pandoc XHTML output
+const BLOCK_REGEX = /(<(?:p|h[1-6]|li|blockquote|div)\b[^>]*>)([\s\S]*?)(<\/(?:p|h[1-6]|li|blockquote|div)>)/gi;
+
+interface InjectResult {
+  content: string;
+  modified: boolean;
 }
 
 /**
- * Builds an inline CSS style string for a single paragraph assignment.
- * Returns null when no styles apply (font matches body font and no
- * paragraph style properties are set).
+ * Processes a single XHTML file:
+ * 1. Injects inline styles (font-family, text-align, font-size, etc.) from docx
  */
-export function buildInlineStyles(assignment: ParagraphAssignment, bodyFont: string): string | null {
-  const parts: string[] = [];
-
-  // Font-family (only if different from body)
-  const fonts = new Set(assignment.runs.map(r => r.font));
-  if (fonts.size === 1 && assignment.runs[0].font !== bodyFont) {
-    parts.push(`font-family: '${assignment.runs[0].font}'`);
-  } else if (assignment.font && assignment.font !== bodyFont) {
-    parts.push(`font-family: '${assignment.font}'`);
-  }
-
-  // Paragraph style properties
-  if (assignment.style) {
-    const s = assignment.style;
-    if (s.textAlign && s.textAlign !== 'justify') {
-      parts.push(`text-align: ${s.textAlign}`);
-      // Override the stylesheet's default text-indent for non-justify alignment,
-      // since centered/right-aligned text should not be indented unless explicitly set.
-      if (s.textIndent === undefined) {
-        parts.push('text-indent: 0pt');
-      }
-    }
-    if (s.fontSize) {
-      parts.push(`font-size: ${s.fontSize}pt`);
-    }
-    if (s.lineHeight) {
-      if (s.lineHeight <= 5) {
-        // Multiplier (e.g., 1.5 = 150%)
-        parts.push(`line-height: ${Math.round(s.lineHeight * 100)}%`);
-      } else {
-        // Absolute value in pt
-        parts.push(`line-height: ${s.lineHeight}pt`);
-      }
-    }
-    if (s.textIndent !== undefined) {
-      parts.push(`text-indent: ${s.textIndent}pt`);
-    }
-    if (s.spaceBefore) {
-      parts.push(`margin-top: ${s.spaceBefore}pt`);
-    }
-    if (s.spaceAfter) {
-      parts.push(`margin-bottom: ${s.spaceAfter}pt`);
-    }
-    if (s.marginLeft) {
-      parts.push(`margin-left: ${s.marginLeft}pt`);
-    }
-    if (s.marginRight) {
-      parts.push(`margin-right: ${s.marginRight}pt`);
-    }
-    if (s.borderTop) {
-      parts.push(`border-top: ${s.borderTop.width}pt ${s.borderTop.style} #${s.borderTop.color}`);
-    }
-    if (s.borderBottom) {
-      parts.push(`border-bottom: ${s.borderBottom.width}pt ${s.borderBottom.style} #${s.borderBottom.color}`);
-    }
-    if (s.borderLeft) {
-      parts.push(`border-left: ${s.borderLeft.width}pt ${s.borderLeft.style} #${s.borderLeft.color}`);
-    }
-    if (s.borderRight) {
-      parts.push(`border-right: ${s.borderRight.width}pt ${s.borderRight.style} #${s.borderRight.color}`);
-    }
-  }
-
-  if (parts.length === 0) {
-    return null;
-  }
-
-  return parts.join('; ');
-}
-
-/**
- * Processes a single XHTML content file using positional cursor matching.
- * Walks block elements in document order and applies the corresponding style
- * from the assignments array at the current cursor position.
- *
- * Empty/whitespace-only blocks are SKIPPED without advancing the cursor,
- * because the font-assignment-extractor does not produce entries for empty
- * paragraphs (it returns null for paragraphs with no text runs). The cursor
- * only advances for non-empty blocks that have a corresponding assignment.
- *
- * @param content - The XHTML file content as a string
- * @param assignments - Ordered array of paragraph assignments from the docx
- * @param cursor - Mutable cursor state tracking position in the assignments array
- * @param bodyFont - The document's body font (used to determine if font-family should be injected)
- * @returns Object with the (possibly modified) content and whether any changes were made
- */
-export function processContentFile(
+function injectStylesIntoXhtml(
   content: string,
-  assignments: ParagraphAssignment[],
-  cursor: CursorState,
-  bodyFont: string
-): { content: string; modified: boolean } {
+  styleMap: Map<string, StyleMapEntry>
+): InjectResult {
   let modified = false;
 
-  // Create a new regex instance to avoid shared lastIndex state
-  const blockRegex = /(<(?:p|h[1-6]|li|blockquote|div)\b[^>]*>)([\s\S]*?)(<\/(?:p|h[1-6]|li|blockquote|div)>)/gi;
+  let result = content.replace(BLOCK_REGEX, (match, openTag: string, inner: string, closeTag: string) => {
+    const textContent = normalizeText(stripHtmlTags(inner));
+    if (textContent.length === 0) return match;
 
-  const result = content.replace(blockRegex, (match, openTag: string, inner: string, closeTag: string) => {
-    // If cursor exceeds assignment length, leave unstyled
-    if (cursor.index >= assignments.length) {
-      return match;
-    }
+    const entry = styleMap.get(textContent);
+    if (!entry) return match;
 
-    // Empty blocks (whitespace/nbsp only) do NOT advance the cursor.
-    // The font-assignment-extractor runs BEFORE the docx-preprocessor, so it
-    // sees truly empty paragraphs (no runs) and skips them (returns null).
-    // The preprocessor then inserts nbsp to preserve them in the EPUB output.
-    // Result: no assignment list entry exists for these blocks.
-    if (isEmptyBlock(inner)) {
-      return match;
-    }
-
-    // Skip page break marker paragraphs inserted by the docx-preprocessor.
-    // These are added AFTER extraction and have no assignment list entry.
-    // The epub-page-splitter removes them later, but we see them first.
-    if (inner.includes('\u00AB\u00ABPAGEBREAK\u00BB\u00BB')) {
-      return match;
-    }
-
-    // Remove the pandoc-generated title-page <h1 class="unnumbered"> entirely.
-    // This is synthesized from --metadata title and has no docx body counterpart.
-    // The actual title from the docx appears as a styled <p> element below it.
-    if (/^<h1\b[^>]*\bclass="[^"]*\bunnumbered\b/i.test(openTag)) {
-      modified = true;
-      return '';
-    }
-
-    // Build inline styles for the assignment at the current cursor position
-    const style = buildInlineStyles(assignments[cursor.index], bodyFont);
-    cursor.index++;
-
-    // If no styles apply, return match unchanged
-    if (style === null) {
-      return match;
-    }
-
-    // Inject style and mark as modified
     modified = true;
-    const styledTag = injectStyleOnTag(openTag, style);
+    const styledTag = injectStyleOnTag(openTag, entry.styles);
     return styledTag + inner + closeTag;
   });
 
@@ -266,4 +212,18 @@ function injectStyleOnTag(openTag: string, style: string): string {
   }
 
   return openTag.replace(/>$/, ` style="${style}">`);
+}
+
+/**
+ * Strips HTML tags from a string, returning only text content.
+ */
+function stripHtmlTags(html: string): string {
+  return html.replace(/<[^>]+>/g, '');
+}
+
+/**
+ * Normalizes text for comparison: collapse whitespace, trim, lowercase.
+ */
+function normalizeText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim().toLowerCase();
 }

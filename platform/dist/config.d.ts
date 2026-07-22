@@ -10,6 +10,7 @@ export declare const config: {
     DS_JWT_SECRET: string;
     TRUST_PROXY: string;
     FILE_STORAGE_PATH: string;
+    STORAGE_BACKEND: "local" | "s3";
     PLATFORM_BASE_URL: string;
     MAIL_DOMAIN: string;
     RESEND_API_KEY: string;

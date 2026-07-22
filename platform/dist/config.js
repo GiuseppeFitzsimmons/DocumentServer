@@ -11,6 +11,7 @@ const envSchema = z.object({
     DS_JWT_SECRET: z.string().min(8),
     TRUST_PROXY: z.string().default('false'),
     FILE_STORAGE_PATH: z.string().default('/data/files'),
+    STORAGE_BACKEND: z.enum(['local', 's3']).default('local'),
     PLATFORM_BASE_URL: z.string().url(),
     MAIL_DOMAIN: z.string().default('eurobureau.eu'),
     RESEND_API_KEY: z.string().default(''),
