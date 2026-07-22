@@ -95,6 +95,9 @@ export async function extractFontAssignments(docxPath: string): Promise<FontAssi
   // Build heading style map (styleId → heading level)
   const headingStyleMap = buildHeadingStyleMap(styleMap, stylesXml);
 
+  // Build TOC style set (paragraphs to exclude from assignments)
+  const tocStyleSet = buildTocStyleSet(stylesXml);
+
   // Resolve body font: Normal style font → docDefault → "serif"
   let bodyFont = docDefaultFont;
   if (normalStyleId) {
@@ -108,7 +111,7 @@ export async function extractFontAssignments(docxPath: string): Promise<FontAssi
     return { bodyFont, paragraphs: [], headingFonts: new Map() };
   }
 
-  const paragraphs = extractParagraphs(docParsed, styleMap, docDefaultFont, bodyFont, headingStyleMap);
+  const paragraphs = extractParagraphs(docParsed, styleMap, docDefaultFont, bodyFont, headingStyleMap, tocStyleSet);
 
   // Compute per-level heading fonts
   const headingFonts = computeHeadingFonts(paragraphs);
@@ -233,13 +236,14 @@ function extractParagraphs(
   styleMap: Map<string, StyleEntry>,
   docDefault: string,
   bodyFont: string,
-  headingStyleMap: Map<string, number>
+  headingStyleMap: Map<string, number>,
+  tocStyleSet: Set<string>
 ): ParagraphAssignment[] {
   const body = getPath(parsed, ['w:document', 'w:body']);
   if (!body || typeof body !== 'object') return [];
 
   const paragraphs: ParagraphAssignment[] = [];
-  collectParagraphs(body, styleMap, docDefault, bodyFont, headingStyleMap, paragraphs);
+  collectParagraphs(body, styleMap, docDefault, bodyFont, headingStyleMap, tocStyleSet, paragraphs);
   return paragraphs;
 }
 
@@ -252,6 +256,7 @@ function collectParagraphs(
   docDefault: string,
   bodyFont: string,
   headingStyleMap: Map<string, number>,
+  tocStyleSet: Set<string>,
   out: ParagraphAssignment[]
 ): void {
   if (!node || typeof node !== 'object') return;
@@ -260,7 +265,7 @@ function collectParagraphs(
   if ('w:p' in obj) {
     const paras = ensureArray(obj['w:p']);
     for (const p of paras) {
-      const assignment = processParagraph(p, styleMap, docDefault, bodyFont, headingStyleMap);
+      const assignment = processParagraph(p, styleMap, docDefault, bodyFont, headingStyleMap, tocStyleSet);
       if (assignment) out.push(assignment);
     }
   }
@@ -270,10 +275,10 @@ function collectParagraphs(
     if (key === 'w:p') continue; // Already processed
     if (Array.isArray(value)) {
       for (const item of value) {
-        collectParagraphs(item, styleMap, docDefault, bodyFont, headingStyleMap, out);
+        collectParagraphs(item, styleMap, docDefault, bodyFont, headingStyleMap, tocStyleSet, out);
       }
     } else if (typeof value === 'object' && value !== null) {
-      collectParagraphs(value, styleMap, docDefault, bodyFont, headingStyleMap, out);
+      collectParagraphs(value, styleMap, docDefault, bodyFont, headingStyleMap, tocStyleSet, out);
     }
   }
 }
@@ -287,7 +292,8 @@ function processParagraph(
   styleMap: Map<string, StyleEntry>,
   docDefault: string,
   bodyFont: string,
-  headingStyleMap: Map<string, number>
+  headingStyleMap: Map<string, number>,
+  tocStyleSet: Set<string>
 ): ParagraphAssignment | null {
   if (!p || typeof p !== 'object') return null;
   const pObj = p as Record<string, unknown>;
@@ -295,6 +301,23 @@ function processParagraph(
   // Resolve paragraph-level font
   // Priority: direct pPr/rPr/rFonts > pStyle reference > bodyFont (implicit Normal)
   const pStyleId = getPath(pObj, ['w:pPr', 'w:pStyle', '@_w:val']) as string | undefined;
+
+  // Skip TOC paragraphs — pandoc generates its own TOC that doesn't match 1:1
+  // BUT still include them in the assignment list with empty style so positional
+  // alignment is maintained with the Lua filter (which sees these as Para elements)
+  if (pStyleId && tocStyleSet.has(pStyleId)) {
+    // Return a placeholder assignment with no styling
+    const runs: RunAssignment[] = [];
+    const runElements = ensureArray(pObj['w:r']);
+    for (const run of runElements) {
+      if (!run || typeof run !== 'object') continue;
+      const text = extractRunText(run as Record<string, unknown>);
+      if (text.length > 0) runs.push({ font: bodyFont, text });
+    }
+    if (runs.length === 0) return null;
+    return { font: bodyFont, runs };  // No style, no heading — just a position placeholder
+  }
+
   const pDirectFont = getFontFromRFonts(getPath(pObj, ['w:pPr', 'w:rPr', 'w:rFonts']));
 
   // Detect heading level from style
@@ -341,6 +364,12 @@ function processParagraph(
   // Extract paragraph style properties (including inherited from named style)
   const style = extractParagraphStyle(pObj, pStyleId, styleMap);
 
+  // Debug: log heading style resolution
+  if (headingLevel) {
+    const text = runs.map(r => r.text).join('').slice(0, 40);
+    console.log(`[font-assign] H${headingLevel} "${text}": textAlign=${style?.textAlign || 'NONE'}, pStyleId=${pStyleId}`);
+  }
+
   return { font: paraFont, runs, headingLevel, style };
 }
 
@@ -362,9 +391,13 @@ function extractParagraphStyle(
   const style: ParagraphStyle = {};
   let hasAny = false;
 
-  // text-align from w:jc (direct first, then style)
-  const jc = (pPrObj ? getPath(pPrObj, ['w:jc', '@_w:val']) : undefined) ??
-             (stylePPr ? getPath(stylePPr, ['w:jc', '@_w:val']) : undefined);
+  // text-align from w:jc (direct first, then style chain)
+  const jcDirect = pPrObj ? getPath(pPrObj, ['w:jc', '@_w:val']) : undefined;
+  let jc = jcDirect;
+  if (!jc && pStyleId) {
+    // Traverse the full basedOn chain for w:jc
+    jc = resolveStyleProperty(pStyleId, styleMap, ['w:jc', '@_w:val'], 0);
+  }
   if (jc && typeof jc === 'string') {
     const alignMap: Record<string, ParagraphStyle['textAlign']> = {
       left: 'left', start: 'left',
@@ -490,6 +523,33 @@ function parseBorder(borderEl: unknown): BorderDef | null {
     color: color === 'auto' ? '000000' : color,
     width: widthPt,
   };
+}
+
+/**
+ * Resolves a specific property from a style's pPr by traversing the basedOn chain.
+ * Unlike resolveStylePPr which stops at the first pPr found, this looks for a
+ * specific property path within pPr through the entire chain.
+ */
+function resolveStyleProperty(
+  styleId: string,
+  styleMap: Map<string, StyleEntry>,
+  propertyPath: string[],
+  depth: number
+): unknown {
+  if (depth > 10) return undefined;
+  const entry = styleMap.get(styleId);
+  if (!entry) return undefined;
+
+  if (entry.pPr) {
+    const value = getPath(entry.pPr, propertyPath);
+    if (value !== undefined) return value;
+  }
+
+  if (entry.parentStyleId) {
+    return resolveStyleProperty(entry.parentStyleId, styleMap, propertyPath, depth + 1);
+  }
+
+  return undefined;
 }
 
 /**
@@ -637,6 +697,39 @@ function buildHeadingStyleMap(styleMap: Map<string, StyleEntry>, stylesXml: stri
   }
 
   return headingStyleMap;
+}
+
+/**
+ * Builds a set of styleIds that are TOC (Table of Contents) styles.
+ * Paragraphs using these styles are excluded from the assignment list because
+ * pandoc generates its own TOC structure that doesn't correspond 1:1 to docx TOC entries.
+ */
+function buildTocStyleSet(stylesXml: string | null): Set<string> {
+  const tocStyles = new Set<string>();
+  if (!stylesXml) return tocStyles;
+
+  const parsed = parseXml(stylesXml);
+  if (!parsed) return tocStyles;
+
+  const styles = getPath(parsed, ['w:styles', 'w:style']);
+  if (!styles) return tocStyles;
+
+  for (const style of ensureArray(styles)) {
+    if (!style || typeof style !== 'object') continue;
+    const obj = style as Record<string, unknown>;
+    const styleId = obj['@_w:styleId'];
+    if (typeof styleId !== 'string') continue;
+
+    const styleName = getPath(obj, ['w:name', '@_w:val']);
+    if (typeof styleName !== 'string') continue;
+
+    // Match "toc 1" through "toc 9" and "TOC Heading"
+    if (/^toc\s*\d$/i.test(styleName) || /^toc\s*heading$/i.test(styleName)) {
+      tocStyles.add(styleId);
+    }
+  }
+
+  return tocStyles;
 }
 
 /**

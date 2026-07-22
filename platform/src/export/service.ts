@@ -11,7 +11,7 @@ import { extractFontsFromDocx } from './font-extractor.js';
 import { resolveFonts } from './font-resolver.js';
 import { injectFontsIntoEpub } from './epub-font-injector.js';
 import { extractFontAssignments } from './font-assignment-extractor.js';
-import { injectXhtmlFonts } from './xhtml-font-injector.js';
+import { generateStyleMap } from './style-map-generator.js';
 import { removeSections } from './section-remover.js';
 import { preprocessDocx } from './docx-preprocessor.js';
 import { splitEpubAtPageBreaks } from './epub-page-splitter.js';
@@ -66,24 +66,35 @@ export interface ConvertOptions {
  * Runs pandoc to convert a docx file to epub format.
  * Extracted as a helper to keep the main function clean with async/await.
  */
-function runPandoc(inputPath: string, outputPath: string, options?: ConvertOptions): Promise<void> {
+function runPandoc(inputPath: string, outputPath: string, options?: ConvertOptions, styleMapPath?: string): Promise<void> {
   const cssPath = path.resolve(process.cwd(), 'config/epub-styles.css');
-  const args = [inputPath];
+  const luaFilterPath = path.resolve(process.cwd(), 'config/inject-styles.lua');
+  const args = ['-f', 'docx+styles', inputPath];
   if (options?.includeToc !== false) {
     args.push('--toc', '--toc-depth=3');
   }
   if (options?.includeTitlePage === false) {
     args.push('--epub-title-page=false');
   }
-  args.push('--css', cssPath, '-o', outputPath);
+  args.push('--css', cssPath);
+  if (styleMapPath) {
+    args.push('--lua-filter', luaFilterPath);
+  }
+  args.push('-o', outputPath);
   if (options?.title) {
     args.push('--metadata', `title=${options.title}`);
   }
+
+  const env = { ...process.env };
+  if (styleMapPath) {
+    env.STYLE_MAP_PATH = styleMapPath;
+  }
+
   return new Promise<void>((resolve, reject) => {
     execFile(
       'pandoc',
       args,
-      { timeout: PANDOC_TIMEOUT_MS },
+      { timeout: PANDOC_TIMEOUT_MS, env },
       (error, _stdout, stderr) => {
         if (error) {
           if (error.killed || error.signal) {
@@ -123,15 +134,13 @@ export async function convertDocxToEpub(inputStream: Readable, options?: Convert
     }
   }
 
-  // Extract per-element font/style assignments AFTER section removal but BEFORE
-  // preprocessing. Section removal alters which paragraphs exist, and the positional
-  // cursor needs the assignment list to match only the paragraphs that will appear
-  // in the final EPUB. Preprocessing adds nbsp/markers that should NOT be in the list.
+  // Extract font assignments for font embedding (bodyFont, headingFonts).
+  // Style injection is now handled by the Lua filter using the style map.
   let assignmentResult: FontAssignmentResult | null = null;
   try {
     assignmentResult = await extractFontAssignments(inputPath);
   } catch (err) {
-    console.warn('Font assignment extraction failed, proceeding without per-element styling:', err);
+    console.warn('Font assignment extraction failed, proceeding without font info:', err);
   }
 
   // Pre-pandoc transformations (preserve empty paragraphs, section breaks, soft returns)
@@ -166,17 +175,18 @@ export async function convertDocxToEpub(inputStream: Readable, options?: Convert
     console.warn('Font extraction/resolution failed, proceeding without fonts:', err);
   }
 
-  // Invoke Pandoc
-  await runPandoc(inputPath, outputPath, options);
-
-  // Inject per-element font-family styles into XHTML (best-effort)
-  if (assignmentResult) {
-    try {
-      await injectXhtmlFonts({ epubPath: outputPath, assignments: assignmentResult });
-    } catch (err) {
-      console.warn('XHTML font injection failed, proceeding without per-element styling:', err);
-    }
+  // Generate style map for pandoc Lua filter
+  let styleMapPath: string | undefined;
+  try {
+    styleMapPath = path.join(tempDir, 'style-map.json');
+    generateStyleMap(inputPath, styleMapPath);
+  } catch (err) {
+    console.warn('Style map generation failed, proceeding without per-element styling:', err);
+    styleMapPath = undefined;
   }
+
+  // Invoke Pandoc with Lua filter for style injection
+  await runPandoc(inputPath, outputPath, options, styleMapPath);
 
   // Inject fonts into epub (best-effort)
   if (options?.embedFonts !== false) {

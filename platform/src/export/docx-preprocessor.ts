@@ -59,6 +59,18 @@ export async function preprocessDocx(options: PreprocessOptions): Promise<void> 
     zip.updateFile('word/document.xml', Buffer.from(xml, 'utf-8'));
     writeFileSync(docxPath, zip.toBuffer());
   }
+
+  // Always promote direct paragraph formatting to named styles.
+  // This must run AFTER other transformations and writes back independently
+  // because it modifies both document.xml AND styles.xml.
+  try {
+    const promoted = promoteDirectFormatting(docxPath);
+    if (promoted > 0) {
+      console.log(`[docx-preprocessor] Promoted ${promoted} direct-formatted paragraph(s) to named styles`);
+    }
+  } catch (err) {
+    console.warn('[docx-preprocessor] Direct formatting promotion failed:', err);
+  }
 }
 
 interface TransformResult {
@@ -183,4 +195,101 @@ function preserveEmptyParagraphs(xml: string): TransformResult {
   });
 
   return { xml: result, changed: count > 0, count };
+}
+
+
+/**
+ * Promotes direct paragraph formatting (w:jc alignment) to named styles.
+ * 
+ * Pandoc's +styles extension only exposes named styles via custom-style Divs.
+ * Direct formatting (e.g., text-align center applied to a single paragraph
+ * without using a named style) is lost during conversion. This function:
+ * 
+ * 1. Scans document.xml for paragraphs with direct w:jc that don't already have a pStyle
+ * 2. Creates synthetic styles in styles.xml (euro-center, euro-right, euro-left)
+ * 3. Assigns the synthetic style to those paragraphs
+ * 
+ * This ensures the Lua filter can detect and apply the alignment.
+ */
+function promoteDirectFormatting(docxPath: string): number {
+  const zip = new AdmZip(docxPath);
+  const docEntry = zip.getEntry('word/document.xml');
+  const stylesEntry = zip.getEntry('word/styles.xml');
+  if (!docEntry) return 0;
+
+  let docXml = docEntry.getData().toString('utf-8');
+  let stylesXml = stylesEntry?.getData().toString('utf-8') || '';
+
+  // Find the Normal style ID (the default paragraph style)
+  let normalStyleId = 'Normal';
+  const defaultMatch = stylesXml.match(/<w:style[^>]*w:default="1"[^>]*w:type="paragraph"[^>]*w:styleId="([^"]+)"/);
+  const defaultMatch2 = stylesXml.match(/<w:style[^>]*w:type="paragraph"[^>]*w:default="1"[^>]*w:styleId="([^"]+)"/);
+  const defaultMatch3 = stylesXml.match(/<w:style[^>]*w:styleId="([^"]+)"[^>]*w:type="paragraph"[^>]*w:default="1"/);
+  if (defaultMatch) normalStyleId = defaultMatch[1];
+  else if (defaultMatch2) normalStyleId = defaultMatch2[1];
+  else if (defaultMatch3) normalStyleId = defaultMatch3[1];
+
+  // Track which synthetic styles we need to create
+  const neededStyles = new Set<string>();
+  let count = 0;
+
+  // Find paragraphs with direct w:jc but NO existing pStyle
+  docXml = docXml.replace(
+    /(<w:pPr\b[^>]*>)([\s\S]*?)(<\/w:pPr>)/g,
+    (match, open: string, inner: string, close: string) => {
+      if (/<w:pStyle\b/.test(inner)) return match;
+
+      const jcMatch = inner.match(/<w:jc\s+w:val="([^"]+)"/);
+      if (!jcMatch) return match;
+
+      const alignment = jcMatch[1];
+      if (alignment === 'both' || alignment === 'distribute') return match;
+
+      const styleName = `euro-${alignment === 'start' ? 'left' : alignment === 'end' ? 'right' : alignment}`;
+      neededStyles.add(styleName);
+      count++;
+
+      return `${open}<w:pStyle w:val="${styleName}"/>${inner}${close}`;
+    }
+  );
+
+  if (count === 0) return 0;
+
+  // Add synthetic styles to styles.xml
+  const styleDefsToAdd: string[] = [];
+  const alignMap: Record<string, string> = {
+    'euro-center': 'center',
+    'euro-right': 'right',
+    'euro-left': 'left',
+  };
+
+  for (const styleName of neededStyles) {
+    const align = alignMap[styleName] || 'center';
+    if (!stylesXml.includes(`w:name w:val="${styleName}"`)) {
+      // Use a high numeric ID to avoid collisions with existing OnlyOffice styles
+      const numericId = styleName === 'euro-center' ? '9901' : styleName === 'euro-right' ? '9902' : '9903';
+      styleDefsToAdd.push(
+        `<w:style w:type="paragraph" w:styleId="${numericId}">` +
+        `<w:name w:val="${styleName}"/>` +
+        `<w:basedOn w:val="${normalStyleId}"/>` +
+        `<w:pPr><w:jc w:val="${align}"/></w:pPr>` +
+        `</w:style>`
+      );
+      // Update document.xml to use numeric ID instead of name
+      docXml = docXml.replace(new RegExp(`w:val="${styleName}"`, 'g'), `w:val="${numericId}"`);
+    }
+  }
+
+  if (styleDefsToAdd.length > 0) {
+    stylesXml = stylesXml.replace(
+      '</w:styles>',
+      styleDefsToAdd.join('') + '</w:styles>'
+    );
+    zip.updateFile('word/styles.xml', Buffer.from(stylesXml, 'utf-8'));
+  }
+
+  zip.updateFile('word/document.xml', Buffer.from(docXml, 'utf-8'));
+  writeFileSync(docxPath, zip.toBuffer());
+
+  return count;
 }

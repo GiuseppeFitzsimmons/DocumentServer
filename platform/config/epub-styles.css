@@ -77,3 +77,17 @@ h5, h6 {
   font-size: 0.75em;
   line-height: 120%;
 }
+
+/* First paragraph after a heading should not be indented */
+h1 + p, h2 + p, h3 + p, h4 + p, h5 + p, h6 + p {
+  text-indent: 0;
+}
+
+/* Paragraphs after empty paragraphs (scene breaks) should not be indented */
+p:empty + p {
+  text-indent: 0;
+}
+
+/* Decorative/ornament characters (scene break markers) — center them */
+/* These are single-character paragraphs with direct formatting that
+   the Lua filter can't catch since they don't use a named style */
