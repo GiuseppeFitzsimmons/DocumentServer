@@ -451,22 +451,24 @@ function extractParagraphStyle(
     }
   }
 
-  // font-size: direct pPr/rPr/w:sz → style chain rPr/w:sz → document default
+  // font-size: direct pPr/rPr/w:sz → style chain rPr/w:sz (no document default fallback)
   let sz = pPrObj ? getPath(pPrObj, ['w:rPr', 'w:sz', '@_w:val']) : undefined;
+  const szSource = sz !== undefined ? 'direct' : undefined;
   if (sz === undefined && pStyleId) {
-    // Traverse the full basedOn chain for w:sz (check both pPr/rPr and style-level rPr)
     sz = resolveStyleProperty(pStyleId, styleMap, ['w:rPr', 'w:sz', '@_w:val'], 0);
-    if (sz === undefined) {
+    if (sz !== undefined) {
+      // found in pPr/rPr of style chain
+    } else {
       sz = resolveStyleRprProperty(pStyleId, styleMap, ['w:sz', '@_w:val'], 0);
     }
   }
-  const resolvedFontSize = sz !== undefined ? Number(sz) / 2 : docDefaultFontSize;
   if (sz !== undefined) {
     const val = Number(sz);
-    if (!isNaN(val)) { style.fontSize = val / 2; hasAny = true; }
-  } else if (docDefaultFontSize !== undefined) {
-    style.fontSize = docDefaultFontSize;
-    hasAny = true;
+    if (!isNaN(val)) {
+      style.fontSize = val / 2;
+      hasAny = true;
+      console.log(`[font-size] Found: ${val / 2}pt, pStyleId=${pStyleId || 'none'}, source=${szSource || 'style-chain'}`);
+    }
   }
 
   // Borders from w:pBdr (direct first, then style)

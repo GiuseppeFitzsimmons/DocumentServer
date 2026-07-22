@@ -748,10 +748,6 @@ class DeployHelper:
                 "cd /opt/euro-office/repo && git fetch && git checkout main && git pull && git submodule update --init fonts",
                 build_cmd,
                 f"cd /opt/euro-office/repo/deploy && docker compose -f {compose_file} exec -T portal node dist/db/migrate.js",
-                # Ensure disposable email refresh cron is set up
-                "(crontab -l 2>/dev/null | grep -q refresh-disposable-emails) || (crontab -l 2>/dev/null; echo '30 4 * * 0 /opt/euro-office/repo/deploy/scripts/refresh-disposable-emails.sh >> /var/log/disposable-emails-refresh.log 2>&1') | crontab -",
-                # Ensure nightly backup email cron is set up
-                f"(grep -q nightly-backup /etc/cron.d/euro-office-nightly-backup 2>/dev/null) || echo '5 0 * * * root cd /opt/euro-office/repo/deploy && docker compose -f {compose_file} exec -T portal node dist/jobs/nightly-backup.js >> /var/log/euro-office-nightly-backup.log 2>&1' > /etc/cron.d/euro-office-nightly-backup && chmod 644 /etc/cron.d/euro-office-nightly-backup",
             ]
             for cmd in commands:
                 if not self.running:
