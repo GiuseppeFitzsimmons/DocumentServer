@@ -220,14 +220,25 @@ function promoteDirectFormatting(docxPath: string): number {
   let docXml = docEntry.getData().toString('utf-8');
   let stylesXml = stylesEntry?.getData().toString('utf-8') || '';
 
-  // Find the Normal style ID (the default paragraph style)
+  // Find the Normal style ID (the default paragraph style).
+  // Attributes can appear in any order, so match the opening tag broadly
+  // then check it contains all required attributes.
   let normalStyleId = 'Normal';
-  const defaultMatch = stylesXml.match(/<w:style[^>]*w:default="1"[^>]*w:type="paragraph"[^>]*w:styleId="([^"]+)"/);
-  const defaultMatch2 = stylesXml.match(/<w:style[^>]*w:type="paragraph"[^>]*w:default="1"[^>]*w:styleId="([^"]+)"/);
-  const defaultMatch3 = stylesXml.match(/<w:style[^>]*w:styleId="([^"]+)"[^>]*w:type="paragraph"[^>]*w:default="1"/);
-  if (defaultMatch) normalStyleId = defaultMatch[1];
-  else if (defaultMatch2) normalStyleId = defaultMatch2[1];
-  else if (defaultMatch3) normalStyleId = defaultMatch3[1];
+  const styleTagPattern = /<w:style\b([^>]*)>/g;
+  let stMatch: RegExpExecArray | null;
+  while ((stMatch = styleTagPattern.exec(stylesXml)) !== null) {
+    const attrs = stMatch[1];
+    if (
+      /w:type="paragraph"/.test(attrs) &&
+      /w:default="1"/.test(attrs)
+    ) {
+      const idMatch = attrs.match(/w:styleId="([^"]+)"/);
+      if (idMatch) {
+        normalStyleId = idMatch[1];
+        break;
+      }
+    }
+  }
 
   // Track which synthetic styles we need to create
   const neededStyles = new Set<string>();

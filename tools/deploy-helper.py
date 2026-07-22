@@ -140,12 +140,14 @@ ACTIONS = {
         "special": "proxy_update",
         "nginx_conf": "deploy/nginx/nginx-proxy-prod.conf",
         "nginx_dest": "/etc/nginx/sites-available/eurobureau.conf",
+        "certbot_domain": "eurobureau.eu",
     },
     "Update Proxy Config (Dev)": {
         "targets": ["dev-proxy"],
         "special": "proxy_update",
         "nginx_conf": "deploy/nginx/nginx-proxy-dev.conf",
         "nginx_dest": "/etc/nginx/sites-available/dev.conf",
+        "certbot_domain": "dev.eurobureau.eu",
     },
     "Database Shell": {
         "targets": ["dev-db", "prod-db"],
@@ -366,7 +368,7 @@ class DeployHelper:
 
         if action.get("special") == "proxy_update":
             self.current_thread = threading.Thread(
-                target=self._run_proxy_update, args=(env, action.get("nginx_conf"), action.get("nginx_dest")), daemon=True
+                target=self._run_proxy_update, args=(env, action.get("nginx_conf"), action.get("nginx_dest"), action.get("certbot_domain")), daemon=True
             )
         elif action.get("special") == "stream_logs":
             self.current_thread = threading.Thread(
@@ -457,8 +459,8 @@ class DeployHelper:
         finally:
             self._set_running(False)
 
-    def _run_proxy_update(self, env, nginx_conf_rel=None, nginx_dest=None):
-        """Handle proxy config update: SCP files then reload nginx."""
+    def _run_proxy_update(self, env, nginx_conf_rel=None, nginx_dest=None, certbot_domain=None):
+        """Handle proxy config update: SCP files, reload nginx, re-install certbot SSL."""
         try:
             self._set_status("Uploading config files...", "orange")
 
@@ -522,6 +524,26 @@ class DeployHelper:
                     else:
                         self._log(f"\n✗ Nginx reload also failed (code {reload_exit})\n", "error")
                         self._set_status("Failed", "red")
+
+            # Re-install certbot SSL certificate for the domain
+            if self.running and certbot_domain:
+                self._log(f"\n→ Re-installing certbot SSL for {certbot_domain}...\n", "info")
+                certbot_cmd = f"certbot --nginx -d {certbot_domain} --non-interactive --agree-tos --redirect"
+                self._log_cmd(certbot_cmd)
+                stdin, stdout, stderr = client.exec_command(certbot_cmd, get_pty=True)
+                for line in iter(stdout.readline, ""):
+                    if not self.running:
+                        break
+                    self._log_stream(line)
+                err = stderr.read().decode()
+                if err.strip():
+                    self._log_stream(err, "error")
+                certbot_exit = stdout.channel.recv_exit_status()
+                if certbot_exit == 0:
+                    self._log("✓ Certbot SSL installed\n", "success")
+                else:
+                    self._log(f"\n✗ Certbot failed (code {certbot_exit})\n", "error")
+                    self._set_status("Done (SSL failed)", "orange")
 
             client.close()
 
