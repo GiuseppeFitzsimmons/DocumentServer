@@ -60,6 +60,14 @@ interface StyleEntry {
   rPr?: Record<string, unknown>;  // Raw run properties from the style definition
 }
 
+interface NormalBaseline {
+  lineHeight?: number;
+  spaceAfter?: number;
+  spaceBefore?: number;
+  textIndent?: number;
+  fontSize?: number;
+}
+
 /**
  * Extracts per-element font assignments from a docx file.
  */
@@ -134,18 +142,12 @@ export async function extractFontAssignments(docxPath: string): Promise<FontAssi
     return { bodyFont, paragraphs: [], headingFonts: new Map() };
   }
 
-  const paragraphs = extractParagraphs(docParsed, styleMap, docDefaultFont, bodyFont, headingStyleMap, docDefaultFontSize);
+  const normalBaseline = computeNormalBaseline(normalStyleId, styleMap, docDefaultFontSize);
+
+  const paragraphs = extractParagraphs(docParsed, styleMap, docDefaultFont, bodyFont, headingStyleMap, docDefaultFontSize, normalBaseline);
 
   // Compute per-level heading fonts
   const headingFonts = computeHeadingFonts(paragraphs);
-
-  console.log(`[font-extractor] Produced ${paragraphs.length} assignments, bodyFont="${bodyFont}", bodyFontSize=${bodyFontSize ?? 'none'}pt, headingLevels=${[...headingFonts.keys()].join(',') || 'none'}`);
-  // Log first 10 assignments for debugging alignment
-  for (let i = 0; i < Math.min(paragraphs.length, 15); i++) {
-    const p = paragraphs[i];
-    const text = p.runs.map(r => r.text).join('').slice(0, 40);
-    console.log(`[font-extractor]   [${i}] font="${p.font}" heading=${p.headingLevel ?? '-'} fontSize=${p.style?.fontSize ?? '-'} text="${text}"`);
-  }
 
   return { bodyFont, bodyFontSize, paragraphs, headingFonts };
 }
@@ -262,6 +264,22 @@ function resolveStyleFont(
 }
 
 /**
+ * Resolves a character style's font WITHOUT traversing the basedOn chain.
+ * Only returns a font if it's explicitly defined on this specific style.
+ * This prevents runs from inheriting decorative fonts from paragraph-level
+ * or document-default ancestor styles.
+ */
+function resolveRunStyleFont(
+  styleId: string,
+  styleMap: Map<string, StyleEntry>
+): string | null {
+  const entry = styleMap.get(styleId);
+  if (!entry) return null;
+  // Only use the font if directly defined on this character style
+  return entry.font;  // null if not explicitly set
+}
+
+/**
  * Extracts paragraphs from the parsed document.xml, resolving fonts via inheritance.
  */
 function extractParagraphs(
@@ -270,13 +288,14 @@ function extractParagraphs(
   docDefault: string,
   bodyFont: string,
   headingStyleMap: Map<string, number>,
-  docDefaultFontSize?: number
+  docDefaultFontSize?: number,
+  normalBaseline?: NormalBaseline
 ): ParagraphAssignment[] {
   const body = getPath(parsed, ['w:document', 'w:body']);
   if (!body || typeof body !== 'object') return [];
 
   const paragraphs: ParagraphAssignment[] = [];
-  collectParagraphs(body, styleMap, docDefault, bodyFont, headingStyleMap, paragraphs, docDefaultFontSize);
+  collectParagraphs(body, styleMap, docDefault, bodyFont, headingStyleMap, paragraphs, docDefaultFontSize, normalBaseline);
   return paragraphs;
 }
 
@@ -290,7 +309,8 @@ function collectParagraphs(
   bodyFont: string,
   headingStyleMap: Map<string, number>,
   out: ParagraphAssignment[],
-  docDefaultFontSize?: number
+  docDefaultFontSize?: number,
+  normalBaseline?: NormalBaseline
 ): void {
   if (!node || typeof node !== 'object') return;
   const obj = node as Record<string, unknown>;
@@ -298,7 +318,7 @@ function collectParagraphs(
   if ('w:p' in obj) {
     const paras = ensureArray(obj['w:p']);
     for (const p of paras) {
-      const assignment = processParagraph(p, styleMap, docDefault, bodyFont, headingStyleMap, docDefaultFontSize);
+      const assignment = processParagraph(p, styleMap, docDefault, bodyFont, headingStyleMap, docDefaultFontSize, normalBaseline);
       if (assignment) out.push(assignment);
     }
   }
@@ -308,10 +328,10 @@ function collectParagraphs(
     if (key === 'w:p') continue; // Already processed
     if (Array.isArray(value)) {
       for (const item of value) {
-        collectParagraphs(item, styleMap, docDefault, bodyFont, headingStyleMap, out, docDefaultFontSize);
+        collectParagraphs(item, styleMap, docDefault, bodyFont, headingStyleMap, out, docDefaultFontSize, normalBaseline);
       }
     } else if (typeof value === 'object' && value !== null) {
-      collectParagraphs(value, styleMap, docDefault, bodyFont, headingStyleMap, out, docDefaultFontSize);
+      collectParagraphs(value, styleMap, docDefault, bodyFont, headingStyleMap, out, docDefaultFontSize, normalBaseline);
     }
   }
 }
@@ -326,7 +346,8 @@ function processParagraph(
   docDefault: string,
   bodyFont: string,
   headingStyleMap: Map<string, number>,
-  docDefaultFontSize?: number
+  docDefaultFontSize?: number,
+  normalBaseline?: NormalBaseline
 ): ParagraphAssignment | null {
   if (!p || typeof p !== 'object') return null;
   const pObj = p as Record<string, unknown>;
@@ -362,7 +383,7 @@ function processParagraph(
 
     let runFont = paraFont;
     if (rStyleId) {
-      const styleFont = resolveStyleFont(rStyleId, styleMap, docDefault, 0);
+      const styleFont = resolveRunStyleFont(rStyleId, styleMap);
       if (styleFont) runFont = styleFont;
     }
     if (rDirectFont) runFont = rDirectFont;
@@ -377,28 +398,8 @@ function processParagraph(
   // Skip empty paragraphs (no runs with text)
   if (runs.length === 0) return null;
 
-  // Log paragraphs where runs have non-body font but no heading level (suspicious)
-  const uniqueRunFonts = [...new Set(runs.map(r => r.font))];
-  if (!headingLevel && uniqueRunFonts.some(f => f !== bodyFont)) {
-    const text = runs.map(r => r.text).join('').slice(0, 50);
-    console.log(`[font-extractor] NON-BODY-PARA: pStyle=${pStyleId || 'none'} pDirect=${pDirectFont || 'none'} paraFont="${paraFont}" runFonts=[${uniqueRunFonts.join(',')}] text="${text}"`);
-    // Log individual run details for first occurrence
-    for (const run of runElements.slice(0, 3)) {
-      if (!run || typeof run !== 'object') continue;
-      const rObj = run as Record<string, unknown>;
-      const rStyleId = getPath(rObj, ['w:rPr', 'w:rStyle', '@_w:val']) as string | undefined;
-      const rDirectFont = getFontFromRFonts(getPath(rObj, ['w:rPr', 'w:rFonts']));
-      const rText = extractRunText(rObj).slice(0, 20);
-      if (rStyleId || rDirectFont) {
-        const resolvedFont = rStyleId ? resolveStyleFont(rStyleId, styleMap, docDefault, 0) : null;
-        console.log(`[font-extractor]   run: rStyle=${rStyleId || '-'} rDirect=${rDirectFont || '-'} resolved="${resolvedFont || '-'}" text="${rText}"`);
-      }
-    }
-  }
-  if (runs.length === 0) return null;
-
   // Extract paragraph style properties (including inherited from named style)
-  const style = extractParagraphStyle(pObj, pStyleId, styleMap, docDefaultFontSize);
+  const style = extractParagraphStyle(pObj, pStyleId, styleMap, docDefaultFontSize, normalBaseline);
 
   return { font: paraFont, runs, headingLevel, style };
 }
@@ -411,7 +412,8 @@ function extractParagraphStyle(
   pObj: Record<string, unknown>,
   pStyleId: string | undefined,
   styleMap: Map<string, StyleEntry>,
-  docDefaultFontSize?: number
+  docDefaultFontSize?: number,
+  baseline?: NormalBaseline
 ): ParagraphStyle | undefined {
   const pPr = pObj['w:pPr'];
   const pPrObj = (pPr && typeof pPr === 'object') ? pPr as Record<string, unknown> : undefined;
@@ -449,23 +451,42 @@ function extractParagraphStyle(
     if (line !== undefined) {
       const lineVal = Number(line);
       if (!isNaN(lineVal)) {
+        let lh: number;
         if (!lineRule || lineRule === 'auto') {
-          style.lineHeight = Math.round((lineVal / 240) * 100) / 100;
+          lh = Math.round((lineVal / 240) * 100) / 100;
         } else {
-          style.lineHeight = lineVal / 20;
+          lh = lineVal / 20;
         }
-        hasAny = true;
+        // Only emit if different from baseline
+        if (baseline?.lineHeight === undefined || lh !== baseline.lineHeight) {
+          style.lineHeight = lh;
+          hasAny = true;
+        }
       }
     }
     const before = spacingObj['@_w:before'];
     if (before !== undefined) {
       const val = Number(before);
-      if (!isNaN(val)) { style.spaceBefore = val / 20; hasAny = true; }
+      if (!isNaN(val)) {
+        const sb = val / 20;
+        // Only emit if different from baseline
+        if (baseline?.spaceBefore === undefined || sb !== baseline.spaceBefore) {
+          style.spaceBefore = sb;
+          hasAny = true;
+        }
+      }
     }
     const after = spacingObj['@_w:after'];
     if (after !== undefined) {
       const val = Number(after);
-      if (!isNaN(val)) { style.spaceAfter = val / 20; hasAny = true; }
+      if (!isNaN(val)) {
+        const sa = val / 20;
+        // Only emit if different from baseline
+        if (baseline?.spaceAfter === undefined || sa !== baseline.spaceAfter) {
+          style.spaceAfter = sa;
+          hasAny = true;
+        }
+      }
     }
   }
 
@@ -477,7 +498,14 @@ function extractParagraphStyle(
     const firstLine = indObj['@_w:firstLine'];
     if (firstLine !== undefined) {
       const val = Number(firstLine);
-      if (!isNaN(val)) { style.textIndent = val / 20; hasAny = true; }
+      if (!isNaN(val)) {
+        const ti = val / 20;
+        // Only emit if different from baseline
+        if (baseline?.textIndent === undefined || ti !== baseline.textIndent) {
+          style.textIndent = ti;
+          hasAny = true;
+        }
+      }
     }
     const left = indObj['@_w:left'] ?? indObj['@_w:start'];
     if (left !== undefined) {
@@ -504,8 +532,12 @@ function extractParagraphStyle(
   if (sz !== undefined) {
     const val = Number(sz);
     if (!isNaN(val)) {
-      style.fontSize = val / 2;
-      hasAny = true;
+      const fs = val / 2;
+      // Only emit if different from baseline
+      if (baseline?.fontSize === undefined || fs !== baseline.fontSize) {
+        style.fontSize = fs;
+        hasAny = true;
+      }
     }
   }
 
@@ -633,6 +665,75 @@ function resolveStylePPr(
   if (entry.pPr) return entry.pPr;
   if (entry.parentStyleId) return resolveStylePPr(entry.parentStyleId, styleMap, depth + 1);
   return undefined;
+}
+
+/**
+ * Computes the Normal style's effective paragraph properties as a baseline.
+ * Properties matching this baseline will be suppressed during extraction.
+ */
+function computeNormalBaseline(
+  normalStyleId: string | null,
+  styleMap: Map<string, StyleEntry>,
+  docDefaultFontSize?: number
+): NormalBaseline {
+  const baseline: NormalBaseline = {};
+  if (!normalStyleId) return baseline;
+
+  // Resolve Normal style's pPr (through basedOn chain)
+  const pPr = resolveStylePPr(normalStyleId, styleMap, 0);
+
+  if (pPr) {
+    // spacing
+    const spacing = pPr['w:spacing'];
+    if (spacing && typeof spacing === 'object') {
+      const spacingObj = spacing as Record<string, unknown>;
+      const line = spacingObj['@_w:line'];
+      const lineRule = spacingObj['@_w:lineRule'] as string | undefined;
+      if (line !== undefined) {
+        const lineVal = Number(line);
+        if (!isNaN(lineVal)) {
+          if (!lineRule || lineRule === 'auto') {
+            baseline.lineHeight = Math.round((lineVal / 240) * 100) / 100;
+          } else {
+            baseline.lineHeight = lineVal / 20;
+          }
+        }
+      }
+      const before = spacingObj['@_w:before'];
+      if (before !== undefined) {
+        const val = Number(before);
+        if (!isNaN(val)) baseline.spaceBefore = val / 20;
+      }
+      const after = spacingObj['@_w:after'];
+      if (after !== undefined) {
+        const val = Number(after);
+        if (!isNaN(val)) baseline.spaceAfter = val / 20;
+      }
+    }
+
+    // indentation
+    const ind = pPr['w:ind'];
+    if (ind && typeof ind === 'object') {
+      const indObj = ind as Record<string, unknown>;
+      const firstLine = indObj['@_w:firstLine'];
+      if (firstLine !== undefined) {
+        const val = Number(firstLine);
+        if (!isNaN(val)) baseline.textIndent = val / 20;
+      }
+    }
+  }
+
+  // fontSize from Normal style's rPr (or style chain rPr)
+  const sz = resolveStyleProperty(normalStyleId, styleMap, ['w:rPr', 'w:sz', '@_w:val'], 0)
+    ?? resolveStyleRprProperty(normalStyleId, styleMap, ['w:sz', '@_w:val'], 0);
+  if (sz !== undefined) {
+    const val = Number(sz);
+    if (!isNaN(val)) baseline.fontSize = val / 2;
+  } else if (docDefaultFontSize !== undefined) {
+    baseline.fontSize = docDefaultFontSize;
+  }
+
+  return baseline;
 }
 
 /**
