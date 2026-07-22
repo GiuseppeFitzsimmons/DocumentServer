@@ -49,18 +49,24 @@ export async function injectXhtmlFonts(input: XhtmlFontInjectorInput): Promise<v
   const cursor: CursorState = { index: 0 };
   let modified = false;
 
+  console.log(`[xhtml-inject] Starting injection: ${paragraphs.length} assignments, ${xhtmlEntries.length} content files, bodyFont="${bodyFont}"`);
+
   for (const entryName of xhtmlEntries) {
     const entry = zip.getEntry(entryName);
     if (!entry) continue;
 
     const content = entry.getData().toString('utf-8');
+    const cursorBefore = cursor.index;
     const result = processContentFile(content, paragraphs, cursor, bodyFont);
+    console.log(`[xhtml-inject] File "${entryName}": cursor ${cursorBefore} → ${cursor.index} (advanced ${cursor.index - cursorBefore}), modified=${result.modified}`);
 
     if (result.modified) {
       zip.updateFile(entryName, Buffer.from(result.content, 'utf-8'));
       modified = true;
     }
   }
+
+  console.log(`[xhtml-inject] Done: cursor ended at ${cursor.index}/${paragraphs.length}, modified=${modified}`);
 
   if (modified) {
     writeFileSync(epubPath, zip.toBuffer());
@@ -199,42 +205,49 @@ export function processContentFile(
   bodyFont: string
 ): { content: string; modified: boolean } {
   let modified = false;
+  let blockCount = 0;
+  let emptyCount = 0;
+  let pagebreakCount = 0;
+  let unnumberedCount = 0;
+  let styledCount = 0;
 
   // Create a new regex instance to avoid shared lastIndex state
   const blockRegex = /(<(?:p|h[1-6]|li|blockquote|div)\b[^>]*>)([\s\S]*?)(<\/(?:p|h[1-6]|li|blockquote|div)>)/gi;
 
   const result = content.replace(blockRegex, (match, openTag: string, inner: string, closeTag: string) => {
+    blockCount++;
+
     // If cursor exceeds assignment length, leave unstyled
     if (cursor.index >= assignments.length) {
       return match;
     }
 
     // Empty blocks (whitespace/nbsp only) do NOT advance the cursor.
-    // The font-assignment-extractor runs BEFORE the docx-preprocessor, so it
-    // sees truly empty paragraphs (no runs) and skips them (returns null).
-    // The preprocessor then inserts nbsp to preserve them in the EPUB output.
-    // Result: no assignment list entry exists for these blocks.
     if (isEmptyBlock(inner)) {
+      emptyCount++;
       return match;
     }
 
     // Skip page break marker paragraphs inserted by the docx-preprocessor.
-    // These are added AFTER extraction and have no assignment list entry.
-    // The epub-page-splitter removes them later, but we see them first.
     if (inner.includes('\u00AB\u00ABPAGEBREAK\u00BB\u00BB')) {
+      pagebreakCount++;
       return match;
     }
 
     // Remove the pandoc-generated title-page <h1 class="unnumbered"> entirely.
-    // This is synthesized from --metadata title and has no docx body counterpart.
-    // The actual title from the docx appears as a styled <p> element below it.
     if (/^<h1\b[^>]*\bclass="[^"]*\bunnumbered\b/i.test(openTag)) {
+      unnumberedCount++;
       modified = true;
       return '';
     }
 
     // Build inline styles for the assignment at the current cursor position
-    const style = buildInlineStyles(assignments[cursor.index], bodyFont);
+    const assignment = assignments[cursor.index];
+    const style = buildInlineStyles(assignment, bodyFont);
+    const textPreview = inner.replace(/<[^>]+>/g, '').trim().slice(0, 40);
+    if (blockCount <= 10 || style !== null) {
+      console.log(`[xhtml-inject]   block#${blockCount} cursor=${cursor.index} font="${assignment.font}" text="${textPreview}" style=${style ? 'YES' : 'null'}`);
+    }
     cursor.index++;
 
     // If no styles apply, return match unchanged
@@ -243,10 +256,13 @@ export function processContentFile(
     }
 
     // Inject style and mark as modified
+    styledCount++;
     modified = true;
     const styledTag = injectStyleOnTag(openTag, style);
     return styledTag + inner + closeTag;
   });
+
+  console.log(`[xhtml-inject]   Summary: ${blockCount} blocks, ${emptyCount} empty, ${pagebreakCount} pagebreaks, ${unnumberedCount} unnumbered, ${styledCount} styled`);
 
   return { content: result, modified };
 }

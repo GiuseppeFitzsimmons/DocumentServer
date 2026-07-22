@@ -127,6 +127,14 @@ export async function extractFontAssignments(docxPath: string): Promise<FontAssi
   // Compute per-level heading fonts
   const headingFonts = computeHeadingFonts(paragraphs);
 
+  console.log(`[font-extractor] Produced ${paragraphs.length} assignments, bodyFont="${bodyFont}", headingLevels=${[...headingFonts.keys()].join(',') || 'none'}`);
+  // Log first 10 assignments for debugging alignment
+  for (let i = 0; i < Math.min(paragraphs.length, 15); i++) {
+    const p = paragraphs[i];
+    const text = p.runs.map(r => r.text).join('').slice(0, 40);
+    console.log(`[font-extractor]   [${i}] font="${p.font}" heading=${p.headingLevel ?? '-'} fontSize=${p.style?.fontSize ?? '-'} text="${text}"`);
+  }
+
   return { bodyFont, paragraphs, headingFonts };
 }
 
