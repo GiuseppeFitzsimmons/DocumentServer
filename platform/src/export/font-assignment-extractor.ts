@@ -360,12 +360,6 @@ function processParagraph(
   // Extract paragraph style properties (including inherited from named style)
   const style = extractParagraphStyle(pObj, pStyleId, styleMap, docDefaultFontSize);
 
-  // Debug: log heading style resolution
-  if (headingLevel) {
-    const text = runs.map(r => r.text).join('').slice(0, 40);
-    console.log(`[font-assign] H${headingLevel} "${text}": textAlign=${style?.textAlign || 'NONE'}, pStyleId=${pStyleId}`);
-  }
-
   return { font: paraFont, runs, headingLevel, style };
 }
 
@@ -467,9 +461,6 @@ function extractParagraphStyle(
     }
   }
   const resolvedFontSize = sz !== undefined ? Number(sz) / 2 : docDefaultFontSize;
-  if (resolvedFontSize !== undefined) {
-    console.log(`[font-size] pStyleId=${pStyleId || 'none'}, direct=${pPrObj ? getPath(pPrObj, ['w:rPr', 'w:sz', '@_w:val']) : 'N/A'}, resolved=${resolvedFontSize}pt`);
-  }
   if (sz !== undefined) {
     const val = Number(sz);
     if (!isNaN(val)) { style.fontSize = val / 2; hasAny = true; }
