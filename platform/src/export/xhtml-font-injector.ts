@@ -29,7 +29,7 @@ export interface CursorState {
  */
 export async function injectXhtmlFonts(input: XhtmlFontInjectorInput): Promise<void> {
   const { epubPath, assignments } = input;
-  const { bodyFont, bodyFontSize, paragraphs } = assignments;
+  const { bodyFont, paragraphs } = assignments;
 
   if (paragraphs.length === 0) return;
 
@@ -54,7 +54,7 @@ export async function injectXhtmlFonts(input: XhtmlFontInjectorInput): Promise<v
     if (!entry) continue;
 
     const content = entry.getData().toString('utf-8');
-    const result = processContentFile(content, paragraphs, cursor, bodyFont, bodyFontSize);
+    const result = processContentFile(content, paragraphs, cursor, bodyFont);
 
     if (result.modified) {
       zip.updateFile(entryName, Buffer.from(result.content, 'utf-8'));
@@ -106,11 +106,14 @@ export function isEmptyBlock(innerHtml: string): boolean {
  * Returns null when no styles apply (font matches body font and no
  * paragraph style properties are set).
  */
-export function buildInlineStyles(assignment: ParagraphAssignment, bodyFont: string, bodyFontSize?: number): string | null {
+export function buildInlineStyles(assignment: ParagraphAssignment, bodyFont: string): string | null {
   const parts: string[] = [];
 
   // Font-family (only if different from body)
-  if (assignment.font && assignment.font !== bodyFont) {
+  const fonts = new Set(assignment.runs.map(r => r.font));
+  if (fonts.size === 1 && assignment.runs[0].font !== bodyFont) {
+    parts.push(`font-family: '${assignment.runs[0].font}'`);
+  } else if (assignment.font && assignment.font !== bodyFont) {
     parts.push(`font-family: '${assignment.font}'`);
   }
 
@@ -125,7 +128,7 @@ export function buildInlineStyles(assignment: ParagraphAssignment, bodyFont: str
         parts.push('text-indent: 0pt');
       }
     }
-    if (s.fontSize && s.fontSize !== bodyFontSize) {
+    if (s.fontSize) {
       parts.push(`font-size: ${s.fontSize}pt`);
     }
     if (s.lineHeight) {
@@ -193,8 +196,7 @@ export function processContentFile(
   content: string,
   assignments: ParagraphAssignment[],
   cursor: CursorState,
-  bodyFont: string,
-  bodyFontSize?: number
+  bodyFont: string
 ): { content: string; modified: boolean } {
   let modified = false;
 
@@ -208,24 +210,31 @@ export function processContentFile(
     }
 
     // Empty blocks (whitespace/nbsp only) do NOT advance the cursor.
+    // The font-assignment-extractor runs BEFORE the docx-preprocessor, so it
+    // sees truly empty paragraphs (no runs) and skips them (returns null).
+    // The preprocessor then inserts nbsp to preserve them in the EPUB output.
+    // Result: no assignment list entry exists for these blocks.
     if (isEmptyBlock(inner)) {
       return match;
     }
 
     // Skip page break marker paragraphs inserted by the docx-preprocessor.
+    // These are added AFTER extraction and have no assignment list entry.
+    // The epub-page-splitter removes them later, but we see them first.
     if (inner.includes('\u00AB\u00ABPAGEBREAK\u00BB\u00BB')) {
       return match;
     }
 
     // Remove the pandoc-generated title-page <h1 class="unnumbered"> entirely.
+    // This is synthesized from --metadata title and has no docx body counterpart.
+    // The actual title from the docx appears as a styled <p> element below it.
     if (/^<h1\b[^>]*\bclass="[^"]*\bunnumbered\b/i.test(openTag)) {
       modified = true;
       return '';
     }
 
     // Build inline styles for the assignment at the current cursor position
-    const assignment = assignments[cursor.index];
-    const style = buildInlineStyles(assignment, bodyFont, bodyFontSize);
+    const style = buildInlineStyles(assignments[cursor.index], bodyFont);
     cursor.index++;
 
     // If no styles apply, return match unchanged
