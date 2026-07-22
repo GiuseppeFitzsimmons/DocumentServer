@@ -365,6 +365,26 @@ function processParagraph(
   // Skip empty paragraphs (no runs with text)
   if (runs.length === 0) return null;
 
+  // Log paragraphs where runs have non-body font but no heading level (suspicious)
+  const uniqueRunFonts = [...new Set(runs.map(r => r.font))];
+  if (!headingLevel && uniqueRunFonts.some(f => f !== bodyFont)) {
+    const text = runs.map(r => r.text).join('').slice(0, 50);
+    console.log(`[font-extractor] NON-BODY-PARA: pStyle=${pStyleId || 'none'} pDirect=${pDirectFont || 'none'} paraFont="${paraFont}" runFonts=[${uniqueRunFonts.join(',')}] text="${text}"`);
+    // Log individual run details for first occurrence
+    for (const run of runElements.slice(0, 3)) {
+      if (!run || typeof run !== 'object') continue;
+      const rObj = run as Record<string, unknown>;
+      const rStyleId = getPath(rObj, ['w:rPr', 'w:rStyle', '@_w:val']) as string | undefined;
+      const rDirectFont = getFontFromRFonts(getPath(rObj, ['w:rPr', 'w:rFonts']));
+      const rText = extractRunText(rObj).slice(0, 20);
+      if (rStyleId || rDirectFont) {
+        const resolvedFont = rStyleId ? resolveStyleFont(rStyleId, styleMap, docDefault, 0) : null;
+        console.log(`[font-extractor]   run: rStyle=${rStyleId || '-'} rDirect=${rDirectFont || '-'} resolved="${resolvedFont || '-'}" text="${rText}"`);
+      }
+    }
+  }
+  if (runs.length === 0) return null;
+
   // Extract paragraph style properties (including inherited from named style)
   const style = extractParagraphStyle(pObj, pStyleId, styleMap, docDefaultFontSize);
 
