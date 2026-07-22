@@ -29,7 +29,7 @@ export interface CursorState {
  */
 export async function injectXhtmlFonts(input: XhtmlFontInjectorInput): Promise<void> {
   const { epubPath, assignments } = input;
-  const { bodyFont, paragraphs } = assignments;
+  const { bodyFont, bodyFontSize, paragraphs } = assignments;
 
   if (paragraphs.length === 0) return;
 
@@ -57,7 +57,7 @@ export async function injectXhtmlFonts(input: XhtmlFontInjectorInput): Promise<v
 
     const content = entry.getData().toString('utf-8');
     const cursorBefore = cursor.index;
-    const result = processContentFile(content, paragraphs, cursor, bodyFont);
+    const result = processContentFile(content, paragraphs, cursor, bodyFont, bodyFontSize);
     console.log(`[xhtml-inject] File "${entryName}": cursor ${cursorBefore} → ${cursor.index} (advanced ${cursor.index - cursorBefore}), modified=${result.modified}`);
 
     if (result.modified) {
@@ -112,7 +112,7 @@ export function isEmptyBlock(innerHtml: string): boolean {
  * Returns null when no styles apply (font matches body font and no
  * paragraph style properties are set).
  */
-export function buildInlineStyles(assignment: ParagraphAssignment, bodyFont: string): string | null {
+export function buildInlineStyles(assignment: ParagraphAssignment, bodyFont: string, bodyFontSize?: number): string | null {
   const parts: string[] = [];
 
   // Font-family (only if different from body)
@@ -134,7 +134,7 @@ export function buildInlineStyles(assignment: ParagraphAssignment, bodyFont: str
         parts.push('text-indent: 0pt');
       }
     }
-    if (s.fontSize) {
+    if (s.fontSize && s.fontSize !== bodyFontSize) {
       parts.push(`font-size: ${s.fontSize}pt`);
     }
     if (s.lineHeight) {
@@ -202,7 +202,8 @@ export function processContentFile(
   content: string,
   assignments: ParagraphAssignment[],
   cursor: CursorState,
-  bodyFont: string
+  bodyFont: string,
+  bodyFontSize?: number
 ): { content: string; modified: boolean } {
   let modified = false;
   let blockCount = 0;
@@ -243,7 +244,7 @@ export function processContentFile(
 
     // Build inline styles for the assignment at the current cursor position
     const assignment = assignments[cursor.index];
-    const style = buildInlineStyles(assignment, bodyFont);
+    const style = buildInlineStyles(assignment, bodyFont, bodyFontSize);
     const textPreview = inner.replace(/<[^>]+>/g, '').trim().slice(0, 40);
     if (blockCount <= 10 || style !== null) {
       console.log(`[xhtml-inject]   block#${blockCount} cursor=${cursor.index} font="${assignment.font}" text="${textPreview}" style=${style ? 'YES' : 'null'}`);

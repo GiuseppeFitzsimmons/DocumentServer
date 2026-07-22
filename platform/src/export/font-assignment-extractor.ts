@@ -48,6 +48,7 @@ export interface ParagraphAssignment {
 
 export interface FontAssignmentResult {
   bodyFont: string;
+  bodyFontSize?: number;  // in points — the Normal/body style's font size
   paragraphs: ParagraphAssignment[];
   headingFonts: Map<number, string>;  // heading level → most common font for that level
 }
@@ -116,6 +117,17 @@ export async function extractFontAssignments(docxPath: string): Promise<FontAssi
     if (normalFont) bodyFont = normalFont;
   }
 
+  // Resolve body font size: Normal style's font size → docDefault font size
+  let bodyFontSize: number | undefined = docDefaultFontSize;
+  if (normalStyleId) {
+    const normalSz = resolveStyleProperty(normalStyleId, styleMap, ['w:rPr', 'w:sz', '@_w:val'], 0)
+      ?? resolveStyleRprProperty(normalStyleId, styleMap, ['w:sz', '@_w:val'], 0);
+    if (normalSz !== undefined) {
+      const val = Number(normalSz);
+      if (!isNaN(val)) bodyFontSize = val / 2;
+    }
+  }
+
   // Parse document
   const docParsed = parseXml(documentXml);
   if (!docParsed) {
@@ -127,7 +139,7 @@ export async function extractFontAssignments(docxPath: string): Promise<FontAssi
   // Compute per-level heading fonts
   const headingFonts = computeHeadingFonts(paragraphs);
 
-  console.log(`[font-extractor] Produced ${paragraphs.length} assignments, bodyFont="${bodyFont}", headingLevels=${[...headingFonts.keys()].join(',') || 'none'}`);
+  console.log(`[font-extractor] Produced ${paragraphs.length} assignments, bodyFont="${bodyFont}", bodyFontSize=${bodyFontSize ?? 'none'}pt, headingLevels=${[...headingFonts.keys()].join(',') || 'none'}`);
   // Log first 10 assignments for debugging alignment
   for (let i = 0; i < Math.min(paragraphs.length, 15); i++) {
     const p = paragraphs[i];
@@ -135,7 +147,7 @@ export async function extractFontAssignments(docxPath: string): Promise<FontAssi
     console.log(`[font-extractor]   [${i}] font="${p.font}" heading=${p.headingLevel ?? '-'} fontSize=${p.style?.fontSize ?? '-'} text="${text}"`);
   }
 
-  return { bodyFont, paragraphs, headingFonts };
+  return { bodyFont, bodyFontSize, paragraphs, headingFonts };
 }
 
 function readEntry(zip: AdmZip, entryPath: string): string | null {
