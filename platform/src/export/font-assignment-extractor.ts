@@ -56,6 +56,7 @@ interface StyleEntry {
   font: string | null;
   parentStyleId: string | null;
   pPr?: Record<string, unknown>;  // Raw paragraph properties from the style definition
+  rPr?: Record<string, unknown>;  // Raw run properties from the style definition
 }
 
 /**
@@ -177,8 +178,10 @@ function buildStyleMap(parsed: unknown, styleMap: Map<string, StyleEntry>): void
 
     // Store paragraph properties from the style definition
     const pPr = obj['w:pPr'] as Record<string, unknown> | undefined;
+    // Store run properties from the style definition (for font-size inheritance)
+    const rPr = obj['w:rPr'] as Record<string, unknown> | undefined;
 
-    styleMap.set(styleId, { font, parentStyleId, pPr: pPr || undefined });
+    styleMap.set(styleId, { font, parentStyleId, pPr: pPr || undefined, rPr: rPr || undefined });
   }
 }
 
@@ -457,8 +460,15 @@ function extractParagraphStyle(
   // font-size: direct pPr/rPr/w:sz → style chain rPr/w:sz → document default
   let sz = pPrObj ? getPath(pPrObj, ['w:rPr', 'w:sz', '@_w:val']) : undefined;
   if (sz === undefined && pStyleId) {
-    // Traverse the full basedOn chain for w:sz (in rPr, not pPr/rPr)
+    // Traverse the full basedOn chain for w:sz (check both pPr/rPr and style-level rPr)
     sz = resolveStyleProperty(pStyleId, styleMap, ['w:rPr', 'w:sz', '@_w:val'], 0);
+    if (sz === undefined) {
+      sz = resolveStyleRprProperty(pStyleId, styleMap, ['w:sz', '@_w:val'], 0);
+    }
+  }
+  const resolvedFontSize = sz !== undefined ? Number(sz) / 2 : docDefaultFontSize;
+  if (resolvedFontSize !== undefined) {
+    console.log(`[font-size] pStyleId=${pStyleId || 'none'}, direct=${pPrObj ? getPath(pPrObj, ['w:rPr', 'w:sz', '@_w:val']) : 'N/A'}, resolved=${resolvedFontSize}pt`);
   }
   if (sz !== undefined) {
     const val = Number(sz);
@@ -523,6 +533,32 @@ function parseBorder(borderEl: unknown): BorderDef | null {
     color: color === 'auto' ? '000000' : color,
     width: widthPt,
   };
+}
+
+/**
+ * Resolves a specific property from a style's rPr by traversing the basedOn chain.
+ * Used for font-size which is stored in the style's rPr (not inside pPr).
+ */
+function resolveStyleRprProperty(
+  styleId: string,
+  styleMap: Map<string, StyleEntry>,
+  propertyPath: string[],
+  depth: number
+): unknown {
+  if (depth > 10) return undefined;
+  const entry = styleMap.get(styleId);
+  if (!entry) return undefined;
+
+  if (entry.rPr) {
+    const value = getPath(entry.rPr, propertyPath);
+    if (value !== undefined) return value;
+  }
+
+  if (entry.parentStyleId) {
+    return resolveStyleRprProperty(entry.parentStyleId, styleMap, propertyPath, depth + 1);
+  }
+
+  return undefined;
 }
 
 /**
