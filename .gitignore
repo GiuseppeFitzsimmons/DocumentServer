@@ -10,3 +10,4 @@ platform/node_modules
 tools/.venv
 *.sql
 /deploy/scripts/*.env
+*/__pycache__

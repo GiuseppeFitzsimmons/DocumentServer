@@ -15,7 +15,7 @@ TIMESTAMP=$(date +%Y-%m-%d_%H%M%S)
 BACKUP_FILE="/tmp/eurobureau-${ENV}-db-backup-${TIMESTAMP}.sql.gz"
 
 # Source env vars (placed on DB server during provisioning)
-ENV_FILE="/opt/euro-office/db-backup.env"
+ENV_FILE="/opt/euro-office/jobs.env"
 if [ -f "$ENV_FILE" ]; then
     set -a
     source "$ENV_FILE"

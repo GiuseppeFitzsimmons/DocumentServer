@@ -7,7 +7,12 @@
 #
 # Prerequisites:
 #   - Platform must be built locally (cd platform && npm run build)
-#   - /opt/euro-office/jobs.env must exist on the DB server (scp it first)
+#   - /opt/euro-office/jobs.env must exist on the DB server (scp it first).
+#     Create it from deploy/scripts/db-jobs.env.example.
+#
+# Note: this is also invoked from tools/deploy-helper.py via the
+# "Update DB Jobs (Dev/Prod)" action, since the blue-green deploy does not
+# touch the DB server.
 
 set -euo pipefail
 
@@ -80,7 +85,7 @@ chmod 644 /etc/cron.d/euro-office-disposable-refresh
 echo ""
 echo "=== Done ==="
 echo "Verify jobs.env exists:"
-ssh "root@${DB_HOST}" "[ -f /opt/euro-office/jobs.env ] && echo '  ✓ jobs.env found' || echo '  ✗ jobs.env MISSING — create it!'"
+ssh "root@${DB_HOST}" "[ -f /opt/euro-office/jobs.env ] && echo '  ✓ jobs.env found' || echo '  ✗ jobs.env MISSING — create it from deploy/scripts/db-jobs.env.example and scp it to /opt/euro-office/jobs.env'"
 echo ""
-echo "Test nightly backup:"
-echo "  ssh root@${DB_HOST} \"cd /opt/euro-office/platform && env \\\$(cat /opt/euro-office/jobs.env | grep -v '^#' | grep -v '^\$' | xargs) node dist/jobs/nightly-backup.js\""
+echo "Test nightly backup manually with:"
+echo "  ssh root@${DB_HOST} 'cd /opt/euro-office/platform && env \$(grep -v \"^#\" /opt/euro-office/jobs.env | grep -v \"^\$\" | xargs) node dist/jobs/nightly-backup.js'"

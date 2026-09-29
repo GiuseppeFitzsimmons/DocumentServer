@@ -153,6 +153,16 @@ ACTIONS = {
         "targets": ["dev-db", "prod-db"],
         "special": "db_shell",
     },
+    "Update DB Jobs (Dev)": {
+        "targets": ["dev-db"],
+        "special": "db_jobs",
+        "environment": "dev",
+    },
+    "Update DB Jobs (Prod)": {
+        "targets": ["prod-db"],
+        "special": "db_jobs",
+        "environment": "prod",
+    },
     "Build Web Apps": {
         "targets": ["dev-proxy", "dev-app-a", "dev-app-b", "dev-db", "prod", "prod-proxy"],
         "special": "local_command",
@@ -383,6 +393,10 @@ class DeployHelper:
         elif action.get("special") == "local_command":
             self.current_thread = threading.Thread(
                 target=self._run_local_command, args=(action["command"],), daemon=True
+            )
+        elif action.get("special") == "db_jobs":
+            self.current_thread = threading.Thread(
+                target=self._run_db_jobs, args=(env, action["environment"]), daemon=True
             )
         elif action.get("special") == "bluegreen_deploy":
             self.current_thread = threading.Thread(
@@ -671,6 +685,54 @@ class DeployHelper:
             process.wait()
             if process.returncode == 0:
                 self._log("\n✓ Done.\n", "success")
+                self._set_status("Done", "green")
+            else:
+                self._log(f"\n✗ Exited with code {process.returncode}\n", "error")
+                self._set_status("Failed", "red")
+
+        except Exception as e:
+            self._log(f"\n✗ Error: {e}\n", "error")
+            self._set_status("Error", "red")
+        finally:
+            self._set_running(False)
+
+    def _run_db_jobs(self, env, environment):
+        """
+        (Re)install the scheduled jobs on the DB server by running the local
+        setup-db-jobs.sh script. This rebuilds platform/dist locally, uploads it
+        to the DB host, installs deps, and rewrites the cron files.
+
+        Needed because the blue-green deploy only touches the app/proxy servers —
+        it never updates the DB VPS, so the nightly backup job would otherwise run
+        stale code (or not at all) after a deploy.
+        """
+        try:
+            script = os.path.join(REPO_ROOT, "deploy", "scripts", "setup-db-jobs.sh")
+            command = f'bash "{script}" {env["host"]} {environment}'
+
+            self._set_status(f"Updating DB jobs on {env['label']}...", "orange")
+            self._log_header(f"Updating scheduled jobs on {env['label']} ({env['host']})")
+            self._log_cmd(command)
+
+            process = subprocess.Popen(
+                command,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                cwd=REPO_ROOT,
+                text=True,
+            )
+
+            for line in iter(process.stdout.readline, ""):
+                if not self.running:
+                    process.terminate()
+                    self._log("\n⚠ Stopped by user.\n", "error")
+                    break
+                self._log_stream(line)
+
+            process.wait()
+            if process.returncode == 0:
+                self._log("\n✓ DB jobs updated.\n", "success")
                 self._set_status("Done", "green")
             else:
                 self._log(f"\n✗ Exited with code {process.returncode}\n", "error")
