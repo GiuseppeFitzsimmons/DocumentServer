@@ -1,14 +1,58 @@
 /**
  * Master catalog of available custom fonts from EuroBureau-Fonts.
- * Each entry maps a font name (as it appears in the editor) to a preview filename.
- * Sorted alphabetically by name.
+ *
+ * The catalog is loaded at startup from a manifest (`fonts.json`) that lives in
+ * the fonts submodule / mounted fonts directory. This lets the set of fonts be
+ * managed alongside the font files themselves and picked up automatically on
+ * deploy (the fonts directory is bind-mounted into the portal container and the
+ * submodule is pulled during the deploy) without a code change.
+ *
+ * If the manifest is missing or invalid, we fall back to a built-in list baked
+ * into the application so the font picker never goes offline.
+ *
+ * Each entry maps a font name (as it appears in the editor) to a preview
+ * filename served at /static-fonts/.
  */
+import { readFileSync } from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { config } from '../config.js';
+
 export interface FontEntry {
   name: string;
   file: string; // filename for @font-face preview (relative to /static-fonts/)
 }
 
-export const FONT_CATALOG: FontEntry[] = [
+interface FontManifest {
+  version?: number;
+  defaults?: string[];
+  fonts?: FontEntry[];
+}
+
+const MANIFEST_FILENAME = 'fonts.json';
+
+/**
+ * Resolve the directory that holds the font files and the fonts.json manifest.
+ * Order of precedence:
+ *   1. FONTS_DIR env override
+ *   2. /data/fonts in production (bind-mounted fonts submodule)
+ *   3. the repo `fonts` submodule in development (relative to this file)
+ *
+ * Kept in sync with the static file mount in index.ts (which imports this).
+ */
+export function resolveFontsDir(): string {
+  if (config.FONTS_DIR) return config.FONTS_DIR;
+  if (config.NODE_ENV === 'production') return '/data/fonts';
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  // src/fonts -> src -> platform -> <repo>/fonts
+  return path.join(here, '..', '..', '..', 'fonts');
+}
+
+/**
+ * Built-in fallback catalog. Used only when the manifest cannot be loaded.
+ * Sorted alphabetically by name.
+ */
+const FALLBACK_CATALOG: FontEntry[] = [
   { name: "Achafont", file: "Achafont.ttf" },
   { name: "Allura", file: "Allura-Regular.ttf" },
   { name: "Amatic SC", file: "AmaticSC-Regular.ttf" },
@@ -122,11 +166,9 @@ export const FONT_CATALOG: FontEntry[] = [
   { name: "Zombified", file: "Zombified.ttf" },
 ];
 
-export const FONT_NAMES = FONT_CATALOG.map(f => f.name);
-export const FONT_CATALOG_SET = new Set(FONT_NAMES);
-
-// Default font set for users who haven't customized their preferences
-export const DEFAULT_FONTS = [
+// Default font set for users who haven't customized their preferences.
+// Used as a fallback when the manifest omits a "defaults" list.
+const FALLBACK_DEFAULT_FONTS = [
   "Baskervville",
   "Caslon OS",
   "Cormorant",
@@ -136,3 +178,75 @@ export const DEFAULT_FONTS = [
   "TeXGyrePagella",
   "TeXGyreTermes",
 ];
+
+/**
+ * Validate and normalize a parsed manifest into a catalog + defaults.
+ * Throws if the manifest does not contain a usable font list.
+ */
+export function parseManifest(raw: unknown): { catalog: FontEntry[]; defaults: string[] } {
+  const manifest = raw as FontManifest;
+  if (!manifest || !Array.isArray(manifest.fonts)) {
+    throw new Error('manifest missing "fonts" array');
+  }
+
+  const catalog: FontEntry[] = [];
+  const seen = new Set<string>();
+  for (const entry of manifest.fonts) {
+    if (
+      !entry ||
+      typeof entry.name !== 'string' ||
+      typeof entry.file !== 'string' ||
+      entry.name.trim() === '' ||
+      entry.file.trim() === ''
+    ) {
+      continue; // skip malformed entries rather than failing the whole load
+    }
+    if (seen.has(entry.name)) continue; // first definition wins
+    seen.add(entry.name);
+    catalog.push({ name: entry.name, file: entry.file });
+  }
+
+  if (catalog.length === 0) {
+    throw new Error('manifest contained no valid font entries');
+  }
+
+  const names = new Set(catalog.map(f => f.name));
+  let defaults = Array.isArray(manifest.defaults)
+    ? manifest.defaults.filter(d => typeof d === 'string' && names.has(d))
+    : [];
+  if (defaults.length === 0) {
+    // Keep the built-in defaults, but only those present in this catalog.
+    defaults = FALLBACK_DEFAULT_FONTS.filter(d => names.has(d));
+    if (defaults.length === 0) {
+      // Last resort: first few catalog entries so the picker has something.
+      defaults = catalog.slice(0, Math.min(8, catalog.length)).map(f => f.name);
+    }
+  }
+
+  return { catalog, defaults };
+}
+
+function loadCatalog(): { catalog: FontEntry[]; defaults: string[] } {
+  const manifestPath = path.join(resolveFontsDir(), MANIFEST_FILENAME);
+  try {
+    const text = readFileSync(manifestPath, 'utf-8');
+    const parsed = parseManifest(JSON.parse(text));
+    console.log(
+      `[fonts] Loaded catalog from ${manifestPath}: ${parsed.catalog.length} fonts, ${parsed.defaults.length} defaults`
+    );
+    return parsed;
+  } catch (err) {
+    console.warn(
+      `[fonts] Could not load font manifest at ${manifestPath} (${(err as Error).message}); ` +
+      `using built-in fallback catalog (${FALLBACK_CATALOG.length} fonts)`
+    );
+    return { catalog: FALLBACK_CATALOG, defaults: FALLBACK_DEFAULT_FONTS };
+  }
+}
+
+const loaded = loadCatalog();
+
+export const FONT_CATALOG: FontEntry[] = loaded.catalog;
+export const FONT_NAMES = FONT_CATALOG.map(f => f.name);
+export const FONT_CATALOG_SET = new Set(FONT_NAMES);
+export const DEFAULT_FONTS = loaded.defaults;

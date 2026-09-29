@@ -6,6 +6,7 @@ import { requireAuth } from '../auth/middleware.js';
 import * as storage from './s3.js';
 import * as metadata from './metadata.js';
 import { getTemplate, isValidDocumentType } from './templates.js';
+import { normalizeDocxStyles } from './docx-style-normalizer.js';
 import { getShare, deleteSharesForFile } from '../sharing/service.js';
 import * as versionRepo from '../versions/repository.js';
 import { pool } from '../db/pool.js';
@@ -88,11 +89,21 @@ fileRouter.post('/upload', (req, res, next) => {
                 return;
             }
         }
-        await storage.upload(s3Key, req.file.buffer, req.file.mimetype);
+        // Normalize .docx style definitions on upload. Documents exported from
+        // Google Docs (and some other editors) omit the <w:qFormat/> flag on the
+        // built-in styles (Normal, Heading 1-9, Title, Subtitle), which makes those
+        // styles invisible in the OnlyOffice Home menu style gallery even though
+        // they are present and used. Re-adding the flag mirrors the LibreOffice
+        // re-save workaround. Non-docx or unexpected files pass through untouched.
+        let uploadBuffer = req.file.buffer;
+        if (ext === '.docx') {
+            uploadBuffer = normalizeDocxStyles(req.file.buffer);
+        }
+        await storage.upload(s3Key, uploadBuffer, req.file.mimetype);
         const fileRecord = await metadata.createFile({
             name: sanitizedName,
             mimeType: req.file.mimetype,
-            sizeBytes: req.file.size,
+            sizeBytes: uploadBuffer.length,
             userId,
             folderId,
             s3Key,

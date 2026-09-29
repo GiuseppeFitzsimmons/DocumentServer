@@ -120,6 +120,10 @@ ACTIONS = {
             "cd /opt/euro-office/repo/fonts && git checkout main && git pull",
             "cd /opt/euro-office/repo/deploy && docker compose -f docker-compose.multi.yml build --no-cache documentserver",
             "cd /opt/euro-office/repo/deploy && docker compose -f docker-compose.multi.yml up -d documentserver",
+            # Restart the portal so it re-reads fonts/fonts.json (the portal font
+            # catalog). The fonts dir is bind-mounted, so no rebuild is needed —
+            # just a restart to reload the manifest at startup.
+            "cd /opt/euro-office/repo/deploy && docker compose -f docker-compose.multi.yml restart portal",
         ],
     },
     "Update Fonts (Prod)": {
@@ -128,6 +132,10 @@ ACTIONS = {
             "cd /opt/euro-office/repo/fonts && git checkout main && git pull",
             "cd /opt/euro-office/repo/deploy && docker compose -f docker-compose.multi.yml build --no-cache documentserver",
             "cd /opt/euro-office/repo/deploy && docker compose -f docker-compose.multi.yml up -d documentserver",
+            # Restart the portal so it re-reads fonts/fonts.json (the portal font
+            # catalog). The fonts dir is bind-mounted, so no rebuild is needed —
+            # just a restart to reload the manifest at startup.
+            "cd /opt/euro-office/repo/deploy && docker compose -f docker-compose.multi.yml restart portal",
         ],
     },
     "View Logs": {
@@ -831,6 +839,16 @@ class DeployHelper:
             commands = [
                 "cd /opt/euro-office/repo && git fetch && git checkout main && git pull && git submodule update --init fonts",
                 build_cmd,
+                # Always force-recreate nginx so it re-resolves the portal/
+                # documentserver container IPs. Docker reuses freed IPs on
+                # recreate, and nginx caches upstream IPs at startup — if nginx
+                # isn't recreated (the --no-cache path uses `up -d`, which leaves
+                # unchanged containers running), it can keep a stale IP where
+                # "portal" now points at the documentserver container, serving
+                # the DS welcome page at "/". The re-resolving nginx config makes
+                # this self-healing, but we still recreate to load config changes
+                # and as a guaranteed reset.
+                f"cd /opt/euro-office/repo/deploy && docker compose -f {compose_file} up -d --force-recreate nginx",
                 f"cd /opt/euro-office/repo/deploy && docker compose -f {compose_file} exec -T portal node dist/db/migrate.js",
             ]
             for cmd in commands:

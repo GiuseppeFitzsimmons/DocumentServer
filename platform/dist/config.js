@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { z } from 'zod';
 const envSchema = z.object({
     PORT: z.coerce.number().default(3000),
-    NODE_ENV: z.enum(['development', 'production']).default('development'),
+    NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
     DATABASE_URL: z.string(),
     REDIS_URL: z.string().default('redis://localhost:6379'),
     SESSION_SECRET: z.string().min(16),
@@ -11,6 +11,10 @@ const envSchema = z.object({
     DS_JWT_SECRET: z.string().min(8),
     TRUST_PROXY: z.string().default('false'),
     FILE_STORAGE_PATH: z.string().default('/data/files'),
+    // Directory containing the font files and the fonts.json catalog manifest.
+    // Defaults are resolved at use-site (‘/data/fonts’ in production, the repo
+    // ‘fonts’ submodule in development); set this to override both.
+    FONTS_DIR: z.string().default(''),
     STORAGE_BACKEND: z.enum(['local', 's3']).default('local'),
     PLATFORM_BASE_URL: z.string().url(),
     MAIL_DOMAIN: z.string().default('eurobureau.eu'),

@@ -16,6 +16,7 @@ import { usersRouter } from './users/routes.js';
 import { accountRouter, accountPageRouter } from './account/routes.js';
 import { supportRouter } from './support/routes.js';
 import { fontsRouter } from './fonts/routes.js';
+import { resolveFontsDir } from './fonts/catalog.js';
 import { serveRouter } from './ds/serve.js';
 import { callbackRouter } from './ds/callback.js';
 import { forceSaveRouter } from './ds/forcesave.js';
@@ -45,10 +46,9 @@ app.use(sessionMiddleware);
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-// Static assets (fonts, images)
-const fontsPath = process.env.NODE_ENV === 'production'
-  ? '/data/fonts'
-  : path.join(__dirname, '..', '..', 'fonts');
+// Static assets (fonts, images). Uses the same directory the font catalog is
+// loaded from so previews and the catalog manifest always come from one place.
+const fontsPath = resolveFontsDir();
 app.use('/fonts', express.static(fontsPath));
 app.use('/static-fonts', express.static(fontsPath));
 app.use(express.static(path.join(__dirname, '..', 'public')));
