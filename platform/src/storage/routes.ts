@@ -454,6 +454,7 @@ fileRouter.get('/', async (req, res) => {
         type: 'folder' as const,
         size: null,
         mimeType: null,
+        createdAt: f.createdAt,
         updatedAt: f.updatedAt,
       })),
       ...contents.files.map(f => ({
@@ -462,6 +463,7 @@ fileRouter.get('/', async (req, res) => {
         type: 'file' as const,
         size: f.sizeBytes,
         mimeType: f.mimeType,
+        createdAt: f.createdAt,
         updatedAt: f.updatedAt,
       })),
     ];

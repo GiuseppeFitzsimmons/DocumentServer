@@ -357,7 +357,48 @@ body.auth-page {
   text-overflow: ellipsis;
 }
 .file-tree-name.folder-name { font-weight: 500; }
-.file-tree-meta { font-size: 12px; color: #888; flex-shrink: 0; margin-right: 4px; }
+.file-tree-meta { font-size: 12px; color: #888; flex-shrink: 0; }
+
+/* Shared column sizing between the header row and each item row. */
+.col-size { width: 80px; text-align: right; }
+.col-date { width: 130px; text-align: right; }
+.col-actions { width: 32px; flex-shrink: 0; }
+
+/* Sortable header row */
+.file-tree-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+  border-bottom: 1px solid #e5e5e5;
+  background: #fafafa;
+  user-select: none;
+}
+/* Spacer to line the header up with each row's arrow + icon columns. */
+.file-tree-header::before {
+  content: "";
+  /* arrow (16px) + gap (8px) + icon (18px) */
+  width: 42px;
+  flex-shrink: 0;
+}
+.file-tree-header-cell.col-name { flex: 1; }
+.file-tree-header-cell[data-sort] { cursor: pointer; }
+.file-tree-header-cell[data-sort]:hover { color: #111; }
+.file-tree-header-cell.sorted { color: #111; }
+.file-tree-header-cell:focus-visible {
+  outline: 2px solid #111;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.sort-indicator { font-size: 10px; }
+
+/* On narrow viewports, drop the date columns to keep the name readable */
+@media (max-width: 640px) {
+  .col-date { display: none; }
+}
 
 .file-tree-actions {
   opacity: 0;

@@ -34,15 +34,19 @@
     }
     .font-chip-main {
       display: flex;
-      flex-direction: column;
-      gap: 3px;
+      flex-direction: row;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
       min-width: 0;
     }
     .font-chip-name { white-space: nowrap; }
     .font-chip-tags {
       display: flex;
       flex-wrap: wrap;
+      justify-content: flex-end;
       gap: 4px;
+      margin-left: auto;
     }
     .font-tag {
       font-size: 11px;
@@ -68,6 +72,7 @@
       border: 1px solid #ddd;
       border-radius: 4px;
       font-size: 14px;
+      font-family: inherit;
     }
     .font-search:focus {
       outline: none;
@@ -80,6 +85,7 @@
     }
     .font-tag-filter {
       font-size: 12px;
+      font-family: inherit;
       line-height: 1;
       padding: 5px 10px;
       border-radius: 999px;
@@ -152,6 +158,13 @@
         <button class="btn-toolbar" id="btn-new-folder" onclick="handleNewFolder()">New Folder</button>
       </div>
       <div class="file-tree-container" id="fileTreeContainer">
+        <div class="file-tree-header" id="fileTreeHeader" role="row">
+          <span class="file-tree-header-cell col-name" data-sort="name" role="columnheader" tabindex="0">Name<span class="sort-indicator"></span></span>
+          <span class="file-tree-header-cell col-size" data-sort="size" role="columnheader" tabindex="0">Size<span class="sort-indicator"></span></span>
+          <span class="file-tree-header-cell col-date" data-sort="updatedAt" role="columnheader" tabindex="0">Modified<span class="sort-indicator"></span></span>
+          <span class="file-tree-header-cell col-date" data-sort="createdAt" role="columnheader" tabindex="0">Created<span class="sort-indicator"></span></span>
+          <span class="file-tree-header-cell col-actions" aria-hidden="true"></span>
+        </div>
         <div class="file-tree" id="fileTree" role="tree" aria-label="File browser"></div>
       </div>
     </section>
@@ -217,9 +230,9 @@
         var folders = [];
         items.forEach(function(item) {
           if (item.type === 'folder') {
-            folders.push({ id: item.id, name: item.name, updatedAt: item.updatedAt });
+            folders.push({ id: item.id, name: item.name, createdAt: item.createdAt, updatedAt: item.updatedAt });
           } else {
-            files.push({ id: item.id, name: item.name, mimeType: item.mimeType, sizeBytes: item.size, updatedAt: item.updatedAt });
+            files.push({ id: item.id, name: item.name, mimeType: item.mimeType, sizeBytes: item.size, createdAt: item.createdAt, updatedAt: item.updatedAt });
           }
         });
         return { files: files, folders: folders };
@@ -359,6 +372,11 @@
       return d.toLocaleDateString();
     }
 
+    function formatDateAbsolute(dateStr) {
+      if (!dateStr) return '\u2014';
+      return new Date(dateStr).toLocaleString();
+    }
+
     function formatSize(bytes) {
       if (!bytes && bytes !== 0) return '\u2014';
       if (bytes === 0) return '0 B';
@@ -433,13 +451,78 @@
     var expandedFolders = new Set();
     var activeContextMenuNode = null;
 
+    // Sort state for the My Files table. Default: name ascending.
+    var fileSortKey = 'name';       // 'name' | 'size' | 'updatedAt' | 'createdAt'
+    var fileSortDir = 'asc';        // 'asc' | 'desc'
+
     async function initFileTree() {
       try {
         fileTreeCache.set(null, initialItems);
+        initFileTreeHeader();
         renderFileTree();
       } catch(err) {
         document.getElementById('fileTree').innerHTML = '<div class="file-tree-empty">Failed to load files</div>';
       }
+    }
+
+    // Wire the sortable column headers.
+    function initFileTreeHeader() {
+      var header = document.getElementById('fileTreeHeader');
+      if (!header || header.dataset.wired) return;
+      header.dataset.wired = '1';
+      header.querySelectorAll('.file-tree-header-cell[data-sort]').forEach(function(cell) {
+        function activate() {
+          var key = cell.getAttribute('data-sort');
+          if (fileSortKey === key) {
+            fileSortDir = (fileSortDir === 'asc') ? 'desc' : 'asc';
+          } else {
+            fileSortKey = key;
+            // Names default to A→Z; sizes and dates default to largest/newest first.
+            fileSortDir = (key === 'name') ? 'asc' : 'desc';
+          }
+          updateSortIndicators();
+          renderFileTree();
+        }
+        cell.addEventListener('click', activate);
+        cell.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); }
+        });
+      });
+      updateSortIndicators();
+    }
+
+    function updateSortIndicators() {
+      var header = document.getElementById('fileTreeHeader');
+      if (!header) return;
+      header.querySelectorAll('.file-tree-header-cell[data-sort]').forEach(function(cell) {
+        var ind = cell.querySelector('.sort-indicator');
+        var active = cell.getAttribute('data-sort') === fileSortKey;
+        cell.classList.toggle('sorted', active);
+        if (ind) ind.textContent = active ? (fileSortDir === 'asc' ? ' \u25B2' : ' \u25BC') : '';
+      });
+    }
+
+    // Compare two items (files or folders) by the active sort key/direction.
+    function compareBySort(a, b) {
+      var dir = (fileSortDir === 'asc') ? 1 : -1;
+      var av, bv;
+      if (fileSortKey === 'size') {
+        // Folders have no size; treat as -1 so they group consistently.
+        av = (typeof a.sizeBytes === 'number') ? a.sizeBytes : -1;
+        bv = (typeof b.sizeBytes === 'number') ? b.sizeBytes : -1;
+      } else if (fileSortKey === 'updatedAt' || fileSortKey === 'createdAt') {
+        av = a[fileSortKey] ? new Date(a[fileSortKey]).getTime() : 0;
+        bv = b[fileSortKey] ? new Date(b[fileSortKey]).getTime() : 0;
+      } else {
+        // name
+        av = (a.name || '').toLowerCase();
+        bv = (b.name || '').toLowerCase();
+        return av.localeCompare(bv) * dir;
+      }
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      // Stable tiebreaker by name.
+      return (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase());
     }
 
     function renderFileTree() {
@@ -451,12 +534,10 @@
     }
 
     function renderTreeLevel(parentEl, data, parentFolderId, depth) {
-      var folders = (data.folders || []).slice().sort(function(a, b) {
-        return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-      });
-      var files = (data.files || []).slice().sort(function(a, b) {
-        return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-      });
+      // Folders always group above files; each group is sorted by the active
+      // column so the hierarchy stays intact.
+      var folders = (data.folders || []).slice().sort(compareBySort);
+      var files = (data.files || []).slice().sort(compareBySort);
 
       if (folders.length === 0 && files.length === 0 && depth > 0) {
         var emptyEl = document.createElement('div');
@@ -500,6 +581,21 @@
         name.className = 'file-tree-name folder-name';
         name.textContent = folder.name;
 
+        // Folders have no size; render an empty size cell so columns align.
+        var fsize = document.createElement('span');
+        fsize.className = 'file-tree-meta col-size';
+        fsize.textContent = '\u2014';
+
+        var fmodified = document.createElement('span');
+        fmodified.className = 'file-tree-meta col-date';
+        fmodified.textContent = formatDate(folder.updatedAt);
+        fmodified.title = 'Last modified: ' + formatDateAbsolute(folder.updatedAt);
+
+        var fcreated = document.createElement('span');
+        fcreated.className = 'file-tree-meta col-date';
+        fcreated.textContent = formatDate(folder.createdAt);
+        fcreated.title = 'Created: ' + formatDateAbsolute(folder.createdAt);
+
         var actions = document.createElement('button');
         actions.className = 'file-tree-actions';
         actions.textContent = '\u22EE';
@@ -508,6 +604,9 @@
         item.appendChild(arrow);
         item.appendChild(icon);
         item.appendChild(name);
+        item.appendChild(fsize);
+        item.appendChild(fmodified);
+        item.appendChild(fcreated);
         item.appendChild(actions);
         node.appendChild(item);
 
@@ -586,8 +685,18 @@
         name.textContent = file.name;
 
         var meta = document.createElement('span');
-        meta.className = 'file-tree-meta';
+        meta.className = 'file-tree-meta col-size';
         meta.textContent = formatSize(file.sizeBytes);
+
+        var modified = document.createElement('span');
+        modified.className = 'file-tree-meta col-date';
+        modified.textContent = formatDate(file.updatedAt);
+        modified.title = 'Last modified: ' + formatDateAbsolute(file.updatedAt);
+
+        var created = document.createElement('span');
+        created.className = 'file-tree-meta col-date';
+        created.textContent = formatDate(file.createdAt);
+        created.title = 'Created: ' + formatDateAbsolute(file.createdAt);
 
         var actions = document.createElement('button');
         actions.className = 'file-tree-actions';
@@ -598,6 +707,8 @@
         item.appendChild(icon);
         item.appendChild(name);
         item.appendChild(meta);
+        item.appendChild(modified);
+        item.appendChild(created);
         item.appendChild(actions);
         node.appendChild(item);
 
