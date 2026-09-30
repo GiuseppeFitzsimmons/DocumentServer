@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { config } from '../config.js';
 import { requireAuth } from '../auth/middleware.js';
 import { filterFontsBin } from './binary-filter.js';
-import { FONT_CATALOG, FONT_NAMES, FONT_CATALOG_SET, DEFAULT_FONTS } from './catalog.js';
+import { FONT_CATALOG, FONT_NAMES, FONT_CATALOG_SET, DEFAULT_FONTS, FONT_TAGS } from './catalog.js';
 import { getUserFonts, setUserFonts } from './preferences.js';
 
 export const fontsRouter = Router();
@@ -75,9 +75,34 @@ let defaultFilteredResponse: string | null = null;
 
 // --- Public API endpoints ---
 
-// GET /api/fonts/catalog — list all available fonts with filenames
-fontsRouter.get('/catalog', requireAuth, (_req, res) => {
-  res.json(FONT_CATALOG);
+// GET /api/fonts/catalog — list all available fonts with filenames and tags.
+// Supports optional server-side filtering: ?q=<text> matches font name or tag,
+// ?tag=<tag> (repeatable) requires the font to carry all given tags. Filtering
+// is also done client-side for instant feedback; these params let integrations
+// query a subset directly.
+fontsRouter.get('/catalog', requireAuth, (req, res) => {
+  const q = typeof req.query.q === 'string' ? req.query.q.trim().toLowerCase() : '';
+  const rawTags = req.query.tag;
+  const tagFilter = (Array.isArray(rawTags) ? rawTags : rawTags != null ? [rawTags] : [])
+    .map(t => String(t).trim().toLowerCase())
+    .filter(t => t !== '');
+
+  let results = FONT_CATALOG;
+  if (q) {
+    results = results.filter(
+      f => f.name.toLowerCase().includes(q) || f.tags.some(t => t.includes(q))
+    );
+  }
+  if (tagFilter.length > 0) {
+    results = results.filter(f => tagFilter.every(t => f.tags.includes(t)));
+  }
+
+  res.json(results);
+});
+
+// GET /api/fonts/tags — list every tag used across the catalog (sorted).
+fontsRouter.get('/tags', requireAuth, (_req, res) => {
+  res.json(FONT_TAGS);
 });
 
 // GET /api/fonts/preferences — get current user's selected fonts

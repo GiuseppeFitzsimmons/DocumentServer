@@ -32,7 +32,76 @@
       cursor: pointer;
       accent-color: #111;
     }
+    .font-chip-main {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-width: 0;
+    }
     .font-chip-name { white-space: nowrap; }
+    .font-chip-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .font-tag {
+      font-size: 11px;
+      line-height: 1;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: #eee;
+      color: #555;
+      white-space: nowrap;
+      font-family: inherit;
+    }
+    /* Font controls: search + tag filters */
+    .font-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin: 0 0 12px;
+    }
+    .font-search {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .font-search:focus {
+      outline: none;
+      border-color: #111;
+    }
+    .font-tag-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .font-tag-filter {
+      font-size: 12px;
+      line-height: 1;
+      padding: 5px 10px;
+      border-radius: 999px;
+      border: 1px solid #ddd;
+      background: #fff;
+      color: #555;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.1s, border-color 0.1s, color 0.1s;
+    }
+    .font-tag-filter:hover { border-color: #999; }
+    .font-tag-filter.active {
+      background: #111;
+      border-color: #111;
+      color: #fff;
+    }
+    .font-empty {
+      padding: 16px 14px;
+      font-size: 14px;
+      color: #999;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
@@ -109,6 +178,10 @@
         <button class="btn-toolbar" id="btn-save-fonts" onclick="saveFontPreferences()" disabled>Save selection</button>
       </div>
       <p style="font-size:14px;color:#666;margin:0 0 16px;">Choose which fonts appear in the editor font picker. Changes take effect on next document open.</p>
+      <div class="font-controls">
+        <input type="text" id="font-search" class="font-search" placeholder="Search fonts by name or tag..." autocomplete="off" />
+        <div class="font-tag-filters" id="font-tag-filters"></div>
+      </div>
       <div class="font-picker-grid" id="font-picker-grid"></div>
     </section>
 
@@ -987,6 +1060,9 @@
     var fontCatalog = [];
     var userFontSelection = new Set();
     var savedFontSelection = new Set(); // Track what's saved to detect real changes
+    var fontSearchTerm = '';            // current search text (lowercased)
+    var activeTagFilters = new Set();   // tags the user is filtering by
+    var fontPreviewsInjected = false;   // @font-face rules injected once
 
     async function loadFontPreferences() {
       try {
@@ -999,17 +1075,20 @@
         var defaultFonts = ["Baskervville", "Caslon OS", "Cormorant", "Dancing Script", "Libre Bodoni", "TeX Gyre Bonum", "TeXGyrePagella", "TeXGyreTermes"];
         userFontSelection = new Set(prefs.length > 0 ? prefs : defaultFonts);
         savedFontSelection = new Set(userFontSelection);
+
+        injectFontPreviewStyles();
+        renderTagFilters();
+        wireFontSearch();
         renderFontPicker();
       } catch(err) {
         console.error('Failed to load font preferences:', err);
       }
     }
 
-    function renderFontPicker() {
-      var grid = document.getElementById('font-picker-grid');
-      grid.innerHTML = '';
-
-      // Build @font-face rules for previews
+    // Inject @font-face rules for every catalog font once, so previews work
+    // regardless of the current filter.
+    function injectFontPreviewStyles() {
+      if (fontPreviewsInjected) return;
       var style = document.getElementById('font-preview-styles');
       if (!style) {
         style = document.createElement('style');
@@ -1017,19 +1096,99 @@
         document.head.appendChild(style);
       }
       var cssRules = '';
-
       fontCatalog.forEach(function(entry) {
-        var font = entry.name;
-        var file = entry.file;
-        var safeName = font.replace(/'/g, "\\'");
+        var safeName = entry.name.replace(/'/g, "\\'");
+        cssRules += "@font-face { font-family: '" + safeName + "'; src: url('/static-fonts/" + encodeURIComponent(entry.file) + "'); font-display: swap; }\n";
+      });
+      style.textContent = cssRules;
+      fontPreviewsInjected = true;
+    }
 
-        cssRules += "@font-face { font-family: '" + safeName + "'; src: url('/static-fonts/" + encodeURIComponent(file) + "'); font-display: swap; }\n";
+    function wireFontSearch() {
+      var input = document.getElementById('font-search');
+      if (!input || input.dataset.wired) return;
+      input.dataset.wired = '1';
+      input.addEventListener('input', function() {
+        fontSearchTerm = this.value.trim().toLowerCase();
+        renderFontPicker();
+      });
+    }
+
+    function renderTagFilters() {
+      var container = document.getElementById('font-tag-filters');
+      if (!container) return;
+      var tagSet = {};
+      fontCatalog.forEach(function(entry) {
+        (entry.tags || []).forEach(function(t) { tagSet[t] = true; });
+      });
+      var tags = Object.keys(tagSet).sort();
+      container.innerHTML = '';
+      tags.forEach(function(tag) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'font-tag-filter' + (activeTagFilters.has(tag) ? ' active' : '');
+        btn.textContent = tag;
+        btn.addEventListener('click', function() {
+          if (activeTagFilters.has(tag)) {
+            activeTagFilters.delete(tag);
+            btn.classList.remove('active');
+          } else {
+            activeTagFilters.add(tag);
+            btn.classList.add('active');
+          }
+          renderFontPicker();
+        });
+        container.appendChild(btn);
+      });
+    }
+
+    // A font matches if it satisfies the search term (name or any tag) AND
+    // carries every active tag filter.
+    function fontMatchesFilter(entry) {
+      var tags = entry.tags || [];
+      if (fontSearchTerm) {
+        var inName = entry.name.toLowerCase().indexOf(fontSearchTerm) !== -1;
+        var inTag = tags.some(function(t) { return t.indexOf(fontSearchTerm) !== -1; });
+        if (!inName && !inTag) return false;
+      }
+      for (var t of activeTagFilters) {
+        if (tags.indexOf(t) === -1) return false;
+      }
+      return true;
+    }
+
+    function renderFontPicker() {
+      var grid = document.getElementById('font-picker-grid');
+      grid.innerHTML = '';
+
+      var visible = fontCatalog.filter(fontMatchesFilter);
+
+      if (visible.length === 0) {
+        var empty = document.createElement('div');
+        empty.className = 'font-empty';
+        empty.textContent = 'No fonts match your search.';
+        grid.appendChild(empty);
+        updateFontCounter();
+        return;
+      }
+
+      visible.forEach(function(entry) {
+        var font = entry.name;
+        var safeName = font.replace(/'/g, "\\'");
+        var tags = entry.tags || [];
+
+        var tagsHtml = tags.map(function(t) {
+          return '<span class="font-tag">' + escapeHtml(t) + '</span>';
+        }).join('');
 
         var chip = document.createElement('label');
         chip.className = 'font-chip' + (userFontSelection.has(font) ? ' selected' : '');
         chip.innerHTML =
           '<input type="checkbox" ' + (userFontSelection.has(font) ? 'checked' : '') + ' />' +
-          '<span class="font-chip-name" style="font-family:\'' + safeName + '\', serif;">' + escapeHtml(font) + '</span>';
+          '<span class="font-chip-main">' +
+            '<span class="font-chip-name" style="font-family:\'' + safeName + '\', serif;">' + escapeHtml(font) + '</span>' +
+            (tagsHtml ? '<span class="font-chip-tags">' + tagsHtml + '</span>' : '') +
+          '</span>';
         chip.querySelector('input').addEventListener('change', function() {
           if (this.checked) {
             if (userFontSelection.size >= 14) {
@@ -1049,7 +1208,6 @@
         grid.appendChild(chip);
       });
 
-      style.textContent = cssRules;
       updateFontCounter();
     }
 

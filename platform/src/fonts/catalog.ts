@@ -21,12 +21,34 @@ import { config } from '../config.js';
 export interface FontEntry {
   name: string;
   file: string; // filename for @font-face preview (relative to /static-fonts/)
+  tags: string[]; // lowercase category/style tags, e.g. ["serif", "display"]
+}
+
+interface RawFontEntry {
+  name?: unknown;
+  file?: unknown;
+  tags?: unknown;
 }
 
 interface FontManifest {
   version?: number;
   defaults?: string[];
-  fonts?: FontEntry[];
+  fonts?: RawFontEntry[];
+}
+
+/** Normalize a raw tag list into a deduped array of lowercase, trimmed tags. */
+function normalizeTags(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const t of raw) {
+    if (typeof t !== 'string') continue;
+    const tag = t.trim().toLowerCase();
+    if (tag === '' || seen.has(tag)) continue;
+    seen.add(tag);
+    out.push(tag);
+  }
+  return out;
 }
 
 const MANIFEST_FILENAME = 'fonts.json';
@@ -52,7 +74,7 @@ export function resolveFontsDir(): string {
  * Built-in fallback catalog. Used only when the manifest cannot be loaded.
  * Sorted alphabetically by name.
  */
-const FALLBACK_CATALOG: FontEntry[] = [
+const FALLBACK_CATALOG: Array<{ name: string; file: string; tags?: string[] }> = [
   { name: "Achafont", file: "Achafont.ttf" },
   { name: "Allura", file: "Allura-Regular.ttf" },
   { name: "Amatic SC", file: "AmaticSC-Regular.ttf" },
@@ -203,7 +225,7 @@ export function parseManifest(raw: unknown): { catalog: FontEntry[]; defaults: s
     }
     if (seen.has(entry.name)) continue; // first definition wins
     seen.add(entry.name);
-    catalog.push({ name: entry.name, file: entry.file });
+    catalog.push({ name: entry.name, file: entry.file, tags: normalizeTags(entry.tags) });
   }
 
   if (catalog.length === 0) {
@@ -240,7 +262,12 @@ function loadCatalog(): { catalog: FontEntry[]; defaults: string[] } {
       `[fonts] Could not load font manifest at ${manifestPath} (${(err as Error).message}); ` +
       `using built-in fallback catalog (${FALLBACK_CATALOG.length} fonts)`
     );
-    return { catalog: FALLBACK_CATALOG, defaults: FALLBACK_DEFAULT_FONTS };
+    const catalog: FontEntry[] = FALLBACK_CATALOG.map(f => ({
+      name: f.name,
+      file: f.file,
+      tags: normalizeTags(f.tags),
+    }));
+    return { catalog, defaults: FALLBACK_DEFAULT_FONTS };
   }
 }
 
@@ -250,3 +277,8 @@ export const FONT_CATALOG: FontEntry[] = loaded.catalog;
 export const FONT_NAMES = FONT_CATALOG.map(f => f.name);
 export const FONT_CATALOG_SET = new Set(FONT_NAMES);
 export const DEFAULT_FONTS = loaded.defaults;
+
+/** Sorted, deduped list of every tag present across the catalog. */
+export const FONT_TAGS: string[] = Array.from(
+  new Set(FONT_CATALOG.flatMap(f => f.tags))
+).sort();
