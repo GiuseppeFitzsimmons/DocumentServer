@@ -9,6 +9,7 @@
 import AdmZip from 'adm-zip';
 import { XMLParser } from 'fast-xml-parser';
 import { writeFileSync } from 'fs';
+import { buildFontFamilyValue } from '../fonts/catalog.js';
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
@@ -104,10 +105,11 @@ function buildCssForStyle(
 ): string | null {
   const parts: string[] = [];
 
-  // Font
+  // Font (include declared generic fallbacks, e.g. 'Limelight', sans-serif, so
+  // ereaders that cannot embed the custom font substitute an appropriate face).
   const font = resolveFont(def.id, allStyles, docDefault);
   if (font && font !== bodyFont) {
-    parts.push(`font-family: '${font}'`);
+    parts.push(`font-family: ${buildFontFamilyValue(font)}`);
   }
 
   // Paragraph properties (resolve through chain)

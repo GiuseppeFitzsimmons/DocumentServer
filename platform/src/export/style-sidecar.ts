@@ -9,6 +9,7 @@
 
 import { writeFileSync } from 'fs';
 import type { FontAssignmentResult, ParagraphAssignment } from './font-assignment-extractor.js';
+import { buildFontFamilyValue } from '../fonts/catalog.js';
 
 export interface SidecarEntry {
   style: string;  // CSS style string, or "" if no styling needed
@@ -21,9 +22,11 @@ export interface SidecarEntry {
 function buildStyle(assignment: ParagraphAssignment, bodyFont: string): string {
   const parts: string[] = [];
 
-  // Font-family (only if paragraph font differs from body)
+  // Font-family (only if paragraph font differs from body). Includes declared
+  // generic fallbacks (e.g. 'Limelight', sans-serif) for ereaders that cannot
+  // embed the custom font.
   if (assignment.font && assignment.font !== bodyFont) {
-    parts.push(`font-family: '${assignment.font}'`);
+    parts.push(`font-family: ${buildFontFamilyValue(assignment.font)}`);
   }
 
   // Paragraph style properties

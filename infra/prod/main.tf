@@ -119,7 +119,20 @@ resource "hcloud_server" "prod_db" {
   firewall_ids = [hcloud_firewall.db.id]
 
   user_data = templatefile("${path.module}/cloud-init-db.yaml", {
-    db_password = var.db_password
+    db_password    = var.db_password
+    repo_url       = var.repo_url
+    jwt_secret     = var.jwt_secret
+    session_secret = var.session_secret
+    domain         = var.domain
+    s3_endpoint    = var.ovh_s3_endpoint
+    s3_bucket      = var.ovh_s3_bucket
+    s3_access_key  = var.ovh_s3_access_key
+    s3_secret_key  = var.ovh_s3_secret_key
+    s3_region      = var.ovh_s3_region
+    smtp_host      = var.smtp_host
+    smtp_port      = var.smtp_port
+    smtp_user      = var.smtp_user
+    smtp_pass      = var.smtp_pass
   })
 
   public_net {

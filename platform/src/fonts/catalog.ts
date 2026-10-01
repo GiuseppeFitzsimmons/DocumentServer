@@ -22,12 +22,14 @@ export interface FontEntry {
   name: string;
   file: string; // filename for @font-face preview (relative to /static-fonts/)
   tags: string[]; // lowercase category/style tags, e.g. ["serif", "display"]
+  generic: string[]; // ordered CSS generic-family fallbacks, e.g. ["cursive", "sans-serif"]
 }
 
 interface RawFontEntry {
   name?: unknown;
   file?: unknown;
   tags?: unknown;
+  generic?: unknown;
 }
 
 interface FontManifest {
@@ -47,6 +49,47 @@ function normalizeTags(raw: unknown): string[] {
     if (tag === '' || seen.has(tag)) continue;
     seen.add(tag);
     out.push(tag);
+  }
+  return out;
+}
+
+/**
+ * CSS generic font-family keywords. These are the only values allowed in a
+ * font entry's `generic` list; anything else is dropped during normalization
+ * so we never emit an invalid fallback into exported CSS.
+ */
+export const VALID_GENERICS = new Set<string>([
+  'serif',
+  'sans-serif',
+  'monospace',
+  'cursive',
+  'fantasy',
+  'system-ui',
+  'ui-serif',
+  'ui-sans-serif',
+  'ui-monospace',
+  'ui-rounded',
+  'math',
+  'fangsong',
+]);
+
+/**
+ * Normalize a raw generic list into an ordered, deduped array of valid CSS
+ * generic-family keywords (lowercase, trimmed). Order is preserved because it
+ * is meaningful: ereaders pick the first generic they support, e.g. a script
+ * font declares ["cursive", "sans-serif"] so a reader with a cursive face uses
+ * it and otherwise falls back to sans-serif.
+ */
+function normalizeGenerics(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const g of raw) {
+    if (typeof g !== 'string') continue;
+    const generic = g.trim().toLowerCase();
+    if (generic === '' || seen.has(generic) || !VALID_GENERICS.has(generic)) continue;
+    seen.add(generic);
+    out.push(generic);
   }
   return out;
 }
@@ -74,7 +117,7 @@ export function resolveFontsDir(): string {
  * Built-in fallback catalog. Used only when the manifest cannot be loaded.
  * Sorted alphabetically by name.
  */
-const FALLBACK_CATALOG: Array<{ name: string; file: string; tags?: string[] }> = [
+const FALLBACK_CATALOG: Array<{ name: string; file: string; tags?: string[]; generic?: string[] }> = [
   { name: "Achafont", file: "Achafont.ttf" },
   { name: "Allura", file: "Allura-Regular.ttf" },
   { name: "Amatic SC", file: "AmaticSC-Regular.ttf" },
@@ -225,7 +268,12 @@ export function parseManifest(raw: unknown): { catalog: FontEntry[]; defaults: s
     }
     if (seen.has(entry.name)) continue; // first definition wins
     seen.add(entry.name);
-    catalog.push({ name: entry.name, file: entry.file, tags: normalizeTags(entry.tags) });
+    catalog.push({
+      name: entry.name,
+      file: entry.file,
+      tags: normalizeTags(entry.tags),
+      generic: normalizeGenerics(entry.generic),
+    });
   }
 
   if (catalog.length === 0) {
@@ -266,6 +314,7 @@ function loadCatalog(): { catalog: FontEntry[]; defaults: string[] } {
       name: f.name,
       file: f.file,
       tags: normalizeTags(f.tags),
+      generic: normalizeGenerics(f.generic),
     }));
     return { catalog, defaults: FALLBACK_DEFAULT_FONTS };
   }
@@ -282,3 +331,36 @@ export const DEFAULT_FONTS = loaded.defaults;
 export const FONT_TAGS: string[] = Array.from(
   new Set(FONT_CATALOG.flatMap(f => f.tags))
 ).sort();
+
+/** Fast lookup from font name to its catalog entry. */
+const FONT_BY_NAME = new Map<string, FontEntry>(FONT_CATALOG.map(f => [f.name, f]));
+
+/**
+ * Returns the ordered CSS generic-family fallbacks for a given font name, as
+ * declared in the manifest. Returns an empty array for unknown fonts or fonts
+ * with no declared generics.
+ */
+export function genericsForFont(fontName: string): string[] {
+  return FONT_BY_NAME.get(fontName)?.generic ?? [];
+}
+
+/**
+ * Builds a CSS `font-family` value for a font, quoting the family name and
+ * appending its declared generic fallbacks. Most ereaders cannot embed custom
+ * fonts, so the generic (serif / sans-serif / cursive / ...) tells the reader
+ * which built-in face to substitute.
+ *
+ * Examples:
+ *   buildFontFamilyValue("Limelight")      -> "'Limelight', sans-serif"
+ *   buildFontFamilyValue("Allura")         -> "'Allura', cursive"
+ *   buildFontFamilyValue("Achafont")       -> "'Achafont', fantasy, cursive"
+ *   buildFontFamilyValue("Unknown Font")   -> "'Unknown Font'"
+ *
+ * @param fontName  The font family name as it appears in the catalog/editor.
+ * @param quote     Quote character for the family name (default single quote).
+ */
+export function buildFontFamilyValue(fontName: string, quote: string = "'"): string {
+  const family = `${quote}${fontName}${quote}`;
+  const generics = genericsForFont(fontName);
+  return generics.length > 0 ? `${family}, ${generics.join(', ')}` : family;
+}

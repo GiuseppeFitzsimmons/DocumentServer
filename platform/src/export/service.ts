@@ -4,11 +4,13 @@ import { createWriteStream } from 'fs';
 import { mkdir, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { execFile } from 'child_process';
 import { pipeline } from 'stream/promises';
 
 import { extractFontsFromDocx } from './font-extractor.js';
 import { resolveFonts } from './font-resolver.js';
+import { resolveFontsDir } from '../fonts/catalog.js';
 import { injectFontsIntoEpub } from './epub-font-injector.js';
 import { extractFontAssignments } from './font-assignment-extractor.js';
 import { generateStyleMap } from './style-map-generator.js';
@@ -20,12 +22,21 @@ import type { FontAssignmentResult } from './font-assignment-extractor.js';
 
 const PANDOC_TIMEOUT_MS = 30_000;
 
-const FONT_DIR = process.env.NODE_ENV === 'production'
-  ? '/data/fonts'
-  : path.resolve(process.cwd(), 'fonts');
+// Custom fonts: reuse the catalog's resolver so this honors the FONTS_DIR
+// override and resolves the dev path relative to the source module (the repo
+// root `fonts/`), not process.cwd() — the dev server runs from `platform/`,
+// so cwd-relative paths pointed at the non-existent `platform/fonts`.
+const FONT_DIR = resolveFontsDir();
+
+// Core fonts live next to the repo `fonts/` dir. In production they're mounted
+// at /data/core-fonts; in dev they sit at <repo>/core-fonts (one level up from
+// platform/), resolved relative to this module rather than cwd.
 const CORE_FONT_DIR = process.env.NODE_ENV === 'production'
   ? '/data/core-fonts'
-  : path.resolve(process.cwd(), 'core-fonts');
+  : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'core-fonts');
+
+// Font mappings ship with the app under platform/config, so cwd-relative is
+// correct here (dev server runs from platform/).
 const FONT_MAPPINGS_PATH = path.resolve(process.cwd(), 'config/font-mappings.json');
 
 export class PandocError extends Error {

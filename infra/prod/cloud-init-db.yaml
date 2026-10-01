@@ -67,9 +67,6 @@ runcmd:
   # Ensure private network interface is configured
   - |
     if ! grep -q "enp7s0" /etc/netplan/50-cloud-init.yaml 2>/dev/null; then
-      cat >> /etc/netplan/50-cloud-init.yaml <<EOF
-        enp7s0:
-          dhcp4: true
-    EOF
+      printf '        enp7s0:\n          dhcp4: true\n' >> /etc/netplan/50-cloud-init.yaml
       netplan apply
     fi

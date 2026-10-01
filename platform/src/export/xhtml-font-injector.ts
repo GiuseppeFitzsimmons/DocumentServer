@@ -11,6 +11,7 @@
 import AdmZip from 'adm-zip';
 import { writeFileSync } from 'fs';
 import type { FontAssignmentResult, ParagraphAssignment } from './font-assignment-extractor.js';
+import { buildFontFamilyValue } from '../fonts/catalog.js';
 
 export interface XhtmlFontInjectorInput {
   epubPath: string;
@@ -129,12 +130,14 @@ export function isEmptyBlock(innerHtml: string): boolean {
 export function buildInlineStyles(assignment: ParagraphAssignment, bodyFont: string): string | null {
   const parts: string[] = [];
 
-  // Font-family (only if different from body)
+  // Font-family (only if different from body). The value includes the font's
+  // declared generic fallbacks (e.g. 'Limelight', sans-serif) so ereaders that
+  // cannot embed the custom font substitute an appropriate built-in face.
   const fonts = new Set(assignment.runs.map(r => r.font));
   if (fonts.size === 1 && assignment.runs[0].font !== bodyFont) {
-    parts.push(`font-family: '${assignment.runs[0].font}'`);
+    parts.push(`font-family: ${buildFontFamilyValue(assignment.runs[0].font)}`);
   } else if (assignment.font && assignment.font !== bodyFont) {
-    parts.push(`font-family: '${assignment.font}'`);
+    parts.push(`font-family: ${buildFontFamilyValue(assignment.font)}`);
   }
 
   // Paragraph style properties

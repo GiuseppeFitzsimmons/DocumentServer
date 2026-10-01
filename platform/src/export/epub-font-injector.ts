@@ -14,6 +14,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import path from 'path';
 import { deflateRawSync } from 'zlib';
 import type { FontResolutionResult } from './font-types.js';
+import { buildFontFamilyValue, genericsForFont } from '../fonts/catalog.js';
 
 /**
  * Input for the epub font injection process.
@@ -355,22 +356,27 @@ function injectFontFamilyIntoRules(
 ): string {
   let result = css;
 
-  // Inject into body/p rules
+  // Inject into body/p rules. Body text must always have a safe reading
+  // fallback, so if the font declares no generics we default to "serif".
   if (bodyFont) {
-    result = injectPropertyIntoRule(result, 'p', `font-family: "${bodyFont}", serif;`);
+    const bodyValue = genericsForFont(bodyFont).length > 0
+      ? buildFontFamilyValue(bodyFont, '"')
+      : `"${bodyFont}", serif`;
+    result = injectPropertyIntoRule(result, 'p', `font-family: ${bodyValue};`);
     // Also add a body rule if one exists; if not, append it
     if (result.match(/^body\s*\{/m)) {
-      result = injectPropertyIntoRule(result, 'body', `font-family: "${bodyFont}", serif;`);
+      result = injectPropertyIntoRule(result, 'body', `font-family: ${bodyValue};`);
     } else {
-      result += `\nbody {\n  font-family: "${bodyFont}", serif;\n}\n`;
+      result += `\nbody {\n  font-family: ${bodyValue};\n}\n`;
     }
   }
 
-  // Inject into heading rules
+  // Inject into heading rules, appending each heading font's declared generic
+  // fallbacks (e.g. "Limelight", sans-serif).
   if (headingFonts) {
     for (const [level, font] of headingFonts) {
       if (level >= 1 && level <= 6) {
-        result = injectPropertyIntoRule(result, `h${level}`, `font-family: "${font}";`);
+        result = injectPropertyIntoRule(result, `h${level}`, `font-family: ${buildFontFamilyValue(font, '"')};`);
       }
     }
   }
