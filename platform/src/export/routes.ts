@@ -94,6 +94,13 @@ async function sendForcesave(key: string): Promise<'accepted' | 'nochanges' | 'm
 async function ensureSavedToS3(fileId: string, documentKey: string): Promise<SaveOutcome> {
   const activeKey = await getActiveDocumentKey(fileId);
 
+  // Start listening for a save-complete BEFORE issuing any forcesave, so we
+  // can't miss a save that lands while the forcesave round-trips. The client
+  // triggers api.forceSave() just before navigating to export, so a callback
+  // is usually already in flight by the time we get here. This is the
+  // authoritative signal that S3 holds the latest content.
+  const pendingSave = waitForSave(fileId);
+
   // Candidate keys in priority order: Redis session key first, DB key as a
   // fallback. Deduped so we don't send the same key twice.
   const candidateKeys = [activeKey, documentKey].filter(
@@ -115,7 +122,7 @@ async function ensureSavedToS3(fileId: string, documentKey: string): Promise<Sav
 
     if (outcome === 'accepted') {
       console.log('[export:save] Forcesave accepted, waiting for save callback...');
-      const saved = await waitForSave(fileId);
+      const saved = await pendingSave;
       console.log(`[export:save] waitForSave: ${saved ? 'CONFIRMED' : 'TIMED OUT'}`);
       // Even on timeout, the forcesave was accepted; the callback may land
       // shortly. Treat as saved — the handler re-fetches the record.
@@ -123,10 +130,13 @@ async function ensureSavedToS3(fileId: string, documentKey: string): Promise<Sav
     }
 
     if (outcome === 'nochanges') {
-      // Doc is open on this key but has no unsaved edits. One brief retry in
-      // case an autosave is mid-flight, then accept S3 as current.
-      console.log('[export:save] DS reports no changes; S3 is current.');
-      return 'nochanges';
+      // Doc is open on this key with no server-side unsaved changes. A
+      // client-triggered forcesave may still be in flight, so wait for it
+      // (bounded) before concluding S3 is current.
+      console.log('[export:save] DS reports no changes; waiting for any in-flight client save...');
+      const saved = await pendingSave;
+      console.log(`[export:save] in-flight save: ${saved ? 'CONFIRMED' : 'none within timeout'}`);
+      return saved ? 'saved' : 'nochanges';
     }
 
     if (outcome === 'mismatch') {
@@ -139,17 +149,22 @@ async function ensureSavedToS3(fileId: string, documentKey: string): Promise<Sav
     break;
   }
 
-  // Not an error: the client triggers a forcesave (api.forceSave) before
-  // navigating to export, so the content is normally already persisted by the
-  // time we get here. This server-side forcesave is a redundant backstop; a
-  // 'notopen' here just means the live DS session key has rotated past the keys
-  // we know (Redis is set once at open, the DB key drifts as saves bump
-  // updated_at). S3 holds the last saved state, which the client already made current.
+  // No server-side forcesave matched (the live DS session key has rotated past
+  // the keys we know). The client triggers api.forceSave() before navigating,
+  // so a save callback is normally in flight — wait for it so we read the fresh
+  // content rather than racing ahead to a stale S3 read (which was the bug:
+  // export beat the client-triggered save on slower/deployed environments).
   console.log(
-    `[export:save] No server-side forcesave landed for file=${fileId}; ` +
-    `exporting current S3 state (client forcesave is the primary mechanism).`
+    `[export:save] No server-side forcesave matched for file=${fileId}; ` +
+    `waiting for client-triggered save to land...`
   );
-  return 'notopen';
+  const saved = await pendingSave;
+  console.log(
+    saved
+      ? `[export:save] Client-triggered save confirmed for file=${fileId}.`
+      : `[export:save] No save landed within timeout for file=${fileId}; exporting current S3 state.`
+  );
+  return saved ? 'saved' : 'notopen';
 }
 
 export const exportRouter = Router();

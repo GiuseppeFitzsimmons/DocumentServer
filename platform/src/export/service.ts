@@ -13,6 +13,7 @@ import { resolveFonts } from './font-resolver.js';
 import { resolveFontsDir } from '../fonts/catalog.js';
 import { injectFontsIntoEpub } from './epub-font-injector.js';
 import { injectHeadingStyles } from './heading-style-injector.js';
+import { removeSynthesizedTitleHeading } from './title-heading-remover.js';
 import { extractFontAssignments } from './font-assignment-extractor.js';
 import { generateStyleMap } from './style-map-generator.js';
 import { removeSections } from './section-remover.js';
@@ -207,6 +208,17 @@ export async function convertDocxToEpub(inputStream: Readable, options?: Convert
 
   // Invoke Pandoc with Lua filter for style injection
   await runPandoc(inputPath, outputPath, options, styleMapPath);
+
+  // Remove pandoc's synthesized title heading (the file name injected into the
+  // body as <h1 class="unnumbered">). The EPUB writer adds this after filters
+  // run, so it must be stripped post-write. Best-effort.
+  if (options?.title) {
+    try {
+      await removeSynthesizedTitleHeading(outputPath);
+    } catch (err) {
+      console.warn('Title heading removal failed, proceeding:', err);
+    }
+  }
 
   // Inject fonts into epub (best-effort)
   if (options?.embedFonts !== false) {
