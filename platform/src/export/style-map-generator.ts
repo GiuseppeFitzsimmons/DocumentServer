@@ -29,6 +29,7 @@ interface StyleDef {
 
 interface StyleMapOutput {
   bodyFont: string;
+  bodySize?: number;  // resolved Normal style font-size in pt (points), if defined
   styles: Record<string, string>;  // styleName → CSS string
   headingStyles: Record<string, string>;  // "heading 1" → CSS string
 }
@@ -46,6 +47,10 @@ export function generateStyleMap(docxPath: string, outputPath: string): void {
 
   // Extract docDefaults font
   const docDefaultFont = getFontFromRFonts(getPath(parsed, ['w:styles', 'w:docDefaults', 'w:rPrDefault', 'w:rPr', 'w:rFonts'])) || 'serif';
+
+  // Extract docDefaults font-size (w:sz is in half-points). Used as the final
+  // fallback for the body size when the Normal style doesn't specify one.
+  const docDefaultSize = halfPointsToPt(getPath(parsed, ['w:styles', 'w:docDefaults', 'w:rPrDefault', 'w:rPr', 'w:sz', '@_w:val']));
 
   // Build style map
   const styleDefs = new Map<string, StyleDef>();
@@ -77,8 +82,23 @@ export function generateStyleMap(docxPath: string, outputPath: string): void {
     if (resolved) bodyFont = resolved;
   }
 
+  // Resolve the body font-size (pt) from the Normal style, falling back to
+  // docDefaults. w:sz lives in the style's rPr (top-level) or pPr/rPr. This is
+  // the author's document default text size, applied to body paragraphs via the
+  // base stylesheet (see epub-font-injector), since pandoc does not wrap
+  // Normal-styled paragraphs for the Lua filter to style individually.
+  let bodySize: number | undefined;
+  if (normalId) {
+    bodySize = halfPointsToPt(resolveRPrProperty(normalId, styleDefs, ['w:sz', '@_w:val']));
+    if (bodySize === undefined) {
+      const normalPPr = resolvePPr(normalId, styleDefs);
+      bodySize = halfPointsToPt(getPath(normalPPr, ['w:rPr', 'w:sz', '@_w:val']));
+    }
+  }
+  if (bodySize === undefined) bodySize = docDefaultSize;
+
   // Build CSS for each named style
-  const output: StyleMapOutput = { bodyFont, styles: {}, headingStyles: {} };
+  const output: StyleMapOutput = { bodyFont, bodySize, styles: {}, headingStyles: {} };
 
   for (const [, def] of styleDefs) {
     if (!def.name || def.type !== 'paragraph') continue;
@@ -174,6 +194,24 @@ function buildCssForStyle(
       const val = Number(sz);
       if (!isNaN(val)) parts.push(`font-size: ${val / 2}pt`);
     }
+
+    // Paragraph borders (w:pBdr). Common use: a rule above/below chapter
+    // headings. Exported as CSS border-{top,bottom,left,right}. ereaders
+    // broadly support these.
+    const pBdr = pPr['w:pBdr'];
+    if (pBdr && typeof pBdr === 'object') {
+      const bdr = pBdr as Record<string, unknown>;
+      const sides: Array<['w:top' | 'w:bottom' | 'w:left' | 'w:right', string]> = [
+        ['w:top', 'border-top'],
+        ['w:bottom', 'border-bottom'],
+        ['w:left', 'border-left'],
+        ['w:right', 'border-right'],
+      ];
+      for (const [ooxmlSide, cssProp] of sides) {
+        const css = borderToCss(bdr[ooxmlSide]);
+        if (css) parts.push(`${cssProp}: ${css}`);
+      }
+    }
   }
 
   // Also check top-level rPr for font-size
@@ -216,6 +254,58 @@ function resolveRPrProperty(styleId: string, styles: Map<string, StyleDef>, prop
   }
   if (def.parentId) return resolveRPrProperty(def.parentId, styles, propPath, depth + 1);
   return undefined;
+}
+
+/**
+ * Converts a single OOXML paragraph border element (w:top/w:bottom/etc.) into a
+ * CSS border shorthand value, e.g. "1pt solid #000000". Returns null when the
+ * border is absent or explicitly none/nil (so instance overrides that turn a
+ * style's border off are respected).
+ *
+ * OOXML specifics:
+ *   - w:sz is in EIGHTHS of a point (sz=8 → 1pt). Clamped to a 0.5pt minimum.
+ *   - w:val maps border art styles to CSS (single→solid, double→double, ...).
+ *   - w:color may be "auto" → treated as black.
+ */
+function borderToCss(borderEl: unknown): string | null {
+  if (!borderEl || typeof borderEl !== 'object') return null;
+  const obj = borderEl as Record<string, unknown>;
+
+  const val = obj['@_w:val'] as string | undefined;
+  if (!val || val === 'none' || val === 'nil') return null;
+
+  const szEighths = Number(obj['@_w:sz'] ?? 0);
+  const widthPt = isNaN(szEighths) ? 0.5 : Math.max(szEighths / 8, 0.5);
+
+  const styleMap: Record<string, string> = {
+    single: 'solid',
+    thick: 'solid',
+    double: 'double',
+    dotted: 'dotted',
+    dashed: 'dashed',
+    dashSmallGap: 'dashed',
+    dotDash: 'dashed',
+    dotDotDash: 'dotted',
+    triple: 'double',
+    wave: 'solid',
+  };
+  const cssStyle = styleMap[val] || 'solid';
+
+  let color = (obj['@_w:color'] as string) || '000000';
+  if (color === 'auto') color = '000000';
+
+  return `${widthPt}pt ${cssStyle} #${color}`;
+}
+
+/**
+ * Converts an OOXML w:sz value (half-points) to points. Returns undefined for
+ * missing or non-numeric input. e.g. "21" → 10.5pt.
+ */
+function halfPointsToPt(raw: unknown): number | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  const val = Number(raw);
+  if (isNaN(val)) return undefined;
+  return val / 2;
 }
 
 function getFontFromRFonts(rFonts: unknown): string | null {

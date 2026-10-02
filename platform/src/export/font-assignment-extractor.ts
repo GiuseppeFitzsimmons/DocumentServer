@@ -22,6 +22,7 @@ export interface BorderDef {
   style: string;    // CSS border-style (solid, dashed, dotted, double, none)
   color: string;    // hex color
   width: number;    // in pt (from w:sz / 8)
+  space: number;    // gap between border and text, in pt (from w:space; already in points)
 }
 
 export interface ParagraphStyle {
@@ -33,6 +34,7 @@ export interface ParagraphStyle {
   marginLeft?: number;      // in points (from w:ind w:left in twips / 20)
   marginRight?: number;     // in points
   fontSize?: number;        // in points (from w:sz / 2, half-points)
+  letterSpacing?: number;   // in points (character spacing, from rPr w:spacing w:val in twentieths of a pt / 20)
   borderTop?: BorderDef;
   borderBottom?: BorderDef;
   borderLeft?: BorderDef;
@@ -56,6 +58,7 @@ interface StyleEntry {
   font: string | null;
   parentStyleId: string | null;
   pPr?: Record<string, unknown>;  // Raw paragraph properties from the style definition
+  rPr?: Record<string, unknown>;  // Raw run properties from the style definition (top-level)
 }
 
 /**
@@ -165,10 +168,11 @@ function buildStyleMap(parsed: unknown, styleMap: Map<string, StyleEntry>): void
     const basedOn = getPath(obj, ['w:basedOn', '@_w:val']);
     const parentStyleId = typeof basedOn === 'string' ? basedOn : null;
 
-    // Store paragraph properties from the style definition
+    // Store paragraph + run properties from the style definition
     const pPr = obj['w:pPr'] as Record<string, unknown> | undefined;
+    const rPr = obj['w:rPr'] as Record<string, unknown> | undefined;
 
-    styleMap.set(styleId, { font, parentStyleId, pPr: pPr || undefined });
+    styleMap.set(styleId, { font, parentStyleId, pPr: pPr || undefined, rPr: rPr || undefined });
   }
 }
 
@@ -462,10 +466,23 @@ function extractParagraphStyle(
 
   // font-size from pPr/rPr/w:sz (direct first, then style)
   const sz = (pPrObj ? getPath(pPrObj, ['w:rPr', 'w:sz', '@_w:val']) : undefined) ??
-             (stylePPr ? getPath(stylePPr, ['w:rPr', 'w:sz', '@_w:val']) : undefined);
+             (stylePPr ? getPath(stylePPr, ['w:rPr', 'w:sz', '@_w:val']) : undefined) ??
+             (pStyleId ? resolveStyleRPrProperty(pStyleId, styleMap, ['w:sz', '@_w:val'], 0) : undefined);
   if (sz !== undefined) {
     const val = Number(sz);
     if (!isNaN(val)) { style.fontSize = val / 2; hasAny = true; }
+  }
+
+  // letter-spacing (character spacing) from pPr/rPr/w:spacing/@w:val (direct
+  // first, then style). In rPr, w:spacing/@w:val is in twentieths of a point
+  // (unlike pPr spacing which carries before/after/line). Can be negative
+  // (condensed) or positive (expanded); 0 means normal and is skipped.
+  const charSpacing = (pPrObj ? getPath(pPrObj, ['w:rPr', 'w:spacing', '@_w:val']) : undefined) ??
+                      (stylePPr ? getPath(stylePPr, ['w:rPr', 'w:spacing', '@_w:val']) : undefined) ??
+                      (pStyleId ? resolveStyleRPrProperty(pStyleId, styleMap, ['w:spacing', '@_w:val'], 0) : undefined);
+  if (charSpacing !== undefined) {
+    const val = Number(charSpacing);
+    if (!isNaN(val) && val !== 0) { style.letterSpacing = val / 20; hasAny = true; }
   }
 
   // Borders from w:pBdr (direct first, then style)
@@ -504,6 +521,10 @@ function parseBorder(borderEl: unknown): BorderDef | null {
   // w:sz is in eighths of a point
   const widthPt = Math.max(sz / 8, 0.5);
 
+  // w:space is the gap between the border and the text, already in points.
+  const spaceRaw = Number(obj['@_w:space'] ?? 0);
+  const space = isNaN(spaceRaw) ? 0 : spaceRaw;
+
   // Map OOXML border styles to CSS
   const styleMap: Record<string, string> = {
     single: 'solid',
@@ -522,6 +543,7 @@ function parseBorder(borderEl: unknown): BorderDef | null {
     style: styleMap[val] || 'solid',
     color: color === 'auto' ? '000000' : color,
     width: widthPt,
+    space,
   };
 }
 
@@ -547,6 +569,33 @@ function resolveStyleProperty(
 
   if (entry.parentStyleId) {
     return resolveStyleProperty(entry.parentStyleId, styleMap, propertyPath, depth + 1);
+  }
+
+  return undefined;
+}
+
+/**
+ * Resolves a specific property from a style's top-level rPr by traversing the
+ * basedOn chain. Used for run properties that live on the style's rPr rather
+ * than its pPr/rPr (e.g. heading character spacing, font-size).
+ */
+function resolveStyleRPrProperty(
+  styleId: string,
+  styleMap: Map<string, StyleEntry>,
+  propertyPath: string[],
+  depth: number
+): unknown {
+  if (depth > 10) return undefined;
+  const entry = styleMap.get(styleId);
+  if (!entry) return undefined;
+
+  if (entry.rPr) {
+    const value = getPath(entry.rPr, propertyPath);
+    if (value !== undefined) return value;
+  }
+
+  if (entry.parentStyleId) {
+    return resolveStyleRPrProperty(entry.parentStyleId, styleMap, propertyPath, depth + 1);
   }
 
   return undefined;

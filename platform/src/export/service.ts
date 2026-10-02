@@ -1,7 +1,7 @@
 import { Readable } from 'stream';
 import { randomUUID } from 'crypto';
 import { createWriteStream } from 'fs';
-import { mkdir, rm } from 'fs/promises';
+import { mkdir, rm, readFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -12,6 +12,7 @@ import { extractFontsFromDocx } from './font-extractor.js';
 import { resolveFonts } from './font-resolver.js';
 import { resolveFontsDir } from '../fonts/catalog.js';
 import { injectFontsIntoEpub } from './epub-font-injector.js';
+import { injectHeadingStyles } from './heading-style-injector.js';
 import { extractFontAssignments } from './font-assignment-extractor.js';
 import { generateStyleMap } from './style-map-generator.js';
 import { removeSections } from './section-remover.js';
@@ -188,9 +189,17 @@ export async function convertDocxToEpub(inputStream: Readable, options?: Convert
 
   // Generate style map for pandoc Lua filter
   let styleMapPath: string | undefined;
+  let bodySize: number | undefined;
   try {
     styleMapPath = path.join(tempDir, 'style-map.json');
     generateStyleMap(inputPath, styleMapPath);
+    // Read back the resolved body font-size (pt) to inject into the base
+    // stylesheet's body rule (see epub-font-injector). Per-heading size, border
+    // and letter-spacing are applied individually by the heading-style-injector.
+    try {
+      const sm = JSON.parse(await readFile(styleMapPath, 'utf-8'));
+      if (typeof sm.bodySize === 'number') bodySize = sm.bodySize;
+    } catch { /* non-fatal: body size stays undefined */ }
   } catch (err) {
     console.warn('Style map generation failed, proceeding without per-element styling:', err);
     styleMapPath = undefined;
@@ -207,11 +216,28 @@ export async function convertDocxToEpub(inputStream: Readable, options?: Convert
           epubPath: outputPath,
           resolvedFonts,
           bodyFont: assignmentResult?.bodyFont,
+          bodySize,
           headingFonts: assignmentResult?.headingFonts,
         });
       }
     } catch (err) {
       console.warn('Font injection failed, returning epub without fonts:', err);
+    }
+  }
+
+  // Apply per-heading instance styling (font-size, letter-spacing, borders,
+  // per-heading font overrides) to the matching <hN> elements. Independent of
+  // font embedding and best-effort: any failure degrades to uniform styling.
+  if (assignmentResult && assignmentResult.paragraphs.length > 0) {
+    try {
+      await injectHeadingStyles({
+        epubPath: outputPath,
+        paragraphs: assignmentResult.paragraphs,
+        bodyFont: assignmentResult.bodyFont,
+        headingFonts: assignmentResult.headingFonts,
+      });
+    } catch (err) {
+      console.warn('Heading style injection failed, proceeding without per-heading styles:', err);
     }
   }
 

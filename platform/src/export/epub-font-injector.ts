@@ -23,6 +23,7 @@ export interface EpubFontInjectorInput {
   epubPath: string;
   resolvedFonts: FontResolutionResult[];
   bodyFont?: string;
+  bodySize?: number;  // body font-size in pt (points), applied to p/body rules
   headingFonts?: Map<number, string>;
 }
 
@@ -41,7 +42,7 @@ export interface EpubFontInjectorInput {
  * @param input - The epub path and resolved font entries
  */
 export async function injectFontsIntoEpub(input: EpubFontInjectorInput): Promise<void> {
-  const { epubPath, resolvedFonts, bodyFont, headingFonts } = input;
+  const { epubPath, resolvedFonts, bodyFont, bodySize, headingFonts } = input;
 
   // Filter to only fonts with a resolved file path
   const fontsToEmbed = resolvedFonts.filter(
@@ -95,7 +96,7 @@ export async function injectFontsIntoEpub(input: EpubFontInjectorInput): Promise
   let css = zip.getEntry(cssEntry)!.getData().toString('utf-8');
 
   // Inject font-family into existing CSS rule blocks instead of appending
-  css = injectFontFamilyIntoRules(css, bodyFont, headingFonts);
+  css = injectFontFamilyIntoRules(css, bodyFont, headingFonts, bodySize);
 
   // Append @font-face declarations at the end
   const fontFaceDeclarations = generateFontFaceCSS(fontsToEmbed, fontsRelativeToCSS);
@@ -352,7 +353,8 @@ function generateFontFaceCSS(
 function injectFontFamilyIntoRules(
   css: string,
   bodyFont?: string,
-  headingFonts?: Map<number, string>
+  headingFonts?: Map<number, string>,
+  bodySize?: number
 ): string {
   let result = css;
 
@@ -368,6 +370,19 @@ function injectFontFamilyIntoRules(
       result = injectPropertyIntoRule(result, 'body', `font-family: ${bodyValue};`);
     } else {
       result += `\nbody {\n  font-family: ${bodyValue};\n}\n`;
+    }
+  }
+
+  // Inject the author's body font-size (pt → pt) into the body rule so all
+  // body text reflects the document's default size. We set it on `body` (not
+  // `p`) so it cascades to every element while still allowing per-style rules
+  // (headings, quotes, etc.) to override via their own font-size.
+  if (bodySize !== undefined && bodySize > 0) {
+    const sizeDecl = `font-size: ${bodySize}pt;`;
+    if (result.match(/^body\s*\{/m)) {
+      result = injectPropertyIntoRule(result, 'body', sizeDecl);
+    } else {
+      result += `\nbody {\n  ${sizeDecl}\n}\n`;
     }
   }
 
