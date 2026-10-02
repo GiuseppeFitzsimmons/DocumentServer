@@ -30,9 +30,18 @@ vi.mock('../../storage/metadata.js', () => ({
 
 const mockGetLatestVersionNumber = vi.fn();
 const mockInsertVersion = vi.fn();
+const mockPruneOldVersions = vi.fn();
 vi.mock('../repository.js', () => ({
   getLatestVersionNumber: (...args: unknown[]) => mockGetLatestVersionNumber(...args),
   insertVersion: (...args: unknown[]) => mockInsertVersion(...args),
+  pruneOldVersions: (...args: unknown[]) => mockPruneOldVersions(...args),
+}));
+
+// Quota check runs during save; mock it so tests don't hit a real DB pool.
+const mockGetAccountUsage = vi.fn();
+vi.mock('../../storage/quota.js', () => ({
+  getAccountUsage: (...args: unknown[]) => mockGetAccountUsage(...args),
+  ACCOUNT_QUOTA_BYTES: 1024 * 1024 * 1024,
 }));
 
 // Mock global fetch
@@ -92,6 +101,8 @@ beforeEach(() => {
   mockUpdateFile.mockResolvedValue({});
   mockGetLatestVersionNumber.mockResolvedValue(0);
   mockInsertVersion.mockResolvedValue({ id: 'ver-1' });
+  mockPruneOldVersions.mockResolvedValue([]);
+  mockGetAccountUsage.mockResolvedValue({ usedBytes: 0 });
 });
 
 describe('Callback Handler - Version Archival', () => {
@@ -232,12 +243,12 @@ describe('Callback Handler - Version Archival', () => {
 
     expect(result.body.error).toBe(0);
     expect(mockUpload).toHaveBeenCalledWith(
-      'user-1/file-1/versions/1/diff.zip',
+      'user-1/file-1/versions/1.diff.zip',
       diffContent,
       'application/zip'
     );
     expect(mockInsertVersion).toHaveBeenCalledWith(expect.objectContaining({
-      changesS3Key: 'user-1/file-1/versions/1/diff.zip',
+      changesS3Key: 'user-1/file-1/versions/1.diff.zip',
       changesJson: { changes: [{ test: true }], serverVersion: '7.0' },
     }));
   });

@@ -13,6 +13,16 @@ const oldCode = 'if(c)return window.location.href="/api/files/"+c+"/export/epub"
 
 const newCode = [
   'if(c){t&&t.hide();',
+  // Capture the editor API and define a save-then-navigate helper. The export
+  // must flush the current document to our storage via a DS forcesave callback
+  // before the server reads it; otherwise freshly-typed text is missing from the
+  // export. forceSave() (unlike asc_Save) is not gated on asc_isDocumentCanSave,
+  // so it persists even when the editor already auto-saved to the co-authoring
+  // cache. We navigate after a short delay to let the persist callback land.
+  'var _api=this.api;',
+  'var _expSave=function(u){var go=function(){window.location.href=u};try{',
+  'if(_api&&_api.forceSave){_api.forceSave();setTimeout(go,2000)}else{go()}',
+  '}catch(e){go()}};',
   // Fetch headings then show dialog
   'fetch("/api/files/"+c+"/export/headings",{credentials:"include"}).then(function(r){return r.json()}).then(function(headings){',
   'var secHtml="";',
@@ -54,13 +64,13 @@ const newCode = [
   'for(var j=0;j<boxes.length;j++){if(!boxes[j].checked)excluded.push(boxes[j].getAttribute("data-idx"))}',
   'if(excluded.length>0)params.push("exclude="+excluded.join(","));',
   'var q=params.length?"?"+params.join("&"):"";',
-  'window.location.href="/api/files/"+c+"/export/epub"+q',
+  '_expSave("/api/files/"+c+"/export/epub"+q)',
   '}',
   '}',
   '});',
   '}).catch(function(){',
   // Fallback: export without options if heading fetch fails
-  'window.location.href="/api/files/"+c+"/export/epub"',
+  '_expSave("/api/files/"+c+"/export/epub")',
   '});',
   'return}',
 ].join('');

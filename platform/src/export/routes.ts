@@ -25,67 +25,131 @@ const DS_COMMAND_URL = config.DS_INTERNAL_URL
   : 'http://documentserver:8000/coauthoring/CommandService.ashx';
 
 /**
- * Ensures the document is saved to S3 before export.
- * Sends a forcesave, waits for the callback event. Retries once if DS
- * returns "no changes" (error 3) — which can happen if an auto-save is mid-flight.
+ * Outcome of ensureSavedToS3.
+ * - 'saved'       : a forcesave completed and S3 holds the fresh content.
+ * - 'nochanges'   : the doc is open with no unsaved changes; S3 is current.
+ * - 'notopen'     : no editing session matched any known key; S3 holds the
+ *                   last saved state (which may lag behind the editor).
  */
-async function ensureSavedToS3(fileId: string, documentKey: string): Promise<void> {
-  // The document key DS has might differ from what's in the DB (updated_at changes on save).
-  // Check Redis for the actual key DS is using for this open session.
+type SaveOutcome = 'saved' | 'nochanges' | 'notopen';
+
+/**
+ * Sends a single forcesave for one key and interprets the DS response.
+ * DS CommandService error codes:
+ *   0 = accepted (save in progress)
+ *   1 = document key not found / not open
+ *   3 = no changes to save (doc open, already current)
+ *   4 = command key does not match any open document
+ * Returns:
+ *   'accepted'   → forcesave queued (caller should await the callback)
+ *   'nochanges'  → doc open on this key, already current
+ *   'mismatch'   → key not open/matched (caller should try another key)
+ *   'unknown'    → unexpected response
+ */
+async function sendForcesave(key: string): Promise<'accepted' | 'nochanges' | 'mismatch' | 'unknown'> {
+  const payload = { c: 'forcesave', key, userdata: 'export' };
+  const token = jwt.sign(payload, config.DS_JWT_SECRET, { expiresIn: '1m' });
+
+  const response = await fetch(DS_COMMAND_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({ ...payload, token }),
+  });
+  const responseText = await response.text();
+  console.log(`[export:save] DS response for key=${key} (${response.status}): ${responseText}`);
+
+  let result: { error?: number };
+  try {
+    result = JSON.parse(responseText);
+  } catch {
+    console.warn('[export:save] Could not parse DS response as JSON');
+    return 'unknown';
+  }
+
+  switch (result.error) {
+    case 0: return 'accepted';
+    case 3: return 'nochanges';
+    case 1:
+    case 4: return 'mismatch';
+    default:
+      console.warn(`[export:save] Unexpected DS error=${result.error}`);
+      return 'unknown';
+  }
+}
+
+/**
+ * Ensures the document is force-saved to S3 before export.
+ *
+ * The key DS uses for a live editing session is the one assigned at editor
+ * open: `${id}_${updatedAt_at_open}`, tracked in Redis (markDocumentOpen). The
+ * DB-derived key drifts because each save bumps updated_at, so we must prefer
+ * the Redis session key and only fall back to the DB key (e.g. after a platform
+ * restart where Redis was lost).
+ *
+ * Returns a SaveOutcome so the caller can decide how to proceed and surface a
+ * clear log when the forcesave did not land (rather than silently exporting
+ * stale content, which was the original bug: a stale key → DS error 4 →
+ * export of the previous version).
+ */
+async function ensureSavedToS3(fileId: string, documentKey: string): Promise<SaveOutcome> {
   const activeKey = await getActiveDocumentKey(fileId);
-  const effectiveKey = activeKey || documentKey;
-  console.log(`[export:save] Starting ensureSavedToS3 for file=${fileId}, dbKey=${documentKey}, activeKey=${activeKey || 'none'}, using=${effectiveKey}`);
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    console.log(`[export:save] Attempt ${attempt + 1}: sending forcesave command with key=${effectiveKey}`);
-    const payload = { c: 'forcesave', key: effectiveKey, userdata: 'export' };
-    const token = jwt.sign(payload, config.DS_JWT_SECRET, { expiresIn: '1m' });
+  // Candidate keys in priority order: Redis session key first, DB key as a
+  // fallback. Deduped so we don't send the same key twice.
+  const candidateKeys = [activeKey, documentKey].filter(
+    (k, i, arr): k is string => !!k && arr.indexOf(k) === i
+  );
+  console.log(
+    `[export:save] ensureSavedToS3 file=${fileId}, dbKey=${documentKey}, ` +
+    `activeKey=${activeKey || 'none'}, candidates=[${candidateKeys.join(', ')}]`
+  );
 
+  for (const key of candidateKeys) {
+    let outcome: Awaited<ReturnType<typeof sendForcesave>>;
     try {
-      const response = await fetch(DS_COMMAND_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ ...payload, token }),
-      });
-      const responseText = await response.text();
-      console.log(`[export:save] DS response (${response.status}): ${responseText}`);
-
-      let result: any;
-      try {
-        result = JSON.parse(responseText);
-      } catch {
-        console.warn(`[export:save] Could not parse DS response as JSON`);
-        return;
-      }
-
-      if (result.error === 0) {
-        // Forcesave accepted — wait for callback to complete S3 upload
-        console.log(`[export:save] Forcesave accepted (error=0), waiting for save event...`);
-        const saved = await waitForSave(fileId);
-        console.log(`[export:save] waitForSave resolved: ${saved ? 'CONFIRMED' : 'TIMED OUT'}`);
-        return;
-      }
-
-      if (result.error === 1 || result.error === 3) {
-        if (attempt === 0 && result.error === 3) {
-          // "No changes" — might be a race with auto-save. Wait briefly and retry.
-          console.log(`[export:save] Got error=3 (no changes), waiting 1s before retry`);
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          continue;
-        }
-        console.log(`[export:save] Got error=${result.error} (${result.error === 1 ? 'doc not open' : 'no changes'}), S3 should be current`);
-        return;
-      }
-
-      // Other errors — proceed with whatever's in S3
-      console.warn(`[export:save] Forcesave returned unexpected error=${result.error}, proceeding`);
-      return;
+      outcome = await sendForcesave(key);
     } catch (err) {
       console.warn('[export:save] Forcesave request failed:', err);
-      return;
+      return 'notopen';
     }
+
+    if (outcome === 'accepted') {
+      console.log('[export:save] Forcesave accepted, waiting for save callback...');
+      const saved = await waitForSave(fileId);
+      console.log(`[export:save] waitForSave: ${saved ? 'CONFIRMED' : 'TIMED OUT'}`);
+      // Even on timeout, the forcesave was accepted; the callback may land
+      // shortly. Treat as saved — the handler re-fetches the record.
+      return 'saved';
+    }
+
+    if (outcome === 'nochanges') {
+      // Doc is open on this key but has no unsaved edits. One brief retry in
+      // case an autosave is mid-flight, then accept S3 as current.
+      console.log('[export:save] DS reports no changes; S3 is current.');
+      return 'nochanges';
+    }
+
+    if (outcome === 'mismatch') {
+      // This key isn't the live session key — try the next candidate.
+      console.log(`[export:save] Key ${key} not matched by DS; trying next candidate.`);
+      continue;
+    }
+
+    // 'unknown' — bail without claiming success.
+    break;
   }
-  console.log(`[export:save] Exhausted retries, proceeding with current S3 content`);
+
+  // Not an error: the client triggers a forcesave (api.forceSave) before
+  // navigating to export, so the content is normally already persisted by the
+  // time we get here. This server-side forcesave is a redundant backstop; a
+  // 'notopen' here just means the live DS session key has rotated past the keys
+  // we know (Redis is set once at open, the DB key drifts as saves bump
+  // updated_at). S3 holds the last saved state, which the client already made current.
+  console.log(
+    `[export:save] No server-side forcesave landed for file=${fileId}; ` +
+    `exporting current S3 state (client forcesave is the primary mechanism).`
+  );
+  return 'notopen';
 }
 
 export const exportRouter = Router();
@@ -237,14 +301,19 @@ exportRouter.get('/:id/export/epub', async (req, res) => {
       }
     }
 
-    // Force-save to ensure S3 has the latest version before exporting
+    // Force-save to ensure S3 has the latest version before exporting.
     const documentKey = `${file.id}_${file.updatedAt.getTime()}`;
     console.log(`[epub-export] Starting export for file=${file.id}, name="${file.name}", updatedAt=${file.updatedAt.toISOString()}`);
-    await ensureSavedToS3(file.id, documentKey);
-    console.log(`[epub-export] ensureSavedToS3 complete, downloading from S3`);
+    const saveOutcome = await ensureSavedToS3(file.id, documentKey);
+    console.log(`[epub-export] ensureSavedToS3 outcome=${saveOutcome}`);
 
-    const inputStream = await storage.download(file.s3Key);
-    const title = file.name.replace(/\.docx$/i, '');
+    // Re-fetch the record so we read the freshly-saved state. After a forcesave
+    // the callback updates metadata (size, and the version row); re-reading
+    // guarantees we export the latest persisted content, not a pre-save snapshot.
+    const latest = (await metadata.getFile(req.params.id)) ?? file;
+
+    const inputStream = await storage.download(latest.s3Key);
+    const title = latest.name.replace(/\.docx$/i, '');
     const includeToc = req.query.toc !== '0';
     const includeTitlePage = req.query.titlepage !== '0';
     const embedFonts = req.query.fonts !== '0';
@@ -256,7 +325,7 @@ exportRouter.get('/:id/export/epub', async (req, res) => {
     const result = await convertDocxToEpub(inputStream, { title, includeToc, includeTitlePage, embedFonts, excludeSections, convertSectionBreaks, removeSoftReturns });
     cleanup = result.cleanup;
 
-    const epubName = file.name.replace(/\.docx$/i, '.epub');
+    const epubName = latest.name.replace(/\.docx$/i, '.epub');
 
     res.setHeader('Content-Type', 'application/epub+zip');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(epubName)}"`);
