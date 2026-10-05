@@ -370,6 +370,18 @@
   <script>
     var config = <%- JSON.stringify(editorConfig) %>;
 
+    // Context for the in-editor cursor-restore IIFE (which runs inside the DS
+    // iframe, a separate document). We expose userId + canEdit on THIS (parent)
+    // window; the IIFE reads them via window.parent.__eoCursorCtx. This is
+    // deterministic and avoids relying on minified editor internals to detect
+    // edit permission or user id (which proved unreadable in DS 9.3.1).
+    try {
+      window.__eoCursorCtx = {
+        userId: (config.editorConfig && config.editorConfig.user && config.editorConfig.user.id) ? String(config.editorConfig.user.id) : 'anon',
+        canEdit: !(config.editorConfig && config.editorConfig.mode === 'view')
+      };
+    } catch (e) {}
+
     config.events = {
       onRequestSaveAs: function(event) {
         var title = event.data.title || 'Copy of ' + config.document.title;
