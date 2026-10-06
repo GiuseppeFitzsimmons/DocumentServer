@@ -11,6 +11,7 @@ export declare const config: {
     TRUST_PROXY: string;
     FILE_STORAGE_PATH: string;
     FONTS_DIR: string;
+    STATIC_CONTENT_BASE_URL: string;
     STORAGE_BACKEND: "local" | "s3";
     PLATFORM_BASE_URL: string;
     MAIL_DOMAIN: string;

@@ -25,6 +25,7 @@ import { exportRouter, internalExportRouter } from './export/routes.js';
 import { editorRouter } from './pages/editor.js';
 import { landingRouter } from './pages/landing.js';
 import { homeRouter } from './pages/home.js';
+import { contentRouter } from './content/routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -78,6 +79,10 @@ const authLimiter = rateLimit({
 
 // Public homepage (unauthenticated visitors)
 app.use(homeRouter);
+
+// Public static content (T&C, FAQ) — fetched from the EuroBureau-Static repo at
+// runtime so edits go live without a redeploy.
+app.use(contentRouter);
 
 // API auth routes
 app.use('/auth', authLimiter, authRouter);

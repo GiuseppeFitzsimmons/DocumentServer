@@ -14,6 +14,7 @@ const SUPPORT_EMAIL = `support@${config.MAIL_DOMAIN}`;
 const ticketSchema = z.object({
   subject: z.string().min(1).max(200),
   message: z.string().min(1).max(5000),
+  category: z.enum(['technical', 'publishing']).default('technical'),
 });
 
 // POST /api/support
@@ -25,7 +26,7 @@ supportRouter.post('/', async (req, res) => {
   }
 
   const userId = req.session.userId!;
-  const { subject, message } = parsed.data;
+  const { subject, message, category } = parsed.data;
 
   // Get user info
   const userResult = await pool.query(
@@ -39,14 +40,16 @@ supportRouter.post('/', async (req, res) => {
   }
 
   const user = userResult.rows[0];
+  const categoryLabel = category === 'publishing' ? 'Publishing Support' : 'Technical Support';
 
   try {
     await sendEmail({
       to: SUPPORT_EMAIL,
-      subject: `[Support] ${subject}`,
+      subject: `[${categoryLabel}] ${subject}`,
       text: [
         `Support ticket from: ${user.display_name} <${user.email}>`,
         `User ID: ${userId}`,
+        `Category: ${categoryLabel}`,
         ``,
         `Subject: ${subject}`,
         ``,
@@ -56,6 +59,7 @@ supportRouter.post('/', async (req, res) => {
       html: [
         `<p><strong>Support ticket from:</strong> ${user.display_name} &lt;${user.email}&gt;</p>`,
         `<p><strong>User ID:</strong> ${userId}</p>`,
+        `<p><strong>Category:</strong> ${categoryLabel}</p>`,
         `<hr>`,
         `<p><strong>Subject:</strong> ${subject}</p>`,
         `<p><strong>Message:</strong></p>`,

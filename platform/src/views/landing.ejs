@@ -1375,17 +1375,20 @@
     })();
   </script>
 
-  <!-- Support Widget -->
+  <!-- Support & FAQ Widget -->
   <div id="support-widget" class="support-widget">
-    <button id="support-toggle" class="support-toggle" aria-label="Contact support">
-      Support
-    </button>
     <div id="support-panel" class="support-panel" style="display:none;">
       <div class="support-panel-header">
-        <span>Contact Support</span>
+        <span>Contact a Human</span>
         <button id="support-close" class="support-panel-close" aria-label="Close">&times;</button>
       </div>
       <form id="support-form" class="support-form">
+        <div class="support-field">
+          <div class="support-radio-group">
+            <label class="support-radio"><input type="radio" name="category" value="technical" checked /> Technical</label>
+            <label class="support-radio"><input type="radio" name="category" value="publishing" /> Publishing</label>
+          </div>
+        </div>
         <div class="support-field">
           <label for="support-subject">Subject</label>
           <input type="text" id="support-subject" name="subject" required maxlength="200" placeholder="Brief description of your issue" />
@@ -1400,6 +1403,11 @@
         <p>Your message has been sent. We'll get back to you shortly.</p>
         <button id="support-reset" class="support-submit">Send another</button>
       </div>
+    </div>
+    <div class="support-buttons">
+      <a href="/faq" class="support-toggle support-toggle-secondary" aria-label="FAQ">FAQ</a>
+      <a href="/terms" class="support-toggle support-toggle-secondary" aria-label="FAQ">Terms</a>
+      <button id="support-toggle" class="support-toggle" aria-label="Contact support">Ask a Human</button>
     </div>
   </div>
 
@@ -1425,6 +1433,39 @@
       transition: background 0.15s;
     }
     .support-toggle:hover { background: #333; }
+    .support-toggle-secondary {
+      background: #fff;
+      color: #111;
+      border: 1px solid #ccc;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .support-toggle-secondary:hover { background: #f5f5f5; color: #111; }
+    .support-buttons {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    .support-radio-group {
+      display: flex;
+      gap: 16px;
+    }
+    .support-radio {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 14px;
+      color: #444;
+      cursor: pointer;
+    }
+    .support-radio input {
+      width: auto;
+      cursor: pointer;
+      accent-color: #111;
+    }
     .support-panel {
       position: absolute;
       bottom: 64px;
@@ -1511,34 +1552,36 @@
 
   <script>
     (function() {
-      var toggle = document.getElementById('support-toggle');
-      var panel = document.getElementById('support-panel');
-      var closeBtn = document.getElementById('support-close');
+      var supportToggle = document.getElementById('support-toggle');
+      var supportPanel = document.getElementById('support-panel');
+      var supportClose = document.getElementById('support-close');
       var form = document.getElementById('support-form');
       var successEl = document.getElementById('support-success');
       var resetBtn = document.getElementById('support-reset');
 
-      toggle.addEventListener('click', function() {
-        var visible = panel.style.display !== 'none';
-        panel.style.display = visible ? 'none' : '';
+      supportToggle.addEventListener('click', function() {
+        var visible = supportPanel.style.display !== 'none';
+        supportPanel.style.display = visible ? 'none' : '';
         if (!visible) document.getElementById('support-subject').focus();
       });
 
-      closeBtn.addEventListener('click', function() {
-        panel.style.display = 'none';
+      supportClose.addEventListener('click', function() {
+        supportPanel.style.display = 'none';
       });
 
       form.addEventListener('submit', async function(e) {
         e.preventDefault();
         var subject = document.getElementById('support-subject').value.trim();
         var message = document.getElementById('support-message').value.trim();
+        var categoryEl = form.querySelector('input[name="category"]:checked');
+        var category = categoryEl ? categoryEl.value : 'technical';
         if (!subject || !message) return;
 
         try {
           var res = await fetch('/api/support', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ subject: subject, message: message })
+            body: JSON.stringify({ subject: subject, message: message, category: category })
           });
           if (!res.ok) {
             var data = await res.json();
@@ -1558,5 +1601,12 @@
       });
     })();
   </script>
+
+  <footer style="padding:32px 24px;text-align:center;border-top:1px solid #eee;font-size:13px;color:#888;margin-top:24px;">
+    <p style="margin:0;">&copy; 2026 EuroBureau &middot;
+      <a href="/terms" style="color:#888;text-decoration:none;">Terms</a> &middot;
+      <a href="/faq" style="color:#888;text-decoration:none;">FAQ</a>
+    </p>
+  </footer>
 </body>
 </html>

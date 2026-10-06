@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %> - EuroBureau</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .container {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    header {
+      padding: 24px 0;
+      border-bottom: 1px solid #eee;
+    }
+
+    header .back-link {
+      font-size: 14px;
+      text-decoration: none;
+      color: #444;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    header .back-link:hover {
+      color: #111;
+    }
+
+    header .back-link .arrow {
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    .content {
+      padding: 56px 0 72px;
+      line-height: 1.75;
+      color: #222;
+    }
+
+    .content h1 {
+      font-size: 32px;
+      font-weight: normal;
+      letter-spacing: -0.01em;
+      margin-bottom: 24px;
+    }
+
+    .content h2 {
+      font-size: 22px;
+      font-weight: normal;
+      margin: 40px 0 12px;
+    }
+
+    .content h3 {
+      font-size: 17px;
+      font-weight: 600;
+      margin: 28px 0 8px;
+    }
+
+    .content p {
+      margin-bottom: 16px;
+      font-size: 16px;
+    }
+
+    .content ul,
+    .content ol {
+      margin: 0 0 16px 24px;
+    }
+
+    .content li {
+      margin-bottom: 8px;
+    }
+
+    .content blockquote {
+      margin: 0 0 20px;
+      padding: 12px 20px;
+      border-left: 3px solid #ddd;
+      background: #fafafa;
+      color: #555;
+    }
+
+    .content code {
+      background: #f2f2f2;
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-size: 90%;
+    }
+
+    .content hr {
+      border: none;
+      border-top: 1px solid #eee;
+      margin: 32px 0;
+    }
+
+    .content a {
+      color: #1a56db;
+    }
+
+    footer {
+      padding: 40px 0;
+      text-align: center;
+      border-top: 1px solid #eee;
+      font-size: 13px;
+      color: #888;
+    }
+
+    footer a {
+      color: #888;
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      color: #444;
+    }
+
+    @media (max-width: 600px) {
+      .content { padding: 40px 0 56px; }
+      .content h1 { font-size: 26px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/home" class="back-link"><span class="arrow">&larr;</span> Home</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="content">
+      <div class="container">
+        <%- bodyHtml %>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p>&copy; 2026 EuroBureau &middot; <a href="/terms">Terms</a> &middot; <a href="/faq">FAQ</a></p>
+    </div>
+  </footer>
+</body>
+</html>

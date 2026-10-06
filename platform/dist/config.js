@@ -15,6 +15,13 @@ const envSchema = z.object({
     // Defaults are resolved at use-site (‘/data/fonts’ in production, the repo
     // ‘fonts’ submodule in development); set this to override both.
     FONTS_DIR: z.string().default(''),
+    // Base URL for runtime-fetched static content (T&C, FAQ). Points at the raw
+    // GitHub content of the EuroBureau-Static repo so edits go live without a
+    // redeploy. Override to pin a tag/branch or serve from a mirror. No trailing
+    // slash required; it is normalised at use-site.
+    STATIC_CONTENT_BASE_URL: z
+        .string()
+        .default('https://raw.githubusercontent.com/GiuseppeFitzsimmons/EuroBureau-Static/main'),
     STORAGE_BACKEND: z.enum(['local', 's3']).default('local'),
     PLATFORM_BASE_URL: z.string().url(),
     MAIL_DOMAIN: z.string().default('eurobureau.eu'),

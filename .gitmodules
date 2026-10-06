@@ -38,3 +38,6 @@
 [submodule "fonts"]
 	path = fonts
 	url = https://github.com/GiuseppeFitzsimmons/EuroBureau-Fonts.git
+[submodule "static-content"]
+	path = static-content
+	url = https://github.com/GiuseppeFitzsimmons/EuroBureau-Static.git
