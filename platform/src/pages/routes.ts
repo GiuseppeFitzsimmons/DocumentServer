@@ -93,11 +93,20 @@ pageRouter.post('/register', rejectDisposableEmail, async (req, res) => {
     email: z.string().email(),
     displayName: z.string().min(1).max(100),
     reason: z.string().max(1000).default(''),
+    // Checkbox posts "yes" when ticked, absent otherwise. Must be accepted.
+    agreeTerms: z.literal('yes'),
   });
 
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
-    res.render('register', { title: 'Request beta access', error: 'Please fill in a valid email and name.', success: null });
+    const agreeMissing = parsed.error.issues.some(i => i.path[0] === 'agreeTerms');
+    res.render('register', {
+      title: 'Request beta access',
+      error: agreeMissing
+        ? 'You must agree to the Terms & Conditions to request access.'
+        : 'Please fill in a valid email and name.',
+      success: null,
+    });
     return;
   }
 

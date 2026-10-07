@@ -19,6 +19,12 @@
     <label for="reason">Tell us briefly why you'd like access <span style="color:#999;font-weight:normal;">(optional)</span></label>
     <textarea id="reason" name="reason" maxlength="1000" rows="3" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:3px;font-family:inherit;font-size:14px;resize:vertical;"></textarea>
   </div>
+  <div class="form-group form-check">
+    <label class="checkbox-label">
+      <input type="checkbox" id="agreeTerms" name="agreeTerms" value="yes" required />
+      <span>I agree to the <a href="/terms" target="_blank" rel="noopener">Terms &amp; Conditions</a>.</span>
+    </label>
+  </div>
   <button type="submit" class="btn">Request access</button>
 </form>
 <% } %>
