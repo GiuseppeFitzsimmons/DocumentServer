@@ -9,5 +9,9 @@ platform/node_modules
 /scripts/dev/
 tools/.venv
 *.sql
+# Platform DB migrations must be tracked (they ship in the image and run on
+# deploy); exempt them from the blanket *.sql ignore above.
+!platform/src/db/migrations/
+!platform/src/db/migrations/*.sql
 /deploy/scripts/*.env
 */__pycache__
