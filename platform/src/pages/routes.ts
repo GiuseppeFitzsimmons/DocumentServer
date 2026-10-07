@@ -4,7 +4,7 @@ import { pool } from '../db/pool.js';
 import { hashPassword, verifyPassword } from '../auth/password.js';
 import { generateTempPassword } from '../auth/temp-password.js';
 import { sendEmail } from '../email.js';
-import { rejectDisposableEmail, isDisposableEmail } from '../auth/disposable-email.js';
+import { isDisposableEmail } from '../auth/disposable-email.js';
 
 export const pageRouter = Router();
 
@@ -40,7 +40,11 @@ pageRouter.post('/login', async (req, res) => {
     return;
   }
 
-  const { email, password } = parsed.data;
+  const { password } = parsed.data;
+  // Emails are stored lowercased (signup/beta-approve normalise them), but the
+  // users.email column is case-sensitive TEXT. Normalise the login input too so
+  // "Foo@Bar.com" matches the stored "foo@bar.com".
+  const email = parsed.data.email.trim().toLowerCase();
 
   try {
     const result = await pool.query(
@@ -83,7 +87,7 @@ pageRouter.get('/register', (req, res) => {
   res.render('register', { title: 'Request beta access', error: null, success: null });
 });
 
-pageRouter.post('/register', rejectDisposableEmail, async (req, res) => {
+pageRouter.post('/register', async (req, res) => {
   if (req.session.userId) {
     res.redirect('/');
     return;

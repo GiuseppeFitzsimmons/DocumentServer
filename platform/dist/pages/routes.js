@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import { hashPassword, verifyPassword } from '../auth/password.js';
 import { sendEmail } from '../email.js';
-import { rejectDisposableEmail, isDisposableEmail } from '../auth/disposable-email.js';
+import { isDisposableEmail } from '../auth/disposable-email.js';
 export const pageRouter = Router();
 const registerSchema = z.object({
     email: z.string().email(),
@@ -33,7 +33,11 @@ pageRouter.post('/login', async (req, res) => {
         res.render('login', { title: 'Sign in', error: 'Invalid email or password.' });
         return;
     }
-    const { email, password } = parsed.data;
+    const { password } = parsed.data;
+    // Emails are stored lowercased (signup/beta-approve normalise them), but the
+    // users.email column is case-sensitive TEXT. Normalise the login input too so
+    // "Foo@Bar.com" matches the stored "foo@bar.com".
+    const email = parsed.data.email.trim().toLowerCase();
     try {
         const result = await pool.query('SELECT id, email, display_name, password_hash, is_temp_password FROM users WHERE email = $1', [email]);
         if (result.rows.length === 0) {
@@ -67,7 +71,7 @@ pageRouter.get('/register', (req, res) => {
     }
     res.render('register', { title: 'Request beta access', error: null, success: null });
 });
-pageRouter.post('/register', rejectDisposableEmail, async (req, res) => {
+pageRouter.post('/register', async (req, res) => {
     if (req.session.userId) {
         res.redirect('/');
         return;

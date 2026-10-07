@@ -1,46 +1,19 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { pool } from '../db/pool.js';
-import { hashPassword, verifyPassword } from './password.js';
+import { verifyPassword } from './password.js';
 import { requireAuth } from './middleware.js';
-import { rejectDisposableEmail } from './disposable-email.js';
 export const authRouter = Router();
-const registerSchema = z.object({
-    email: z.string().email(),
-    password: z.string().min(8),
-    displayName: z.string().min(1).max(100),
-});
 const loginSchema = z.object({
     email: z.string().email(),
     password: z.string(),
 });
-authRouter.post('/register', rejectDisposableEmail, async (req, res) => {
-    try {
-        const parsed = registerSchema.safeParse(req.body);
-        if (!parsed.success) {
-            res.status(400).json({ error: 'Invalid input', details: parsed.error.flatten() });
-            return;
-        }
-        const { email, password, displayName } = parsed.data;
-        const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
-        if (existing.rows.length > 0) {
-            res.status(409).json({ error: 'Email already registered' });
-            return;
-        }
-        const passwordHash = await hashPassword(password);
-        const result = await pool.query('INSERT INTO users (email, password_hash, display_name) VALUES ($1, $2, $3) RETURNING id, email, display_name', [email, passwordHash, displayName]);
-        const user = result.rows[0];
-        req.session.userId = user.id;
-        res.status(201).json({
-            id: user.id,
-            email: user.email,
-            displayName: user.display_name,
-        });
-    }
-    catch (err) {
-        console.error('Register error:', err);
-        res.status(500).json({ error: 'Internal server error' });
-    }
+authRouter.post('/register', (_req, res) => {
+    // Self-serve account creation is disabled during the invite-only beta. New
+    // users come in via the /register beta-signup form + manual approval
+    // (beta:approve). This JSON endpoint previously created accounts directly,
+    // bypassing that gate — keep it closed until public signup opens.
+    res.status(403).json({ error: 'Registration is invite-only during beta.' });
 });
 authRouter.post('/login', async (req, res) => {
     try {
@@ -49,7 +22,8 @@ authRouter.post('/login', async (req, res) => {
             res.status(400).json({ error: 'Invalid input' });
             return;
         }
-        const { email, password } = parsed.data;
+        const { password } = parsed.data;
+        const email = parsed.data.email.trim().toLowerCase();
         const result = await pool.query('SELECT id, email, display_name, password_hash FROM users WHERE email = $1', [email]);
         if (result.rows.length === 0) {
             res.status(401).json({ error: 'Invalid credentials' });
