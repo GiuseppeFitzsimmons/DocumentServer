@@ -10,6 +10,9 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/seed.ts",
     "db:setup": "tsx src/db/migrate.ts && tsx src/db/seed.ts",
+    "beta:list": "tsx src/beta/list.ts",
+    "beta:approve": "tsx src/beta/approve.ts",
+    "beta:reject": "tsx src/beta/reject.ts",
     "test": "vitest --run"
   },
   "dependencies": {

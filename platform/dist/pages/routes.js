@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import { hashPassword, verifyPassword } from '../auth/password.js';
 import { sendEmail } from '../email.js';
+import { rejectDisposableEmail, isDisposableEmail } from '../auth/disposable-email.js';
 export const pageRouter = Router();
 const registerSchema = z.object({
     email: z.string().email(),
@@ -64,10 +65,46 @@ pageRouter.get('/register', (req, res) => {
         res.redirect('/');
         return;
     }
-    res.render('register', { title: 'Create account', error: 'Registration is currently invitation-only. We will open to the public soon.' });
+    res.render('register', { title: 'Request beta access', error: null, success: null });
 });
-pageRouter.post('/register', async (req, res) => {
-    res.render('register', { title: 'Create account', error: 'Registration is currently invitation-only. We will open to the public soon.' });
+pageRouter.post('/register', rejectDisposableEmail, async (req, res) => {
+    if (req.session.userId) {
+        res.redirect('/');
+        return;
+    }
+    const schema = z.object({
+        email: z.string().email(),
+        displayName: z.string().min(1).max(100),
+        reason: z.string().max(1000).default(''),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+        res.render('register', { title: 'Request beta access', error: 'Please fill in a valid email and name.', success: null });
+        return;
+    }
+    const { email, displayName, reason } = parsed.data;
+    const emailLower = email.trim().toLowerCase();
+    if (isDisposableEmail(emailLower)) {
+        res.render('register', { title: 'Request beta access', error: 'Disposable email addresses are not accepted.', success: null });
+        return;
+    }
+    try {
+        // Check if already a registered user
+        const existingUser = await pool.query('SELECT id FROM users WHERE email = $1', [emailLower]);
+        if (existingUser.rows.length > 0) {
+            res.render('register', { title: 'Request beta access', error: null, success: 'An account with this email already exists. Try signing in.' });
+            return;
+        }
+        // Upsert: if they already submitted, update their info
+        await pool.query(`INSERT INTO beta_signups (email, display_name, reason)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (email) DO UPDATE SET display_name = $2, reason = $3`, [emailLower, displayName.trim(), reason.trim()]);
+        res.render('register', { title: 'Request beta access', error: null, success: 'Thanks for signing up! We\'ll review your request and get back to you shortly.' });
+    }
+    catch (err) {
+        console.error('Beta signup error:', err);
+        res.render('register', { title: 'Request beta access', error: 'Something went wrong. Please try again.', success: null });
+    }
 });
 pageRouter.get('/set-password', (req, res) => {
     if (!req.session.userId) {

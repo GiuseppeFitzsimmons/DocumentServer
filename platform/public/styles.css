@@ -111,6 +111,17 @@ body.auth-page {
   font-size: 14px;
 }
 
+.success {
+  background: #f3fbf4;
+  color: #1a6b2e;
+  padding: 12px 14px;
+  border: 1px solid #c9ebcf;
+  border-radius: 3px;
+  margin-bottom: 20px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
 .message {
   text-align: center;
   font-size: 15px;
