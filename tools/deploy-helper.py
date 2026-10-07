@@ -5,7 +5,8 @@ A Tkinter-based GUI for running deployment commands over SSH.
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, simpledialog
+import shlex
 import paramiko
 import threading
 import subprocess
@@ -160,6 +161,10 @@ ACTIONS = {
     "Database Shell": {
         "targets": ["dev-db", "prod-db"],
         "special": "db_shell",
+    },
+    "Beta Signups": {
+        "targets": ["dev-app-a", "dev-app-b", "prod-app-a", "prod-app-b"],
+        "special": "beta_signups",
     },
     "Update DB Jobs (Dev)": {
         "targets": ["dev-db"],
@@ -398,6 +403,17 @@ class DeployHelper:
             self.current_thread = threading.Thread(
                 target=self._run_db_shell, args=(env,), daemon=True
             )
+        elif action.get("special") == "beta_signups":
+            # Prompt for the sub-command (and email) on the UI thread BEFORE
+            # spawning the worker — Tk dialogs must run on the main thread.
+            choice = self._prompt_beta_action()
+            if not choice:
+                self._log("Beta signups: cancelled.\n", "info")
+                self._set_running(False)
+                return
+            self.current_thread = threading.Thread(
+                target=self._run_beta_signups, args=(env, choice), daemon=True
+            )
         elif action.get("special") == "local_command":
             self.current_thread = threading.Thread(
                 target=self._run_local_command, args=(action["command"],), daemon=True
@@ -614,6 +630,124 @@ class DeployHelper:
             if not self.running:
                 self._log("\n⚠ Stream stopped by user.\n", "info")
             self._set_status("Done", "green")
+
+        except Exception as e:
+            self._log(f"\n✗ Error: {e}\n", "error")
+            self._set_status("Error", "red")
+        finally:
+            self._set_running(False)
+
+    def _prompt_beta_action(self):
+        """
+        Modal dialog to choose a beta-signups sub-command. Returns a dict like
+        {"cmd": "list", "all": bool} or {"cmd": "approve"/"reject", "email": str},
+        or None if cancelled. Must be called on the UI thread.
+        """
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Beta Signups")
+        dlg.transient(self.root)
+        dlg.grab_set()
+        dlg.resizable(False, False)
+
+        result = {"value": None}
+
+        frm = ttk.Frame(dlg, padding=16)
+        frm.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(frm, text="Action:").grid(row=0, column=0, sticky=tk.W, pady=(0, 8))
+        cmd_var = tk.StringVar(value="list")
+        cmd_menu = ttk.Combobox(
+            frm, textvariable=cmd_var, state="readonly", width=24,
+            values=["list (pending)", "list (all)", "approve", "reject"],
+        )
+        cmd_menu.grid(row=0, column=1, sticky=tk.W, pady=(0, 8))
+
+        ttk.Label(frm, text="Email:").grid(row=1, column=0, sticky=tk.W)
+        email_var = tk.StringVar()
+        email_entry = ttk.Entry(frm, textvariable=email_var, width=26)
+        email_entry.grid(row=1, column=1, sticky=tk.W)
+
+        hint = ttk.Label(frm, text="(email required for approve / reject)", foreground="gray")
+        hint.grid(row=2, column=1, sticky=tk.W, pady=(2, 10))
+
+        def _on_cmd_change(_e=None):
+            needs_email = cmd_var.get() in ("approve", "reject")
+            email_entry.configure(state=(tk.NORMAL if needs_email else tk.DISABLED))
+        cmd_menu.bind("<<ComboboxSelected>>", _on_cmd_change)
+        _on_cmd_change()
+
+        btns = ttk.Frame(frm)
+        btns.grid(row=3, column=0, columnspan=2, sticky=tk.E, pady=(8, 0))
+
+        def _ok():
+            sel = cmd_var.get()
+            if sel == "list (pending)":
+                result["value"] = {"cmd": "list", "all": False}
+            elif sel == "list (all)":
+                result["value"] = {"cmd": "list", "all": True}
+            else:
+                email = email_var.get().strip()
+                if not email or "@" not in email:
+                    messagebox.showwarning("Email required", "Enter a valid email for approve/reject.", parent=dlg)
+                    return
+                result["value"] = {"cmd": sel, "email": email}
+            dlg.destroy()
+
+        def _cancel():
+            result["value"] = None
+            dlg.destroy()
+
+        ttk.Button(btns, text="Cancel", command=_cancel).pack(side=tk.RIGHT, padx=(6, 0))
+        ttk.Button(btns, text="Run", command=_ok).pack(side=tk.RIGHT)
+
+        dlg.bind("<Return>", lambda _e: _ok())
+        dlg.bind("<Escape>", lambda _e: _cancel())
+        cmd_menu.focus_set()
+
+        self.root.wait_window(dlg)
+        return result["value"]
+
+    def _run_beta_signups(self, env, choice):
+        """Run a beta-signups CLI command inside the portal container on an app server."""
+        try:
+            compose = "docker-compose.multi.yml"
+            base = f"cd /opt/euro-office/repo/deploy && docker compose -f {compose} exec -T portal node"
+
+            if choice["cmd"] == "list":
+                args = "dist/beta/list.js" + (" --all" if choice.get("all") else "")
+            elif choice["cmd"] == "approve":
+                args = f"dist/beta/approve.js {shlex.quote(choice['email'])}"
+            elif choice["cmd"] == "reject":
+                args = f"dist/beta/reject.js {shlex.quote(choice['email'])}"
+            else:
+                self._log(f"Unknown beta command: {choice}\n", "error")
+                self._set_status("Failed", "red")
+                return
+
+            command = f"{base} {args}"
+
+            self._set_status("Running beta command...", "orange")
+            self._log_header(f"Beta signups on {env['label']} ({env['host']})")
+            self._log_cmd(command)
+
+            client = self._get_ssh_client(env)
+            stdin, stdout, stderr = client.exec_command(command)
+            for line in iter(stdout.readline, ""):
+                if not self.running:
+                    break
+                self._log_stream(line)
+            err = stderr.read().decode()
+            if err:
+                self._log_stream(err)
+            exit_code = stdout.channel.recv_exit_status()
+            client.close()
+
+            if exit_code == 0:
+                self._log("\n✓ Done.\n", "success")
+                self._set_status("Done", "green")
+            else:
+                self._log(f"\n✗ Exited with code {exit_code}\n", "error")
+                self._set_status("Failed", "red")
 
         except Exception as e:
             self._log(f"\n✗ Error: {e}\n", "error")
