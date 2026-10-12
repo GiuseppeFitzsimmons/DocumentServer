@@ -11,7 +11,7 @@ import { getShare, deleteSharesForFile } from '../sharing/service.js';
 import * as versionRepo from '../versions/repository.js';
 import { pool } from '../db/pool.js';
 import { sendEmail } from '../email.js';
-import { getAccountUsage, ACCOUNT_QUOTA_BYTES, QUOTA_WARNING_THRESHOLD } from './quota.js';
+import { getAccountUsage } from './quota.js';
 
 // Must match the callback handler's MAX_SAVE_SIZE_BYTES
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2mb

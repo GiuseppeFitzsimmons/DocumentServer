@@ -1,5 +1,10 @@
 import { Router } from 'express';
-import { fetchContent, invalidateContentCache, ContentNotFoundError } from './fetcher.js';
+import {
+  fetchContent,
+  fetchBinaryContent,
+  invalidateContentCache,
+  ContentNotFoundError,
+} from './fetcher.js';
 import { renderMarkdown } from './markdown.js';
 import { requireAuth } from '../auth/middleware.js';
 
@@ -9,6 +14,17 @@ export const contentRouter = Router();
 const PAGES: Record<string, { file: string; title: string }> = {
   terms: { file: 'terms.md', title: 'Terms & Conditions' },
   faq: { file: 'faq.md', title: 'FAQ' },
+};
+
+// Map public document paths to a binary file in the static-content repo. The
+// slug is the public URL (stable), the file is the repo filename (can change).
+// Served inline so the browser's PDF viewer opens it; the download filename is
+// what the user sees if they save it.
+const DOCUMENTS: Record<string, { file: string; downloadName: string }> = {
+  'publishing-guide': {
+    file: 'Self-Publishing with EuroBureau.pdf',
+    downloadName: 'Self-Publishing with EuroBureau.pdf',
+  },
 };
 
 // Rendered HTML pages (public). Content is fetched from the static-content repo
@@ -34,6 +50,34 @@ for (const [slug, { file, title }] of Object.entries(PAGES)) {
         bodyHtml: `<p>We couldn't load this page right now. Please try again shortly.</p>`,
         layout: false,
       });
+    }
+  });
+}
+
+// Binary documents (public), e.g. the publishing guide PDF. Fetched from the
+// static-content repo at request time, so pushing a new PDF goes live without a
+// redeploy — same model as the Terms/FAQ pages. Served inline with a short
+// cache; the editor updates it by committing a new file to the repo.
+for (const [slug, { file, downloadName }] of Object.entries(DOCUMENTS)) {
+  contentRouter.get(`/${slug}`, async (_req, res) => {
+    try {
+      const { body, contentType } = await fetchBinaryContent(file);
+      res.setHeader('Content-Type', contentType);
+      // Both a quoted ASCII-ish fallback and an RFC 5987 encoded form so the
+      // spaces in the name are handled consistently across browsers.
+      res.setHeader(
+        'Content-Disposition',
+        `inline; filename="${downloadName}"; filename*=UTF-8''${encodeURIComponent(downloadName)}`
+      );
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      res.send(body);
+    } catch (err) {
+      if (err instanceof ContentNotFoundError) {
+        res.status(404).send('This document is not available yet.');
+        return;
+      }
+      console.error(`[content] Failed to serve ${slug}:`, err);
+      res.status(502).send("We couldn't load this document right now. Please try again shortly.");
     }
   });
 }

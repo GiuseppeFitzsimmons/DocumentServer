@@ -166,6 +166,10 @@ ACTIONS = {
         "targets": ["dev-app-a", "dev-app-b", "prod-app-a", "prod-app-b"],
         "special": "beta_signups",
     },
+    "Membership": {
+        "targets": ["dev-app-a", "dev-app-b", "prod-app-a", "prod-app-b"],
+        "special": "membership",
+    },
     "Update DB Jobs (Dev)": {
         "targets": ["dev-db"],
         "special": "db_jobs",
@@ -413,6 +417,15 @@ class DeployHelper:
                 return
             self.current_thread = threading.Thread(
                 target=self._run_beta_signups, args=(env, choice), daemon=True
+            )
+        elif action.get("special") == "membership":
+            choice = self._prompt_membership_action()
+            if not choice:
+                self._log("Membership: cancelled.\n", "info")
+                self._set_running(False)
+                return
+            self.current_thread = threading.Thread(
+                target=self._run_membership, args=(env, choice), daemon=True
             )
         elif action.get("special") == "local_command":
             self.current_thread = threading.Thread(
@@ -728,6 +741,101 @@ class DeployHelper:
 
             self._set_status("Running beta command...", "orange")
             self._log_header(f"Beta signups on {env['label']} ({env['host']})")
+            self._log_cmd(command)
+
+            client = self._get_ssh_client(env)
+            stdin, stdout, stderr = client.exec_command(command)
+            for line in iter(stdout.readline, ""):
+                if not self.running:
+                    break
+                self._log_stream(line)
+            err = stderr.read().decode()
+            if err:
+                self._log_stream(err)
+            exit_code = stdout.channel.recv_exit_status()
+            client.close()
+
+            if exit_code == 0:
+                self._log("\n✓ Done.\n", "success")
+                self._set_status("Done", "green")
+            else:
+                self._log(f"\n✗ Exited with code {exit_code}\n", "error")
+                self._set_status("Failed", "red")
+
+        except Exception as e:
+            self._log(f"\n✗ Error: {e}\n", "error")
+            self._set_status("Error", "red")
+        finally:
+            self._set_running(False)
+
+    # Plan keys must match platform/src/membership/plans.ts (PLANS keys).
+    MEMBERSHIP_PLANS = ["free", "storage_100"]
+
+    def _prompt_membership_action(self):
+        """
+        Modal dialog to set a user's membership plan. Returns
+        {"email": str, "plan": str} or None if cancelled. UI-thread only.
+        """
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Set Membership")
+        dlg.transient(self.root)
+        dlg.grab_set()
+        dlg.resizable(False, False)
+
+        result = {"value": None}
+
+        frm = ttk.Frame(dlg, padding=16)
+        frm.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(frm, text="Email:").grid(row=0, column=0, sticky=tk.W, pady=(0, 8))
+        email_var = tk.StringVar()
+        email_entry = ttk.Entry(frm, textvariable=email_var, width=28)
+        email_entry.grid(row=0, column=1, sticky=tk.W, pady=(0, 8))
+
+        ttk.Label(frm, text="Plan:").grid(row=1, column=0, sticky=tk.W)
+        plan_var = tk.StringVar(value=self.MEMBERSHIP_PLANS[0])
+        plan_menu = ttk.Combobox(
+            frm, textvariable=plan_var, state="readonly", width=25,
+            values=self.MEMBERSHIP_PLANS,
+        )
+        plan_menu.grid(row=1, column=1, sticky=tk.W)
+
+        btns = ttk.Frame(frm)
+        btns.grid(row=2, column=0, columnspan=2, sticky=tk.E, pady=(14, 0))
+
+        def _ok():
+            email = email_var.get().strip()
+            if not email or "@" not in email:
+                messagebox.showwarning("Email required", "Enter a valid email.", parent=dlg)
+                return
+            result["value"] = {"email": email, "plan": plan_var.get()}
+            dlg.destroy()
+
+        def _cancel():
+            result["value"] = None
+            dlg.destroy()
+
+        ttk.Button(btns, text="Cancel", command=_cancel).pack(side=tk.RIGHT, padx=(6, 0))
+        ttk.Button(btns, text="Run", command=_ok).pack(side=tk.RIGHT)
+
+        dlg.bind("<Return>", lambda _e: _ok())
+        dlg.bind("<Escape>", lambda _e: _cancel())
+        email_entry.focus_set()
+
+        self.root.wait_window(dlg)
+        return result["value"]
+
+    def _run_membership(self, env, choice):
+        """Set a user's membership plan via the portal container on an app server."""
+        try:
+            compose = "docker-compose.multi.yml"
+            command = (
+                f"cd /opt/euro-office/repo/deploy && docker compose -f {compose} exec -T portal "
+                f"node dist/membership/set-cli.js {shlex.quote(choice['email'])} {shlex.quote(choice['plan'])}"
+            )
+
+            self._set_status("Setting membership...", "orange")
+            self._log_header(f"Membership on {env['label']} ({env['host']})")
             self._log_cmd(command)
 
             client = self._get_ssh_client(env)

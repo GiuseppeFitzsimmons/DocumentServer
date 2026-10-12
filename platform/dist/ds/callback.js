@@ -5,7 +5,7 @@ import { config } from '../config.js';
 import * as storage from '../storage/s3.js';
 import * as metadata from '../storage/metadata.js';
 import * as versionRepo from '../versions/repository.js';
-import { getAccountUsage, ACCOUNT_QUOTA_BYTES } from '../storage/quota.js';
+import { getAccountUsage } from '../storage/quota.js';
 import { markDocumentClosed } from './active-documents.js';
 import { notifySaveComplete } from './save-events.js';
 import path from 'path';
@@ -176,21 +176,22 @@ callbackRouter.post('/', async (req, res) => {
             res.json({ error: 1 });
             return;
         }
-        // Reject save if account quota is exceeded
+        // Reject save if account quota is exceeded. Use the per-user limit from the
+        // quota result (membership tiers raise this) rather than the global default.
         const quota = await getAccountUsage(file.userId);
         const newTotal = quota.usedBytes - file.sizeBytes + buffer.length;
-        if (newTotal > ACCOUNT_QUOTA_BYTES) {
+        if (newTotal > quota.limitBytes) {
             console.warn('Save rejected: account quota exceeded', {
                 fileId,
                 userId: file.userId,
                 currentUsage: quota.usedBytes,
                 newFileSize: buffer.length,
-                limit: ACCOUNT_QUOTA_BYTES,
+                limit: quota.limitBytes,
             });
             saveRejections.set(fileId, {
                 reason: 'size_limit_exceeded',
                 size: newTotal,
-                limit: ACCOUNT_QUOTA_BYTES,
+                limit: quota.limitBytes,
                 timestamp: Date.now(),
             });
             res.json({ error: 1 });

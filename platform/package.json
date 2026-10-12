@@ -13,6 +13,7 @@
     "beta:list": "tsx src/beta/list.ts",
     "beta:approve": "tsx src/beta/approve.ts",
     "beta:reject": "tsx src/beta/reject.ts",
+    "membership:set": "tsx src/membership/set-cli.ts",
     "test": "vitest --run"
   },
   "dependencies": {
