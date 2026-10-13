@@ -6,6 +6,10 @@ vi.mock('../../db/pool.js', () => ({
         query: vi.fn(),
     },
 }));
+// Mock email so the best-effort share-notification send is a no-op.
+vi.mock('../../email.js', () => ({
+    sendEmail: vi.fn().mockResolvedValue(undefined),
+}));
 import { pool } from '../../db/pool.js';
 import { createShare, getShare, listSharesForFile, updateSharePermissions, revokeShare, deleteSharesForFile, } from '../service.js';
 const mockQuery = pool.query;

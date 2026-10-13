@@ -1,4 +1,9 @@
 import { pool } from '../db/pool.js';
+import { sendEmail } from '../email.js';
+// User-facing base URL for links in emails. PLATFORM_BASE_URL is the internal
+// origin (e.g. http://nginx:80 in prod), so we use the public hostname here —
+// matching the convention in beta/approve.ts and the password-reset email.
+const PUBLIC_BASE_URL = 'https://eurobureau.eu';
 // --- Helper: create a typed error with status code ---
 function createError(message, status) {
     const err = new Error(message);
@@ -38,17 +43,20 @@ function validatePermissions(permissions) {
 export async function createShare(fileId, ownerId, inviteeEmail, permissions) {
     // Validate permissions
     validatePermissions(permissions);
-    // Verify file ownership
-    const fileResult = await pool.query('SELECT user_id FROM files WHERE id = $1', [fileId]);
+    // Verify file ownership (also grab the file name for the notification email)
+    const fileResult = await pool.query('SELECT user_id, name FROM files WHERE id = $1', [fileId]);
     if (fileResult.rows.length === 0 || fileResult.rows[0].user_id !== ownerId) {
         throw createError('Forbidden', 403);
     }
-    // Look up invitee by email
-    const inviteeResult = await pool.query('SELECT id FROM users WHERE email = $1', [inviteeEmail]);
+    const fileName = fileResult.rows[0].name;
+    // Look up invitee by email (also grab email + display name for the email)
+    const inviteeResult = await pool.query('SELECT id, email, display_name FROM users WHERE email = $1', [inviteeEmail]);
     if (inviteeResult.rows.length === 0) {
         throw createError('User not found', 404);
     }
     const inviteeId = inviteeResult.rows[0].id;
+    const inviteeActualEmail = inviteeResult.rows[0].email;
+    const inviteeDisplayName = inviteeResult.rows[0].display_name;
     // Cannot share with yourself
     if (inviteeId === ownerId) {
         throw createError('Cannot share a file with yourself', 400);
@@ -66,7 +74,69 @@ export async function createShare(fileId, ownerId, inviteeEmail, permissions) {
         permissions.edit, permissions.download, permissions.print, permissions.copy,
         permissions.comment, permissions.review, permissions.chat, permissions.fillForms,
     ]);
-    return mapShareRow(rows[0]);
+    const share = mapShareRow(rows[0]);
+    // Notify the invitee by email (best-effort: a mail failure must never break
+    // sharing — the share is already persisted at this point).
+    void sendShareNotification({
+        inviteeEmail: inviteeActualEmail,
+        inviteeDisplayName,
+        ownerId,
+        fileName,
+        fileId,
+        permissions,
+    });
+    return share;
+}
+// Granted permissions -> a short human-readable list for the email.
+function summarizePermissions(p) {
+    const labels = [
+        ['edit', 'edit'],
+        ['comment', 'comment'],
+        ['review', 'review'],
+        ['fillForms', 'fill forms'],
+        ['download', 'download'],
+        ['print', 'print'],
+        ['copy', 'copy'],
+        ['chat', 'chat'],
+    ];
+    const granted = labels.filter(([k]) => p[k]).map(([, label]) => label);
+    return granted.length ? granted.join(', ') : 'view';
+}
+async function sendShareNotification(params) {
+    try {
+        // Owner's display name for the "shared by" line.
+        const ownerResult = await pool.query('SELECT display_name FROM users WHERE id = $1', [params.ownerId]);
+        const ownerName = ownerResult.rows.length
+            ? ownerResult.rows[0].display_name
+            : 'Someone';
+        const link = `${PUBLIC_BASE_URL}/editor/${params.fileId}`;
+        const perms = summarizePermissions(params.permissions);
+        const firstName = params.inviteeDisplayName || 'there';
+        await sendEmail({
+            to: params.inviteeEmail,
+            subject: `${ownerName} shared "${params.fileName}" with you`,
+            text: [
+                `Hi ${firstName},`,
+                ``,
+                `${ownerName} has shared the document "${params.fileName}" with you on EuroBureau.`,
+                `Your access: ${perms}.`,
+                ``,
+                `Open it here: ${link}`,
+                ``,
+                `— EuroBureau`,
+            ].join('\n'),
+            html: [
+                `<p>Hi ${firstName},</p>`,
+                `<p><strong>${ownerName}</strong> has shared the document <strong>"${params.fileName}"</strong> with you on EuroBureau.</p>`,
+                `<p>Your access: ${perms}.</p>`,
+                `<p><a href="${link}">Open the document</a></p>`,
+                `<p>— EuroBureau</p>`,
+            ].join('\n'),
+        });
+    }
+    catch (err) {
+        console.error('[sharing] Failed to send share notification email:', err.message);
+    }
 }
 export async function getShare(fileId, inviteeId) {
     const { rows } = await pool.query('SELECT * FROM file_shares WHERE file_id = $1 AND invitee_id = $2', [fileId, inviteeId]);

@@ -1,4 +1,10 @@
 import { pool } from '../db/pool.js';
+import { sendEmail } from '../email.js';
+
+// User-facing base URL for links in emails. PLATFORM_BASE_URL is the internal
+// origin (e.g. http://nginx:80 in prod), so we use the public hostname here —
+// matching the convention in beta/approve.ts and the password-reset email.
+const PUBLIC_BASE_URL = 'https://eurobureau.eu';
 
 // --- Interfaces ---
 
@@ -88,24 +94,27 @@ export async function createShare(
   // Validate permissions
   validatePermissions(permissions);
 
-  // Verify file ownership
+  // Verify file ownership (also grab the file name for the notification email)
   const fileResult = await pool.query(
-    'SELECT user_id FROM files WHERE id = $1',
+    'SELECT user_id, name FROM files WHERE id = $1',
     [fileId]
   );
   if (fileResult.rows.length === 0 || fileResult.rows[0].user_id !== ownerId) {
     throw createError('Forbidden', 403);
   }
+  const fileName = fileResult.rows[0].name as string;
 
-  // Look up invitee by email
+  // Look up invitee by email (also grab email + display name for the email)
   const inviteeResult = await pool.query(
-    'SELECT id FROM users WHERE email = $1',
+    'SELECT id, email, display_name FROM users WHERE email = $1',
     [inviteeEmail]
   );
   if (inviteeResult.rows.length === 0) {
     throw createError('User not found', 404);
   }
   const inviteeId = inviteeResult.rows[0].id as string;
+  const inviteeActualEmail = inviteeResult.rows[0].email as string;
+  const inviteeDisplayName = inviteeResult.rows[0].display_name as string;
 
   // Cannot share with yourself
   if (inviteeId === ownerId) {
@@ -133,7 +142,84 @@ export async function createShare(
     ]
   );
 
-  return mapShareRow(rows[0]);
+  const share = mapShareRow(rows[0]);
+
+  // Notify the invitee by email (best-effort: a mail failure must never break
+  // sharing — the share is already persisted at this point).
+  void sendShareNotification({
+    inviteeEmail: inviteeActualEmail,
+    inviteeDisplayName,
+    ownerId,
+    fileName,
+    fileId,
+    permissions,
+  });
+
+  return share;
+}
+
+// Granted permissions -> a short human-readable list for the email.
+function summarizePermissions(p: SharePermissions): string {
+  const labels: [keyof SharePermissions, string][] = [
+    ['edit', 'edit'],
+    ['comment', 'comment'],
+    ['review', 'review'],
+    ['fillForms', 'fill forms'],
+    ['download', 'download'],
+    ['print', 'print'],
+    ['copy', 'copy'],
+    ['chat', 'chat'],
+  ];
+  const granted = labels.filter(([k]) => p[k]).map(([, label]) => label);
+  return granted.length ? granted.join(', ') : 'view';
+}
+
+async function sendShareNotification(params: {
+  inviteeEmail: string;
+  inviteeDisplayName: string;
+  ownerId: string;
+  fileName: string;
+  fileId: string;
+  permissions: SharePermissions;
+}): Promise<void> {
+  try {
+    // Owner's display name for the "shared by" line.
+    const ownerResult = await pool.query(
+      'SELECT display_name FROM users WHERE id = $1',
+      [params.ownerId]
+    );
+    const ownerName = ownerResult.rows.length
+      ? (ownerResult.rows[0].display_name as string)
+      : 'Someone';
+
+    const link = `${PUBLIC_BASE_URL}/editor/${params.fileId}`;
+    const perms = summarizePermissions(params.permissions);
+    const firstName = params.inviteeDisplayName || 'there';
+
+    await sendEmail({
+      to: params.inviteeEmail,
+      subject: `${ownerName} shared "${params.fileName}" with you`,
+      text: [
+        `Hi ${firstName},`,
+        ``,
+        `${ownerName} has shared the document "${params.fileName}" with you on EuroBureau.`,
+        `Your access: ${perms}.`,
+        ``,
+        `Open it here: ${link}`,
+        ``,
+        `— EuroBureau`,
+      ].join('\n'),
+      html: [
+        `<p>Hi ${firstName},</p>`,
+        `<p><strong>${ownerName}</strong> has shared the document <strong>"${params.fileName}"</strong> with you on EuroBureau.</p>`,
+        `<p>Your access: ${perms}.</p>`,
+        `<p><a href="${link}">Open the document</a></p>`,
+        `<p>— EuroBureau</p>`,
+      ].join('\n'),
+    });
+  } catch (err) {
+    console.error('[sharing] Failed to send share notification email:', (err as Error).message);
+  }
 }
 
 export async function getShare(fileId: string, inviteeId: string): Promise<ShareRecord | null> {

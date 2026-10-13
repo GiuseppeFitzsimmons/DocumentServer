@@ -23,6 +23,11 @@ vi.mock('../../config.js', () => ({
   },
 }));
 
+// Mock email so the best-effort share-notification send is a no-op.
+vi.mock('../../email.js', () => ({
+  sendEmail: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { pool } from '../../db/pool.js';
 import { createShare, updateSharePermissions, type SharePermissions } from '../service.js';
 import { buildEditorConfig } from '../../ds/editorConfig.js';

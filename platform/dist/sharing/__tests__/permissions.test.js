@@ -19,6 +19,10 @@ vi.mock('../../config.js', () => ({
         DS_JWT_SECRET: 'test-secret-key-12345',
     },
 }));
+// Mock email so the best-effort share-notification send is a no-op.
+vi.mock('../../email.js', () => ({
+    sendEmail: vi.fn().mockResolvedValue(undefined),
+}));
 import { pool } from '../../db/pool.js';
 import { createShare, updateSharePermissions } from '../service.js';
 import { buildEditorConfig } from '../../ds/editorConfig.js';

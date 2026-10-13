@@ -51,6 +51,11 @@ vi.mock('jsonwebtoken', () => ({
   },
 }));
 
+// Mock email so the (best-effort) share-notification send is a no-op in tests.
+vi.mock('../../email.js', () => ({
+  sendEmail: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { pool } from '../../db/pool.js';
 import {
   createShare,
@@ -120,22 +125,29 @@ function configureMockQuery() {
   mockQuery.mockImplementation((sql: string, params?: unknown[]) => {
     const query = sql.trim();
 
-    // SELECT user_id FROM files WHERE id = $1
-    if (query.startsWith('SELECT user_id FROM files WHERE id')) {
+    // SELECT user_id[, name] FROM files WHERE id = $1
+    if (query.startsWith('SELECT user_id') && query.includes('FROM files WHERE id')) {
       const fileId = params?.[0] as string;
       const file = store.files.get(fileId);
-      return Promise.resolve({ rows: file ? [{ user_id: file.user_id }] : [] });
+      return Promise.resolve({ rows: file ? [{ user_id: file.user_id, name: file.name }] : [] });
     }
 
-    // SELECT id FROM users WHERE email = $1
-    if (query.startsWith('SELECT id FROM users WHERE email')) {
+    // SELECT id[, email, display_name] FROM users WHERE email = $1
+    if (query.startsWith('SELECT id') && query.includes('FROM users WHERE email')) {
       const email = params?.[0] as string;
       for (const user of store.users.values()) {
         if (user.email === email) {
-          return Promise.resolve({ rows: [{ id: user.id }] });
+          return Promise.resolve({ rows: [{ id: user.id, email: user.email, display_name: user.display_name }] });
         }
       }
       return Promise.resolve({ rows: [] });
+    }
+
+    // SELECT display_name FROM users WHERE id = $1 (share-notification owner lookup)
+    if (query.startsWith('SELECT display_name FROM users WHERE id')) {
+      const id = params?.[0] as string;
+      const user = store.users.get(id);
+      return Promise.resolve({ rows: user ? [{ display_name: user.display_name }] : [] });
     }
 
     // SELECT id FROM file_shares WHERE file_id = $1 AND invitee_id = $2 (duplicate check)
