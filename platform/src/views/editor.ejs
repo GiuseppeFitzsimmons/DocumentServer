@@ -623,8 +623,6 @@
           li.className = 'sharing-list-item';
           li.setAttribute('data-share-id', share.id);
           var permSummary = summarizePermissions(share.permissions || {});
-          // The list endpoint returns inviteeDisplayName/inviteeEmail; the
-          // optimistic add path sets name/email. Support both.
           var displayName = share.inviteeDisplayName || share.name || share.displayName || '';
           var email = share.inviteeEmail || share.email || '';
           li.innerHTML =
