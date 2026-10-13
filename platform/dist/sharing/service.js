@@ -220,6 +220,12 @@ export async function revokeShare(shareId, ownerId) {
 export async function deleteSharesForFile(fileId) {
     await pool.query('DELETE FROM file_shares WHERE file_id = $1', [fileId]);
 }
+export async function leaveShare(fileId, inviteeId) {
+    const { rowCount } = await pool.query('DELETE FROM file_shares WHERE file_id = $1 AND invitee_id = $2', [fileId, inviteeId]);
+    if (rowCount === 0) {
+        throw createError('Share not found', 404);
+    }
+}
 export async function listShareUsersForFile(fileId, userId) {
     // Check if user is the file owner
     const fileResult = await pool.query('SELECT user_id FROM files WHERE id = $1', [fileId]);

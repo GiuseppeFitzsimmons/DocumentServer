@@ -35,6 +35,7 @@ export declare function listSharedFiles(inviteeId: string): Promise<SharedFileEn
 export declare function updateSharePermissions(shareId: string, ownerId: string, permissions: SharePermissions): Promise<ShareRecord>;
 export declare function revokeShare(shareId: string, ownerId: string): Promise<void>;
 export declare function deleteSharesForFile(fileId: string): Promise<void>;
+export declare function leaveShare(fileId: string, inviteeId: string): Promise<void>;
 export interface ShareUserEntry {
     id: string;
     name: string;

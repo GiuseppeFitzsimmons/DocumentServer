@@ -342,6 +342,16 @@ export async function deleteSharesForFile(fileId: string): Promise<void> {
   await pool.query('DELETE FROM file_shares WHERE file_id = $1', [fileId]);
 }
 
+export async function leaveShare(fileId: string, inviteeId: string): Promise<void> {
+  const { rowCount } = await pool.query(
+    'DELETE FROM file_shares WHERE file_id = $1 AND invitee_id = $2',
+    [fileId, inviteeId]
+  );
+  if (rowCount === 0) {
+    throw createError('Share not found', 404);
+  }
+}
+
 export interface ShareUserEntry {
   id: string;
   name: string;

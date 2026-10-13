@@ -105,6 +105,22 @@ sharingRouter.patch('/:shareId', async (req, res) => {
   }
 });
 
+// DELETE /api/shares/leave/:fileId — Invitee removes themselves from a share
+sharingRouter.delete('/leave/:fileId', async (req, res) => {
+  try {
+    const userId = req.session.userId!;
+    await sharingService.leaveShare(req.params.fileId, userId);
+    res.status(204).end();
+  } catch (err: any) {
+    if (err.statusCode) {
+      res.status(err.statusCode).json({ error: err.message });
+      return;
+    }
+    console.error('Leave share error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // DELETE /api/shares/:shareId — Revoke a share
 sharingRouter.delete('/:shareId', async (req, res) => {
   try {

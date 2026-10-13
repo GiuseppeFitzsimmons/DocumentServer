@@ -173,11 +173,12 @@
     <section class="section" id="shared-section" aria-label="Files shared with me">
       <h2 class="section-heading">Shared with me</h2>
       <div class="shared-list" role="list" aria-label="Shared files list">
-        <div class="shared-list-header" aria-hidden="true">
-          <span>Name</span>
-          <span>Owner</span>
-          <span>Shared</span>
-          <span>Permissions</span>
+        <div class="shared-list-header" id="sharedListHeader" role="row">
+          <span class="shared-header-cell" data-sort="fileName" role="columnheader" tabindex="0">Name<span class="sort-indicator"></span></span>
+          <span class="shared-header-cell" data-sort="ownerDisplayName" role="columnheader" tabindex="0">Owner<span class="sort-indicator"></span></span>
+          <span class="shared-header-cell" data-sort="sharedAt" role="columnheader" tabindex="0">Shared<span class="sort-indicator"></span></span>
+          <span class="shared-header-cell" data-sort="permissions" role="columnheader" tabindex="0">Permissions<span class="sort-indicator"></span></span>
+          <span class="shared-header-cell" aria-hidden="true"></span>
         </div>
         <div id="shared-grid" role="group"></div>
       </div>
@@ -1124,60 +1125,167 @@
     // ========================================
     // Shared With Me Section
     // ========================================
+    var sharedFiles = [];
+    var sharedSortKey = 'fileName';
+    var sharedSortDir = 'asc';
+
     async function loadSharedFiles() {
       try {
         var res = await fetch('/api/shares/my-files');
         if (res.status === 401) { window.location.href = '/login'; return; }
         if (!res.ok) { throw new Error('Failed to load shared files'); }
-        var files = await res.json();
-        renderSharedFiles(files);
+        sharedFiles = await res.json();
+        initSharedHeader();
+        renderSharedFiles();
       } catch (err) {
-        var grid = document.getElementById('shared-grid');
-        grid.innerHTML = '<div class="empty-state">Unable to load shared files</div>';
+        document.getElementById('shared-grid').innerHTML = '<div class="empty-state">Unable to load shared files</div>';
       }
     }
 
-    function renderSharedFiles(files) {
+    function initSharedHeader() {
+      var header = document.getElementById('sharedListHeader');
+      if (!header || header.dataset.wired) return;
+      header.dataset.wired = '1';
+      header.querySelectorAll('.shared-header-cell[data-sort]').forEach(function(cell) {
+        function activate() {
+          var key = cell.getAttribute('data-sort');
+          if (sharedSortKey === key) {
+            sharedSortDir = (sharedSortDir === 'asc') ? 'desc' : 'asc';
+          } else {
+            sharedSortKey = key;
+            sharedSortDir = (key === 'fileName' || key === 'ownerDisplayName') ? 'asc' : 'desc';
+          }
+          updateSharedSortIndicators();
+          renderSharedFiles();
+        }
+        cell.addEventListener('click', activate);
+        cell.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); }
+        });
+      });
+      updateSharedSortIndicators();
+    }
+
+    function updateSharedSortIndicators() {
+      var header = document.getElementById('sharedListHeader');
+      if (!header) return;
+      header.querySelectorAll('.shared-header-cell[data-sort]').forEach(function(cell) {
+        var ind = cell.querySelector('.sort-indicator');
+        var active = cell.getAttribute('data-sort') === sharedSortKey;
+        cell.classList.toggle('sorted', active);
+        if (ind) ind.textContent = active ? (sharedSortDir === 'asc' ? ' \u25B2' : ' \u25BC') : '';
+      });
+    }
+
+    function permissionRank(p) {
+      if (p.edit) return 5;
+      if (p.review) return 4;
+      if (p.comment) return 3;
+      if (p.download) return 2;
+      return 1;
+    }
+
+    function compareShared(a, b) {
+      var dir = (sharedSortDir === 'asc') ? 1 : -1;
+      var av, bv;
+      if (sharedSortKey === 'sharedAt') {
+        av = a.sharedAt ? new Date(a.sharedAt).getTime() : 0;
+        bv = b.sharedAt ? new Date(b.sharedAt).getTime() : 0;
+      } else if (sharedSortKey === 'permissions') {
+        av = permissionRank(a.permissions || {});
+        bv = permissionRank(b.permissions || {});
+      } else {
+        av = (a[sharedSortKey] || '').toLowerCase();
+        bv = (b[sharedSortKey] || '').toLowerCase();
+        return av.localeCompare(bv) * dir;
+      }
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      return (a.fileName || '').toLowerCase().localeCompare((b.fileName || '').toLowerCase());
+    }
+
+    function renderSharedFiles() {
       var grid = document.getElementById('shared-grid');
       grid.innerHTML = '';
 
-      if (!files || files.length === 0) {
+      if (!sharedFiles || sharedFiles.length === 0) {
         grid.innerHTML = '<div class="empty-state">No files have been shared with you yet</div>';
         return;
       }
 
-      files.forEach(function(file) {
-        var link = document.createElement('a');
-        link.href = '/editor/' + file.fileId;
-        link.target = '_blank';
-        link.className = 'shared-item';
-        link.setAttribute('role', 'listitem');
-        link.setAttribute('aria-label', 'Open shared file: ' + escapeHtml(file.fileName) + ', owned by ' + escapeHtml(file.ownerDisplayName));
+      sharedFiles.slice().sort(compareShared).forEach(function(file) {
+        var row = document.createElement('div');
+        row.className = 'shared-item';
+        row.setAttribute('role', 'listitem');
 
         var icon = getFileIcon(file.fileType);
         var permBadges = getPermissionBadges(file.permissions);
         var sharedDate = formatDate(file.sharedAt);
 
-        link.innerHTML =
-          '<div class="shared-item-name-cell">' +
+        row.innerHTML =
+          '<a class="shared-item-name-cell" href="/editor/' + file.fileId + '" target="_blank" aria-label="Open shared file: ' + escapeHtml(file.fileName) + '">' +
             '<span class="shared-item-icon" aria-hidden="true">' + icon + '</span>' +
             '<span class="shared-item-name">' + escapeHtml(file.fileName) + '</span>' +
-          '</div>' +
+          '</a>' +
           '<span class="shared-item-owner">' + escapeHtml(file.ownerDisplayName) + '</span>' +
           '<span class="shared-item-date">' + sharedDate + '</span>' +
-          '<span class="shared-item-permissions">' + permBadges + '</span>';
+          '<span class="shared-item-permissions">' + permBadges + '</span>' +
+          '<button class="shared-item-actions" aria-label="Shared file options">\u22EE</button>';
 
-        grid.appendChild(link);
+        row.querySelector('.shared-item-actions').onclick = function(e) {
+          e.stopPropagation();
+          showSharedContextMenu(e, file);
+        };
+
+        grid.appendChild(row);
       });
+    }
+
+    function showSharedContextMenu(e, file) {
+      closeTreeContextMenu();
+      var menu = document.createElement('div');
+      menu.className = 'context-menu visible';
+      menu.style.position = 'fixed';
+      menu.style.top = e.clientY + 'px';
+      menu.style.left = e.clientX + 'px';
+      menu.style.zIndex = '1000';
+
+      var leaveBtn = document.createElement('button');
+      leaveBtn.className = 'context-menu-item';
+      leaveBtn.textContent = 'Remove shared document';
+      leaveBtn.onclick = function() {
+        closeTreeContextMenu();
+        leaveSharedFile(file);
+      };
+      menu.appendChild(leaveBtn);
+
+      document.body.appendChild(menu);
+      activeContextMenuNode = menu;
+    }
+
+    async function leaveSharedFile(file) {
+      try {
+        var res = await fetch('/api/shares/leave/' + encodeURIComponent(file.fileId), { method: 'DELETE' });
+        if (res.status === 401) { window.location.href = '/login'; return; }
+        if (!res.ok && res.status !== 204) {
+          var data = await res.json().catch(function() { return {}; });
+          throw new Error(data.error || 'Failed to leave share');
+        }
+        sharedFiles = sharedFiles.filter(function(f) { return f.fileId !== file.fileId; });
+        renderSharedFiles();
+        showSuccess('Removed from "' + file.fileName + '"');
+      } catch (err) {
+        showError(err.message || 'Failed to leave share');
+      }
     }
 
     function getPermissionBadges(permissions) {
       var badges = [];
-      if (permissions.edit) badges.push('<span class="perm-badge">Edit</span>');
-      if (permissions.comment) badges.push('<span class="perm-badge">Comment</span>');
-      if (permissions.review) badges.push('<span class="perm-badge">Review</span>');
-      if (permissions.download) badges.push('<span class="perm-badge">Download</span>');
-      if (badges.length === 0) badges.push('<span class="perm-badge">View</span>');
+      if (permissions.edit) badges.push('<span class="perm-badge perm-edit">Edit</span>');
+      if (permissions.comment) badges.push('<span class="perm-badge perm-comment">Comment</span>');
+      if (permissions.review) badges.push('<span class="perm-badge perm-review">Review</span>');
+      if (permissions.download) badges.push('<span class="perm-badge perm-download">Download</span>');
+      if (badges.length === 0) badges.push('<span class="perm-badge perm-view">View</span>');
       return badges.join('');
     }
 
