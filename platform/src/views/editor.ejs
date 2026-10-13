@@ -623,13 +623,17 @@
           li.className = 'sharing-list-item';
           li.setAttribute('data-share-id', share.id);
           var permSummary = summarizePermissions(share.permissions || {});
+          // The list endpoint returns inviteeDisplayName/inviteeEmail; the
+          // optimistic add path sets name/email. Support both.
+          var displayName = share.inviteeDisplayName || share.name || share.displayName || '';
+          var email = share.inviteeEmail || share.email || '';
           li.innerHTML =
             '<div class="sharing-user-info">' +
-              '<div class="sharing-user-name">' + escapeHtml(share.name || share.displayName || '') + '</div>' +
-              '<div class="sharing-user-email">' + escapeHtml(share.email || '') + '</div>' +
+              '<div class="sharing-user-name">' + escapeHtml(displayName) + '</div>' +
+              '<div class="sharing-user-email">' + escapeHtml(email) + '</div>' +
             '</div>' +
             '<span class="sharing-permission-badge">' + escapeHtml(permSummary) + '</span>' +
-            '<button class="sharing-remove-btn" data-share-id="' + share.id + '" aria-label="Remove ' + escapeHtml(share.name || share.displayName || '') + '">Remove</button>';
+            '<button class="sharing-remove-btn" data-share-id="' + share.id + '" aria-label="Remove ' + escapeHtml(displayName) + '">Remove</button>';
           shareList.appendChild(li);
         });
       }
