@@ -123,14 +123,14 @@ async function sendShareNotification(params) {
                 ``,
                 `Open it here: ${link}`,
                 ``,
-                `— EuroBureau`,
+                `EuroBureau`,
             ].join('\n'),
             html: [
                 `<p>Hi ${firstName},</p>`,
                 `<p><strong>${ownerName}</strong> has shared the document <strong>"${params.fileName}"</strong> with you on EuroBureau.</p>`,
                 `<p>Your access: ${perms}.</p>`,
                 `<p><a href="${link}">Open the document</a></p>`,
-                `<p>— EuroBureau</p>`,
+                `<p>EuroBureau</p>`,
             ].join('\n'),
         });
     }
