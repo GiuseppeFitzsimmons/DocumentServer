@@ -21,8 +21,14 @@ RUN mkdir -p /tmp/wc-plugin && \
     tar -xz --strip-components=4 -C /tmp/wc-plugin \
       "onlyoffice.github.io-master/sdkjs-plugins/content/wordscounter/" && \
     GUID=$(grep -oP '"asc\.\{[^}]+\}"' /tmp/wc-plugin/config.json | head -1 | tr -d '"') && \
+    sed -i 's#https\?://onlyoffice\.github\.io/sdkjs-plugins/v1/#/sdkjs-plugins/v1/#g' /tmp/wc-plugin/*.html && \
     mv /tmp/wc-plugin "/var/www/euro-office/documentserver/sdkjs-plugins/$GUID" && \
     chown -R ds:ds "/var/www/euro-office/documentserver/sdkjs-plugins/$GUID"
+
+# Self-host the plugin SDK runtime so plugins load same-origin instead of from
+# onlyoffice.github.io.
+COPY deploy/plugins/_sdk/v1 /var/www/euro-office/documentserver/sdkjs-plugins/v1
+RUN chown -R ds:ds /var/www/euro-office/documentserver/sdkjs-plugins/v1
 
 # Copy our curated font set (msttcore still present at /usr/share/fonts/msttcore/)
 COPY fonts/ /var/www/euro-office/documentserver/core-fonts/custom/
