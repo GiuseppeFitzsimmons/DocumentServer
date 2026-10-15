@@ -39,6 +39,7 @@ services:
       - ../fonts:/var/www/euro-office/documentserver/core-fonts/custom
       - ../deploy/patches/documenteditor-app.js:/var/www/euro-office/documentserver/web-apps/apps/documenteditor/main/app.js:ro
       - ../deploy/plugins/_sdk/v1:/var/www/euro-office/documentserver/sdkjs-plugins/v1:ro
+      - ../plugins/email-to-me:/var/www/euro-office/documentserver/sdkjs-plugins/asc.{B5C5E3D0-7F2A-4E91-9C12-EUROBUREAU001}:ro
 
 volumes:
   pg_data:

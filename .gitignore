@@ -15,3 +15,5 @@ tools/.venv
 !platform/src/db/migrations/*.sql
 /deploy/scripts/*.env
 */__pycache__
+# Playwright editor-test harness (local tooling; bundled Chromium + node_modules)
+/.pw-scratch/

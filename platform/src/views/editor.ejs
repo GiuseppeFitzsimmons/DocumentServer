@@ -378,6 +378,7 @@
     try {
       window.__eoCursorCtx = {
         userId: (config.editorConfig && config.editorConfig.user && config.editorConfig.user.id) ? String(config.editorConfig.user.id) : 'anon',
+        docId: '<%= fileId %>',
         canEdit: !(config.editorConfig && config.editorConfig.mode === 'view')
       };
     } catch (e) {}
