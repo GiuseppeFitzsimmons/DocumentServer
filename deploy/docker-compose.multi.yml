@@ -45,11 +45,18 @@ services:
       - ../core-fonts:/data/core-fonts:ro
 
   documentserver:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile.documentserver
+    # From-source build (our forks of sdkjs/web-apps at 10.0.0 + EO patches),
+    # pushed to GHCR. Pulling a ready image avoids the ~1h compile on the box.
+    # Build/push locally with deploy/build-ds-source/{compile-from-forks,push-image}.sh.
+    image: ${DS_IMAGE:-ghcr.io/giuseppefitzsimmons/documentserver-src:latest}
     restart: unless-stopped
     environment:
       JWT_SECRET: ${JWT_SECRET}
       ALLOW_PRIVATE_IP_ADDRESS: "true"
       EXAMPLE_ENABLED: "true"
+      # Fonts are mounted (not baked); regenerate the index at start. Output is
+      # deterministic for a fixed set, so restarts don't reshuffle it. Font
+      # updates = git pull fonts + restart documentserver (no image rebuild).
+      GENERATE_FONTS: "true"
+    volumes:
+      - ../fonts:/var/www/onlyoffice/documentserver/core-fonts/custom:ro

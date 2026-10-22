@@ -4,10 +4,11 @@
 [submodule "web-apps"]
 	path = web-apps
 	url = https://github.com/GiuseppeFitzsimmons/web-apps.git
-	branch = epub-intercept
+	branch = eo-10.0.0
 [submodule "sdkjs"]
 	path = sdkjs
-	url = https://github.com/Euro-Office/sdkjs.git
+	url = https://github.com/GiuseppeFitzsimmons/sdkjs.git
+	branch = eo-10.0.0
 [submodule "core-fonts"]
 	path = core-fonts
 	url = https://github.com/Euro-Office/core-fonts.git

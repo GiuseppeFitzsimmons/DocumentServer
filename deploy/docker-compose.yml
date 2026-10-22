@@ -36,9 +36,9 @@ services:
       - redis
 
   documentserver:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile.documentserver
+    # From-source build (our forks of sdkjs/web-apps at 10.0.0 + EO patches),
+    # pulled from GHCR. Avoids the ~1h compile on the box.
+    image: ${DS_IMAGE:-ghcr.io/giuseppefitzsimmons/documentserver-src:latest}
     restart: unless-stopped
     ports:
       - "0.0.0.0:80:80"
@@ -46,6 +46,10 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       ALLOW_PRIVATE_IP_ADDRESS: "true"
       EXAMPLE_ENABLED: "true"
+      # Fonts mounted (not baked); regenerate index at start (deterministic).
+      GENERATE_FONTS: "true"
+    volumes:
+      - ../fonts:/var/www/onlyoffice/documentserver/core-fonts/custom:ro
 
   postgres:
     image: postgres:16-alpine

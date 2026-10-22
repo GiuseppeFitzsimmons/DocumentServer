@@ -1,0 +1,164 @@
+diff --git a/apps/documenteditor/main/app/controller/LeftMenu.js b/apps/documenteditor/main/app/controller/LeftMenu.js
+index ebebe8a790..0353483697 100644
+--- a/apps/documenteditor/main/app/controller/LeftMenu.js
++++ b/apps/documenteditor/main/app/controller/LeftMenu.js
+@@ -375,6 +375,81 @@ define([
+                         menu.hide();
+                     }
+                 } else {
++                    // eo-epub-export: intercept EPUB -> platform Pandoc exporter
++                    if (format == Asc.c_oAscFileType.EPUB) {
++                        var docKey = this.getApplication().getController('Main').document.key;
++                        if (docKey) {
++                            var parts = docKey.split('_');
++                            parts.pop();
++                            var fileId = parts.join('_');
++                            if (fileId) {
++                                menu && menu.hide();
++                                var self = this;
++                                var _expSave = function(u) {
++                                    var go = function() { window.location.href = u; };
++                                    try {
++                                        var api = self.api;
++                                        if (api && api.forceSave) { api.forceSave(); setTimeout(go, 2000); }
++                                        else { go(); }
++                                    } catch (e) { go(); }
++                                };
++                                fetch('/api/files/' + fileId + '/export/headings', {credentials: 'include'})
++                                    .then(function(r) { return r.json(); })
++                                    .then(function(headings) {
++                                        var secHtml = '';
++                                        if (headings && headings.length > 0) {
++                                            secHtml = '<div style="max-height:150px;overflow-y:auto;border:1px solid #eee;border-radius:3px;padding:8px;margin-top:12px">';
++                                            for (var i = 0; i < headings.length; i++) {
++                                                var h = headings[i];
++                                                var indent = (h.level - 1) * 16;
++                                                secHtml += '<label style="display:block;margin:4px 0;padding-left:' + indent + 'px;font-size:12px;cursor:pointer"><input type="checkbox" checked data-idx="' + h.index + '" style="margin-right:6px"/>' + h.text + '</label>';
++                                            }
++                                            secHtml += '</div>';
++                                        }
++                                        var msg = '<div style="text-align:left;padding:10px 0">'
++                                            + '<label style="display:block;margin:8px 0;font-size:13px;cursor:pointer"><input type="checkbox" checked id="epub-opt-toc" style="margin-right:8px"/>Include generated Table of Contents</label>'
++                                            + '<label style="display:block;margin:8px 0;font-size:13px;cursor:pointer"><input type="checkbox" checked id="epub-opt-titlepage" style="margin-right:8px"/>Include title page</label>'
++                                            + '<label style="display:block;margin:8px 0;font-size:13px;cursor:pointer"><input type="checkbox" checked id="epub-opt-fonts" style="margin-right:8px"/>Embed fonts</label>'
++                                            + '<label style="display:block;margin:8px 0;font-size:13px;cursor:pointer"><input type="checkbox" id="epub-opt-sections" style="margin-right:8px"/>Convert section breaks to page breaks</label>'
++                                            + '<label style="display:block;margin:8px 0;font-size:13px;cursor:pointer"><input type="checkbox" id="epub-opt-softreturns" style="margin-right:8px"/>Remove soft returns</label>'
++                                            + (headings && headings.length > 0 ? '<p style="margin:16px 0 6px;font-size:13px;font-weight:500">Sections to include:</p>' + secHtml : '')
++                                            + '</div>';
++                                        Common.UI.warning({
++                                            width: 500,
++                                            title: 'EPUB Export Options',
++                                            msg: msg,
++                                            buttons: ['ok', 'cancel'],
++                                            primary: 'ok',
++                                            callback: function(r) {
++                                                if (r == 'ok') {
++                                                    var params = [];
++                                                    var tocEl = document.getElementById('epub-opt-toc');
++                                                    if (tocEl && !tocEl.checked) params.push('toc=0');
++                                                    var titlePageEl = document.getElementById('epub-opt-titlepage');
++                                                    if (titlePageEl && !titlePageEl.checked) params.push('titlepage=0');
++                                                    var fontsEl = document.getElementById('epub-opt-fonts');
++                                                    if (fontsEl && !fontsEl.checked) params.push('fonts=0');
++                                                    var sectionsEl = document.getElementById('epub-opt-sections');
++                                                    if (sectionsEl && sectionsEl.checked) params.push('sections=1');
++                                                    var softEl = document.getElementById('epub-opt-softreturns');
++                                                    if (softEl && softEl.checked) params.push('softreturns=0');
++                                                    var excluded = [];
++                                                    var boxes = document.querySelectorAll('[data-idx]');
++                                                    for (var j = 0; j < boxes.length; j++) {
++                                                        if (!boxes[j].checked) excluded.push(boxes[j].getAttribute('data-idx'));
++                                                    }
++                                                    if (excluded.length > 0) params.push('exclude=' + excluded.join(','));
++                                                    var q = params.length ? '?' + params.join('&') : '';
++                                                    _expSave('/api/files/' + fileId + '/export/epub' + q);
++                                                }
++                                            }
++                                        });
++                                    })
++                                    .catch(function() { _expSave('/api/files/' + fileId + '/export/epub'); });
++                                return;
++                            }
++                        }
++                    }
+                     this.isFromFileDownloadAs = ext;
+                     this.api.asc_DownloadAs(options);
+                     menu.hide();
+diff --git a/apps/documenteditor/main/app/controller/Main.js b/apps/documenteditor/main/app/controller/Main.js
+index d0d1995ece..c64987f269 100644
+--- a/apps/documenteditor/main/app/controller/Main.js
++++ b/apps/documenteditor/main/app/controller/Main.js
+@@ -1309,6 +1309,42 @@ define([
+                     value;
+ 
+                 me._isDocReady = true;
++
++                // eo-cursor-restore: persist caret position per file in
++                // localStorage and restore it on load. Uses the EOGetCursor /
++                // EOSetCursor sdkjs plugin methods (character-exact).
++                (function() {
++                    var api = me.api;
++                    if (!api || !api["pluginMethod_EOGetCursor"]) return;
++                    var fileKey = (me.document && me.document.key) || me.appOptions.fileKey || "";
++                    var userId = (me.appOptions && me.appOptions.user && me.appOptions.user.id) || "anon";
++                    // Derive a stable per-document key: strip the trailing
++                    // revision token DS appends to document.key (id_timestamp).
++                    var baseId = String(fileKey).split("_").slice(0, -1).join("_") || String(fileKey);
++                    var storeKey = "eo:cursor:" + baseId + ":" + userId;
++                    // Restore (after a short settle so content is laid out).
++                    setTimeout(function() {
++                        try {
++                            var raw = window.localStorage.getItem(storeKey);
++                            if (!raw) return;
++                            var path = JSON.parse(raw);
++                            if (path && path.length) api["pluginMethod_EOSetCursor"](path);
++                        } catch (e) {}
++                    }, 800);
++                    // Save (debounced) on caret move / selection end.
++                    var saveTimer = null;
++                    var save = function() {
++                        if (saveTimer) clearTimeout(saveTimer);
++                        saveTimer = setTimeout(function() {
++                            try {
++                                var path = api["pluginMethod_EOGetCursor"]();
++                                if (path && path.length) window.localStorage.setItem(storeKey, JSON.stringify(path));
++                            } catch (e) {}
++                        }, 1000);
++                    };
++                    api.asc_registerCallback("asc_onCursorMove", save);
++                    api.asc_registerCallback("asc_onSelectionEnd", save);
++                })();
+                 Common.NotificationCenter.trigger('app:ready', this.appOptions);
+ 
+                 me.api.SetDrawingFreeze(false);
+@@ -2702,6 +2738,10 @@ define([
+             },
+ 
+             onServerVersion: function(buildVersion) {
++                // eo-no-version-check: we build & serve our own DS, so the
++                // editor/server build-version handshake is meaningless and was
++                // causing a reload loop. Skip it.
++                return false;
+                 if (this.changeServerVersion) return true;
+ 
+                 const cur_version = this.getApplication().getController('LeftMenu').leftMenu.getMenu('about').txtVersionNum;
+diff --git a/apps/documenteditor/main/app/view/Toolbar.js b/apps/documenteditor/main/app/view/Toolbar.js
+index 9197278c0c..7cea2645bf 100644
+--- a/apps/documenteditor/main/app/view/Toolbar.js
++++ b/apps/documenteditor/main/app/view/Toolbar.js
+@@ -1465,6 +1465,15 @@ define([
+                                     toggleGroup: 'menuPageSize',
+                                     value: [120, 235]
+                                 },
++                                {caption:"Trade Paperback (small)",subtitle:"13,97cm x 21,59cm",template:pageSizeTemplate,checkable:true,toggleGroup:"menuPageSize",value:[139.7,215.9]},
++                                {caption:"Trade Paperback (Large)",subtitle:"15,24cm x 22,86cm",template:pageSizeTemplate,checkable:true,toggleGroup:"menuPageSize",value:[152.4,228.6]},
++                                {caption:"6.14x9.21",subtitle:"15,6cm x 23,39cm",template:pageSizeTemplate,checkable:true,toggleGroup:"menuPageSize",value:[156,233.9]},
++                                {caption:"7x10",subtitle:"17,78cm x 25,4cm",template:pageSizeTemplate,checkable:true,toggleGroup:"menuPageSize",value:[177.8,254]},
++                                {caption:"8.25x11",subtitle:"20,95cm x 27,94cm",template:pageSizeTemplate,checkable:true,toggleGroup:"menuPageSize",value:[209.5,279.4]},
++                                {caption:"Mass-Market Paperback",subtitle:"10,8cm x 17,45cm",template:pageSizeTemplate,checkable:true,toggleGroup:"menuPageSize",value:[107.95,174.5]},
++                                {caption:"A Format",subtitle:"11cm x 17,8cm",template:pageSizeTemplate,checkable:true,toggleGroup:"menuPageSize",value:[110,178]},
++                                {caption:"Penguin",subtitle:"11,1cm x 18,1cm",template:pageSizeTemplate,checkable:true,toggleGroup:"menuPageSize",value:[111,181]},
++                                {caption:"B Format",subtitle:"13,8cm x 21,6cm",template:pageSizeTemplate,checkable:true,toggleGroup:"menuPageSize",value:[138,216]},
+                                 {
+                                     caption: 'Super B/A3',
+                                     subtitle: '30,5cm x 48,7cm',

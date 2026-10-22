@@ -1,0 +1,66 @@
+# Package the from-source documentserver tree into a runnable image.
+#
+# Bases on the locally-cached documentserver-develop image purely for its DS
+# RUNTIME scaffolding (OS, nginx, postgres, rabbitmq, supervisor, the normal
+# /app/ds/run-document-server.sh startup). We then overwrite the bundled
+# documentserver tree with OUR from-source 9.4.0 build, so every DS component
+# (sdkjs, web-apps, server binaries) is locally compiled and version-matched.
+#
+# Build context must be the from-source output tree, e.g.:
+#   docker build -f deploy/build-ds-source/Dockerfile.serve \
+#     -t documentserver-src ~/ds-src-out/documentserver
+FROM documentserver-develop
+
+USER root
+
+# Reset to the normal DS startup (the develop image prepends a JS-build step
+# that is irrelevant/broken for a prebuilt tree).
+ENTRYPOINT []
+CMD ["/bin/sh", "-c", "/app/ds/run-document-server.sh"]
+
+# Replace the bundled tree with our from-source build.
+RUN rm -rf /var/www/onlyoffice/documentserver/sdkjs \
+           /var/www/onlyoffice/documentserver/web-apps \
+           /var/www/onlyoffice/documentserver/server
+COPY sdkjs    /var/www/onlyoffice/documentserver/sdkjs
+COPY web-apps /var/www/onlyoffice/documentserver/web-apps
+COPY server   /var/www/onlyoffice/documentserver/server
+
+RUN chown -R ds:ds /var/www/onlyoffice/documentserver/sdkjs \
+                   /var/www/onlyoffice/documentserver/web-apps \
+                   /var/www/onlyoffice/documentserver/server
+
+# The base develop image's nginx hardcodes the editor cache-tag version as
+# 10.0.0, but our from-source tree is 9.4.0. The editor loads assets from the
+# nginx-dictated /10.0.0-<tag>/ path while api.js reports 9.4.0, so the editor
+# sees a version mismatch and reload-loops ("editor version updated"). Align the
+# nginx version to our build.
+RUN sed -i 's/10\.0\.0/4.3.0/g' \
+      /etc/onlyoffice/documentserver/nginx/includes/http-common.conf \
+      /etc/onlyoffice/documentserver/nginx/includes/ds-docservice.conf
+
+# The base develop image runs DS in CoAuthoring mode "development", which makes
+# the editor load the unminified sdk-all.js. Our build's unminified bundle is
+# broken at runtime ("AscWord.DocumentSearch is undefined"); only the minified
+# sdk-all-min.js is good. Switch to "production" so the editor loads the min
+# bundle.
+RUN sed -i 's/"mode": "development"/"mode": "production"/' \
+      /etc/onlyoffice/documentserver/default.json
+
+# Custom fonts are MOUNTED at runtime (not baked), so font updates are just a
+# git pull + container restart — no image rebuild/push. We wipe the stock
+# core-fonts and leave an empty core-fonts/custom/ for the bind-mount to fill.
+# The index is (re)generated at start via GENERATE_FONTS=true. allfontsgen
+# output is deterministic for a fixed font set (verified byte-identical across
+# fresh containers), so restarts do NOT reshuffle the index — avoiding the
+# service-worker glyph desync that garbled text when a BAKED set fought a
+# MOUNTED set. Single source of truth = the mount.
+RUN rm -rf /var/www/onlyoffice/documentserver/core-fonts/* && \
+    mkdir -p /var/www/onlyoffice/documentserver/core-fonts/custom && \
+    chown -R ds:ds /var/www/onlyoffice/documentserver/core-fonts
+
+# Strip the bundled default plugins that 10.0.0 ships (photoeditor, youtube,
+# translator, ocr, speech, thesaurus, mendeley, zotero, highlightcode,
+# speechrecognition). Our own plugins register via their own dirs and are
+# unaffected.
+RUN echo '[]' > /var/www/onlyoffice/documentserver/sdkjs-plugins/plugin-list-default.json

@@ -1,0 +1,18 @@
+# Override: run the from-source-built DS image in place of the prebuilt one.
+# Usage:
+#   docker compose -f docker-compose.dev.yml -f docker-compose.src.yml up -d
+#
+# The platform talks to the `documentserver` service unchanged; only the image
+# swaps to our locally-compiled 9.4.0 build. JWT secret kept identical so the
+# platform<->DS signature still matches.
+services:
+  documentserver:
+    image: documentserver-src
+    environment:
+      # Fonts are mounted (not baked). Regenerate the index at start; output is
+      # deterministic for a fixed set, so restarts don't reshuffle it.
+      GENERATE_FONTS: "true"
+    volumes:
+      - ../deploy/plugins/_sdk/v1:/var/www/onlyoffice/documentserver/sdkjs-plugins/v1:ro
+      # Custom fonts mounted read-only into the proven core-fonts/custom path.
+      - ../fonts:/var/www/onlyoffice/documentserver/core-fonts/custom:ro
