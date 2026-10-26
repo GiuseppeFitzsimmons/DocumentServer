@@ -1080,7 +1080,18 @@ class DeployHelper:
             )
             commands = [
                 "cd /opt/euro-office/repo && git fetch && git checkout main && git pull && git submodule update --init fonts",
+                # Reclaim disk BEFORE pulling the ~10GB DS image. Weeks of
+                # --no-cache builds pile up build cache (that filled the 40GB
+                # disk mid-deploy once). `builder prune -a` clears ALL unused
+                # build cache; `image prune -a` clears images not used by a
+                # RUNNING container. Safe on the idle server (not serving
+                # traffic); never touches layers of running containers.
+                "docker builder prune -a -f && docker image prune -a -f",
                 build_cmd,
+                # After the new stack is up, the previous DS image is no longer
+                # referenced — reclaim it + any now-unused layers so the box
+                # doesn't creep toward full across deploys.
+                "docker image prune -a -f",
                 # Always force-recreate nginx so it re-resolves the portal/
                 # documentserver container IPs. Docker reuses freed IPs on
                 # recreate, and nginx caches upstream IPs at startup — if nginx

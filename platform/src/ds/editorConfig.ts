@@ -91,8 +91,22 @@ export function buildEditorConfig(params: EditorConfigParams): object {
         id: user.id,
         name: user.name,
       },
+      // Disable the bundled Plugin Manager (marketplace) — it points at the
+      // ONLYOFFICE plugin store. Suppress by its plugin GUID. (Later this can
+      // be repointed at a curated store via plugins.options.marketplaceUrl.)
+      plugins: {
+        disable: ['asc.{AA2EA9B6-9EC2-415F-9762-634EE8D9A95E}'],
+      },
       customization: {
         forcesave: true,
+        // Remove the "Suggest a Feature" control (links to ONLYOFFICE). false
+        // makes canSuggest false so the button does not render.
+        suggestFeature: false,
+        // Hide the ONLYOFFICE header logo (top-left). Header.js honors
+        // logo.visible===false unconditionally (not gated by canBranding).
+        logo: {
+          visible: false,
+        },
       },
       ...(params.hasVersions ? {
         events: {
