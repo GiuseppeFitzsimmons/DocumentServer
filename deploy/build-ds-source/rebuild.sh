@@ -29,14 +29,26 @@ echo "== [2/4] sync bundles -> out tree + host extract =="
 docker run --rm -v "$VOLUME":/build -v "$HOME/ds-src-out":/host "$IMAGE_ENV" -lc '
 set -e
 OUT=/build/build_tools/out/linux_64/onlyoffice/documentserver
-cp -r /build/sdkjs/deploy/sdkjs/* "$OUT/sdkjs/"
-cp -r /build/web-apps/deploy/web-apps/* "$OUT/web-apps/" 2>/dev/null || cp -r /build/web-apps/deploy/* "$OUT/web-apps/"
+# Authoritative compiled bundle locations. These MUST exist after build-js.sh;
+# fail hard rather than fall back to a wrong path (a stale fallback once baked a
+# broken code.js into the image and wedged the editor).
+SDKJS_SRC=/build/sdkjs/deploy/sdkjs
+WA_SRC=/build/web-apps/deploy/web-apps
+[ -d "$SDKJS_SRC" ] || { echo "MISSING $SDKJS_SRC — build-js.sh did not produce sdkjs bundle"; exit 1; }
+[ -d "$WA_SRC" ]    || { echo "MISSING $WA_SRC — build-js.sh did not produce web-apps bundle"; exit 1; }
+# Replace (not merge) so stale compiled files (e.g. an old code.js) cannot
+# survive into the new image.
+rm -rf "$OUT/sdkjs" "$OUT/web-apps"
+cp -r "$SDKJS_SRC" "$OUT/sdkjs"
+cp -r "$WA_SRC"    "$OUT/web-apps"
 # never serve a develop script list (forces broken unminified sdk-all.js)
 find "$OUT/sdkjs" -name scripts.js -delete 2>/dev/null || true
 rm -rf /host/documentserver/sdkjs /host/documentserver/web-apps
 cp -r "$OUT/sdkjs" /host/documentserver/sdkjs
 cp -r "$OUT/web-apps" /host/documentserver/web-apps
-echo "synced"
+# sanity: confirm the compiled editor bundle exists in the host extract
+[ -f /host/documentserver/web-apps/apps/documenteditor/main/code.js ] || { echo "code.js missing after sync"; exit 1; }
+echo "synced (strict)"
 '
 
 
