@@ -1087,7 +1087,19 @@ class DeployHelper:
                 # RUNNING container. Safe on the idle server (not serving
                 # traffic); never touches layers of running containers.
                 "docker builder prune -a -f && docker image prune -a -f",
+                # Force-pull the DS image. `up -d` does NOT re-pull a tag that
+                # already exists locally, so a new :latest digest would be
+                # ignored and the box keeps serving the stale image (this bit us:
+                # the logo fix shipped to GHCR but dev kept the old image). An
+                # explicit pull fetches the new digest before recreate.
+                f"cd /opt/euro-office/repo/deploy && docker compose -f {compose_file} pull documentserver",
                 build_cmd,
+                # Explicitly recreate documentserver onto the freshly-pulled
+                # image. `up -d` usually detects the changed image ID and
+                # recreates, but we force it so a stale container can never
+                # survive a new image digest (the exact failure we hit: new
+                # image on GHCR, box kept serving the old container).
+                f"cd /opt/euro-office/repo/deploy && docker compose -f {compose_file} up -d --force-recreate documentserver",
                 # After the new stack is up, the previous DS image is no longer
                 # referenced — reclaim it + any now-unused layers so the box
                 # doesn't creep toward full across deploys.

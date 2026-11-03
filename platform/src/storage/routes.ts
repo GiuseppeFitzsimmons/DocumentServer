@@ -10,7 +10,7 @@ import { normalizeDocxStyles } from './docx-style-normalizer.js';
 import { getShare, deleteSharesForFile } from '../sharing/service.js';
 import * as versionRepo from '../versions/repository.js';
 import { pool } from '../db/pool.js';
-import { getAccountUsage } from './quota.js';
+import { getAccountUsage, checkQuota } from './quota.js';
 
 // Must match the callback handler's MAX_SAVE_SIZE_BYTES
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2mb
@@ -113,6 +113,17 @@ fileRouter.post('/upload', (req, res, next) => {
       uploadBuffer = normalizeDocxStyles(req.file.buffer);
     }
 
+    // Enforce account quota (projected). Upload previously bypassed this, so a
+    // near-cap account could exceed its limit by uploading repeatedly.
+    const uploadCheck = await checkQuota(userId, uploadBuffer.length);
+    if (!uploadCheck.ok) {
+      res.status(413).json({
+        error: 'Account storage is full. Delete some files to free up space.',
+        quota: uploadCheck.quota,
+      });
+      return;
+    }
+
     await storage.upload(s3Key, uploadBuffer, req.file.mimetype);
 
     const fileRecord = await metadata.createFile({
@@ -124,7 +135,9 @@ fileRouter.post('/upload', (req, res, next) => {
       s3Key,
     });
 
-    res.status(201).json(fileRecord);
+    // Include quota warning if the upload pushed the account near its limit.
+    const uploadedQuota = await getAccountUsage(userId);
+    res.status(201).json({ ...fileRecord, quota: uploadedQuota.isWarning ? uploadedQuota : undefined });
   } catch (err) {
     console.error('Upload error:', err);
     res.status(500).json({ error: 'Storage error' });
@@ -154,17 +167,22 @@ fileRouter.post('/create', async (req, res) => {
       return;
     }
 
-    // Check account quota
-    const quota = await getAccountUsage(userId);
-    if (quota.isFull) {
-      res.status(413).json({ error: 'Account storage is full. Delete some files to free up space.', quota });
-      return;
-    }
-
     const fileName = name ? `${name}.${type}` : `Untitled.${type}`;
     const template = getTemplate(type);
     const fileId = randomUUID();
     const s3Key = `${userId}/${fileId}`;
+
+    // Check account quota (projected: does the template fit?). Previously this
+    // only blocked when already full, so a near-cap account could still create
+    // documents that nudged it over the limit.
+    const createCheck = await checkQuota(userId, template.buffer.length);
+    if (!createCheck.ok) {
+      res.status(413).json({
+        error: 'Account storage is full. Delete some files to free up space.',
+        quota: createCheck.quota,
+      });
+      return;
+    }
 
     // Verify folder ownership if provided
     if (folderId) {
@@ -218,6 +236,21 @@ fileRouter.post('/saveas', async (req, res) => {
     }
     const buffer = Buffer.from(await response.arrayBuffer());
     const contentType = response.headers.get('content-type') || 'application/octet-stream';
+
+    // Enforce per-file and account quota. Save-As creates a NEW file, so it
+    // previously bypassed both checks entirely.
+    if (buffer.length > MAX_FILE_SIZE) {
+      res.status(413).json({ error: `File too large. Maximum size is ${Math.round(MAX_FILE_SIZE / 1024)} KB` });
+      return;
+    }
+    const saveAsCheck = await checkQuota(userId, buffer.length);
+    if (!saveAsCheck.ok) {
+      res.status(413).json({
+        error: 'Account storage is full. Delete some files to free up space.',
+        quota: saveAsCheck.quota,
+      });
+      return;
+    }
 
     // Determine folder from original file
     let folderId: string | null = null;

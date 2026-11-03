@@ -370,6 +370,9 @@
   <script>
     var config = <%- JSON.stringify(editorConfig) %>;
 
+    // Where users go to unlock more storage (shown on quota-exceeded save).
+    var STORAGE_UPGRADE_URL = 'https://ko-fi.com/eurobureau';
+
     // Context for the in-editor cursor-restore IIFE (which runs inside the DS
     // iframe, a separate document). We expose userId + canEdit on THIS (parent)
     // window; the IIFE reads them via window.parent.__eoCursorCtx. This is
@@ -492,21 +495,11 @@
       });
     };
 
-    config.events.onError = function(event) {
-      // Check if this was a size-related save rejection
-      fetch('/api/ds/callback/save-status?fileId=<%= fileId %>', {
-        credentials: 'same-origin'
-      }).then(function(res) {
-        return res.json();
-      }).then(function(data) {
-        if (data.status === 'size_limit_exceeded') {
-          showSizeDialog('error',
-            'Save failed',
-            'Your document (' + formatBytes(data.size) + ') exceeds the ' + formatBytes(data.limit) + ' size limit. Please reduce the file size and try again.'
-          );
-        }
-      }).catch(function() {});
-    };
+    // NOTE: save-rejection messaging (quota / per-file size) is handled inside
+    // the forked DocumentServer web-apps (Main.js onError, ConvertationSaveError
+    // case), which swaps the generic save-error text for the quota message by
+    // reading /api/ds/callback/save-status. We no longer duplicate that here to
+    // avoid a double dialog.
 
     config.events.onDocumentStateChange = function(event) {
       if (!event.data) {

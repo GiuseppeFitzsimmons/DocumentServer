@@ -5,7 +5,7 @@ import { config } from '../config.js';
 import * as storage from '../storage/s3.js';
 import * as metadata from '../storage/metadata.js';
 import * as versionRepo from '../versions/repository.js';
-import { getAccountUsage } from '../storage/quota.js';
+import { checkQuota } from '../storage/quota.js';
 import { markDocumentClosed } from './active-documents.js';
 import { notifySaveComplete } from './save-events.js';
 import path from 'path';
@@ -133,14 +133,12 @@ callbackRouter.post('/', async (req, res) => {
             res.json({ error: 1 });
             return;
         }
-        // Archive current version before overwrite
-        try {
-            await archiveCurrentVersion(file, payload);
-        }
-        catch (err) {
-            console.error('Failed to archive version, continuing with save', { fileId, err });
-        }
-        // Download the updated document from DS-provided URL
+        // Download the updated document from DS-provided URL FIRST, so we can run
+        // all size/quota checks BEFORE writing anything. Archiving the prior
+        // version (which uploads a blob + inserts a file_versions row) must not
+        // happen for a save we are going to reject — otherwise every rejected
+        // attempt still grows storage (and, since versions count toward quota,
+        // inflates usage on each try).
         const response = await fetch(payload.url);
         if (!response.ok || !response.body) {
             console.error('Failed to download from DS URL', {
@@ -176,22 +174,29 @@ callbackRouter.post('/', async (req, res) => {
             res.json({ error: 1 });
             return;
         }
-        // Reject save if account quota is exceeded. Use the per-user limit from the
-        // quota result (membership tiers raise this) rather than the global default.
-        const quota = await getAccountUsage(file.userId);
-        const newTotal = quota.usedBytes - file.sizeBytes + buffer.length;
-        if (newTotal > quota.limitBytes) {
+        // Reject save if account quota is exceeded.
+        //
+        // A save does NOT free the old file's bytes: archiveCurrentVersion retains
+        // the pre-save content as a version blob, then the new buffer overwrites
+        // the live file. Net storage change is therefore +buffer.length (old file
+        // size moves from "file" to "version", new buffer takes its place). So we
+        // must NOT subtract file.sizeBytes — projecting used + buffer.length is the
+        // honest cost. (Version pruning may later reclaim the oldest version, but
+        // we don't bank on that for the gate.)
+        const quotaCheck = await checkQuota(file.userId, buffer.length, 0);
+        if (!quotaCheck.ok) {
             console.warn('Save rejected: account quota exceeded', {
                 fileId,
                 userId: file.userId,
-                currentUsage: quota.usedBytes,
+                currentUsage: quotaCheck.quota.usedBytes,
                 newFileSize: buffer.length,
-                limit: quota.limitBytes,
+                projected: quotaCheck.projectedBytes,
+                limit: quotaCheck.quota.limitBytes,
             });
             saveRejections.set(fileId, {
-                reason: 'size_limit_exceeded',
-                size: newTotal,
-                limit: quota.limitBytes,
+                reason: 'quota_exceeded',
+                size: quotaCheck.projectedBytes,
+                limit: quotaCheck.quota.limitBytes,
                 timestamp: Date.now(),
             });
             res.json({ error: 1 });
@@ -209,6 +214,15 @@ callbackRouter.post('/', async (req, res) => {
         else {
             // Clear any previous warning
             saveRejections.delete(fileId);
+        }
+        // Checks passed — NOW archive the prior version (uploads a blob + inserts a
+        // file_versions row). Done only for accepted saves so rejected attempts
+        // never grow storage.
+        try {
+            await archiveCurrentVersion(file, payload);
+        }
+        catch (err) {
+            console.error('Failed to archive version, continuing with save', { fileId, err });
         }
         // Upload to storage, replacing previous version
         await storage.upload(file.s3Key, buffer, file.mimeType);

@@ -125,6 +125,20 @@
   <!-- Toast Container -->
   <div class="toast-container" id="toast-container"></div>
 
+  <!-- Storage limit modal -->
+  <div class="storage-modal-overlay" id="storage-modal-overlay" style="display:none">
+    <div class="storage-modal" role="dialog" aria-modal="true" aria-labelledby="storage-modal-title">
+      <h2 id="storage-modal-title" class="storage-modal-title">Storage limit</h2>
+      <p class="storage-modal-body" id="storage-modal-body"></p>
+      <div class="storage-modal-meter"><div class="storage-modal-meter-fill" id="storage-modal-meter-fill"></div></div>
+      <p class="storage-modal-upsell">Need more room? Support EuroBureau and unlock more storage.</p>
+      <div class="storage-modal-actions">
+        <a class="btn-primary" id="storage-modal-upgrade" href="#" target="_blank" rel="noopener">Get more storage</a>
+        <button type="button" class="btn-secondary" id="storage-modal-close">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Hidden file input for upload -->
   <input type="file" id="file-upload-input" style="display:none">
 
@@ -264,7 +278,11 @@
           body: JSON.stringify(body)
         });
         if (res.status === 401) { window.location.href = '/login'; throw new Error('Unauthorized'); }
-        if (!res.ok) { const err = await res.text(); throw new Error(err || 'Failed to create document'); }
+        if (!res.ok) {
+          let msg = 'Failed to create document', quota = null;
+          try { const j = await res.json(); if (j && j.error) msg = j.error; if (j && j.quota) quota = j.quota; } catch (e) {}
+          const e = new Error(msg); e.quota = quota; e.status = res.status; throw e;
+        }
         return res.json();
       },
 
@@ -290,7 +308,11 @@
           body: formData
         });
         if (res.status === 401) { window.location.href = '/login'; throw new Error('Unauthorized'); }
-        if (!res.ok) { const err = await res.text(); throw new Error(err || 'Failed to upload file'); }
+        if (!res.ok) {
+          let msg = 'Failed to upload file', quota = null;
+          try { const j = await res.json(); if (j && j.error) msg = j.error; if (j && j.quota) quota = j.quota; } catch (e) {}
+          const e = new Error(msg); e.quota = quota; e.status = res.status; throw e;
+        }
         return res.json();
       },
 
@@ -368,6 +390,43 @@
     function showError(message) { showToast(message, 'error'); }
     function showSuccess(message) { showToast(message, 'success'); }
 
+    // Where users go to unlock more storage. Swap this to the real URL.
+    var STORAGE_UPGRADE_URL = 'https://ko-fi.com/eurobureau';
+
+    // Show the storage modal. mode 'full' = an action was blocked; mode 'warn'
+    // = near cap but the action succeeded.
+    function showStorageModal(quota, mode) {
+      var overlay = document.getElementById('storage-modal-overlay');
+      var title = document.getElementById('storage-modal-title');
+      var body = document.getElementById('storage-modal-body');
+      var fill = document.getElementById('storage-modal-meter-fill');
+      var pct = quota ? Math.round(quota.percentage * 100) : 100;
+      var used = quota ? formatSize(quota.usedBytes) : '';
+      var limit = quota ? formatSize(quota.limitBytes) : '';
+      if (mode === 'full') {
+        title.textContent = 'Storage full';
+        body.textContent = 'This would exceed your ' + limit + ' storage limit (currently using ' + used + '). Free up space or unlock more.';
+      } else {
+        title.textContent = 'Storage almost full';
+        body.textContent = "You're using " + used + ' of ' + limit + ' (' + pct + '%).';
+      }
+      fill.style.width = Math.min(pct, 100) + '%';
+      fill.style.background = pct >= 100 ? '#900' : (pct >= 90 ? '#8a6d00' : '#2e7d32');
+      document.getElementById('storage-modal-upgrade').href = STORAGE_UPGRADE_URL;
+      overlay.style.display = 'flex';
+    }
+    (function () {
+      var overlay = document.getElementById('storage-modal-overlay');
+      var closeModal = function () { overlay.style.display = 'none'; };
+      document.getElementById('storage-modal-close').addEventListener('click', closeModal);
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(); });
+    })();
+
+    // Near-cap warning after a successful action -> show the modal once.
+    function maybeWarnQuota(quota) {
+      if (quota && quota.isWarning) showStorageModal(quota, 'warn');
+    }
+
     // ========================================
     // Utility Functions
     // ========================================
@@ -417,14 +476,11 @@
     async function handleCreateDocument(type) {
       try {
         var result = await FileManagerAPI.createDocument(type, null);
-        if (result.quota && result.quota.isWarning) {
-          var pct = Math.round(result.quota.percentage * 100);
-          showToast('Storage warning: ' + pct + '% used (' + formatSize(result.quota.usedBytes) + ' of ' + formatSize(result.quota.limitBytes) + ')', 'error');
-        }
+        maybeWarnQuota(result.quota);
         window.open('/editor/' + result.id, '_blank');
       } catch (err) {
-        if (err.message && err.message.includes('storage is full')) {
-          showError('Account storage is full. Delete some files to free up space.');
+        if (err.status === 413) {
+          showStorageModal(err.quota, 'full');
         } else {
           showError(err.message || 'Failed to create document');
         }
@@ -983,13 +1039,18 @@
       document.body.appendChild(overlay);
 
       try {
-        await FileManagerAPI.uploadFile(file, null);
+        var uploaded = await FileManagerAPI.uploadFile(file, null);
         showSuccess('File uploaded successfully');
+        maybeWarnQuota(uploaded && uploaded.quota);
         var data = await FileManagerAPI.listFolder(null);
         fileTreeCache.set(null, data);
         renderFileTree();
       } catch (err) {
-        showError(err.message || 'Failed to upload file');
+        if (err.status === 413) {
+          showStorageModal(err.quota, 'full');
+        } else {
+          showError(err.message || 'Failed to upload file');
+        }
       } finally {
         overlay.remove();
       }

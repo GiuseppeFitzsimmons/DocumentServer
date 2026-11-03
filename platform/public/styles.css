@@ -655,6 +655,25 @@ body.auth-page {
 
 .toast-error { background: #900; color: #fff; }
 .toast-success { background: #1a5c1a; color: #fff; }
+.toast-warning { background: #8a6d00; color: #fff; }
+
+/* Storage limit modal */
+.storage-modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  display: flex; align-items: center; justify-content: center; z-index: 1000;
+}
+.storage-modal {
+  background: #fff; color: #222; border-radius: 10px; padding: 28px;
+  max-width: 420px; width: calc(100% - 40px); box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+}
+.storage-modal-title { margin: 0 0 12px; font-size: 20px; }
+.storage-modal-body { margin: 0 0 16px; line-height: 1.5; }
+.storage-modal-meter {
+  height: 8px; background: #eee; border-radius: 4px; overflow: hidden; margin-bottom: 16px;
+}
+.storage-modal-meter-fill { height: 100%; width: 0; transition: width 0.3s; }
+.storage-modal-upsell { margin: 0 0 20px; font-size: 14px; color: #555; }
+.storage-modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
 
 @keyframes slideIn {
   from { transform: translateX(100%); opacity: 0; }
