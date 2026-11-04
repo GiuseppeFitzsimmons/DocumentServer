@@ -840,6 +840,20 @@
       renameBtn.onclick = function() { closeTreeContextMenu(); handleTreeRename(id, type); };
       menu.appendChild(renameBtn);
 
+      // Download (files only). The endpoint responds with
+      // Content-Disposition: attachment, so navigating to it saves the file
+      // without leaving the page.
+      if (type === 'file') {
+        var downloadBtn = document.createElement('button');
+        downloadBtn.className = 'context-menu-item';
+        downloadBtn.textContent = 'Download';
+        downloadBtn.onclick = function() {
+          closeTreeContextMenu();
+          window.location.href = '/api/files/' + encodeURIComponent(id) + '/download';
+        };
+        menu.appendChild(downloadBtn);
+      }
+
       var moveBtn = document.createElement('button');
       moveBtn.className = 'context-menu-item';
       moveBtn.textContent = 'Move';

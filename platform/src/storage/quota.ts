@@ -26,20 +26,14 @@ export interface QuotaInfo {
 }
 
 export async function getAccountUsage(userId: string): Promise<QuotaInfo> {
-  // Usage = current files + retained version blobs. Version history consumes
-  // real object storage, so it must count against the quota or the stated cap
-  // understates actual usage (a near-cap document edited repeatedly can retain
-  // several versions). Both sums are scoped to the user.
+  // Usage = the user's current files only. Version history is deliberately NOT
+  // counted: versions are a free feature (paid tiers will later get a higher
+  // retained-version count). The number of versions kept per file is already
+  // capped by MAX_VERSIONS_PER_FILE, which bounds what that costs us.
   const { rows } = await pool.query(
     `SELECT
        u.storage_limit_bytes AS limit_bytes,
-       COALESCE((SELECT SUM(f.size_bytes) FROM files f WHERE f.user_id = u.id), 0)::bigint AS files_total,
-       COALESCE((
-         SELECT SUM(v.size_bytes)
-         FROM file_versions v
-         JOIN files f2 ON f2.id = v.file_id
-         WHERE f2.user_id = u.id
-       ), 0)::bigint AS versions_total
+       COALESCE((SELECT SUM(f.size_bytes) FROM files f WHERE f.user_id = u.id), 0)::bigint AS files_total
      FROM users u
      WHERE u.id = $1`,
     [userId]
@@ -47,9 +41,7 @@ export async function getAccountUsage(userId: string): Promise<QuotaInfo> {
 
   // If the user row is missing, fall back to zero usage + default limit so
   // callers get a well-formed result rather than throwing.
-  const usedBytes = rows.length
-    ? Number(rows[0].files_total) + Number(rows[0].versions_total)
-    : 0;
+  const usedBytes = rows.length ? Number(rows[0].files_total) : 0;
   const limitBytes =
     rows.length && rows[0].limit_bytes != null
       ? Number(rows[0].limit_bytes)

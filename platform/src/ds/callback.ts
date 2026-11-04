@@ -179,8 +179,7 @@ callbackRouter.post('/', async (req, res) => {
     // all size/quota checks BEFORE writing anything. Archiving the prior
     // version (which uploads a blob + inserts a file_versions row) must not
     // happen for a save we are going to reject — otherwise every rejected
-    // attempt still grows storage (and, since versions count toward quota,
-    // inflates usage on each try).
+    // attempt would still write a version blob to storage.
     const response = await fetch(payload.url);
     if (!response.ok || !response.body) {
       console.error('Failed to download from DS URL', {
@@ -220,16 +219,10 @@ callbackRouter.post('/', async (req, res) => {
       return;
     }
 
-    // Reject save if account quota is exceeded.
-    //
-    // A save does NOT free the old file's bytes: archiveCurrentVersion retains
-    // the pre-save content as a version blob, then the new buffer overwrites
-    // the live file. Net storage change is therefore +buffer.length (old file
-    // size moves from "file" to "version", new buffer takes its place). So we
-    // must NOT subtract file.sizeBytes — projecting used + buffer.length is the
-    // honest cost. (Version pruning may later reclaim the oldest version, but
-    // we don't bank on that for the gate.)
-    const quotaCheck = await checkQuota(file.userId, buffer.length, 0);
+    // Reject save if account quota is exceeded. Version blobs are free and not
+    // counted in usage, so a save simply replaces the file's current size with
+    // the new buffer.
+    const quotaCheck = await checkQuota(file.userId, buffer.length, file.sizeBytes);
     if (!quotaCheck.ok) {
       console.warn('Save rejected: account quota exceeded', {
         fileId,

@@ -303,7 +303,14 @@ fileRouter.get('/:id/download', async (req, res) => {
 
     const stream = await storage.download(file.s3Key);
     res.setHeader('Content-Type', file.mimeType);
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.name)}"`);
+    // RFC 6266 / 5987: an ASCII fallback in filename= plus the real UTF-8 name in
+    // filename*=. (Previously a percent-encoded name went into filename=, so
+    // "My Doc.docx" saved as "My%20Doc.docx".)
+    const asciiName = file.name.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(file.name)}`
+    );
     stream.pipe(res);
   } catch (err) {
     console.error('Download error:', err);
