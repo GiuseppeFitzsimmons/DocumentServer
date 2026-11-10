@@ -26,6 +26,7 @@ import { editorRouter } from './pages/editor.js';
 import { landingRouter } from './pages/landing.js';
 import { homeRouter } from './pages/home.js';
 import { contentRouter } from './content/routes.js';
+import { payhipRouter, startMembershipSweep } from './membership/payhip.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -89,6 +90,9 @@ app.use('/auth', authLimiter, authRouter);
 
 // Page routes (login, register, logout — public)
 app.use(pageRouter);
+
+// Payhip purchase webhook (signature-authenticated, no session)
+app.use('/api/webhooks/payhip', payhipRouter);
 
 // Force temp-password users to /set-password before accessing protected routes
 app.use(requirePermanentPassword);
@@ -202,4 +206,5 @@ app.use('/', landingRouter);
 
 app.listen(config.PORT, () => {
   console.log(`Portal running on port ${config.PORT}`);
+  startMembershipSweep();
 });

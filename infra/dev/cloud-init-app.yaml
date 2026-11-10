@@ -25,6 +25,8 @@ write_files:
       SMTP_PORT=${smtp_port}
       SMTP_USER=${smtp_user}
       SMTP_PASS=${smtp_pass}
+      PAYHIP_API_KEY=${payhip_api_key}
+      PAYHIP_STORAGE_PRODUCTS=${payhip_storage_products}
       MAIL_DOMAIN=eurobureau.eu
       NODE_ENV=production
 

@@ -107,3 +107,16 @@ variable "smtp_pass" {
   sensitive   = true
   default     = ""
 }
+
+variable "payhip_api_key" {
+  description = "Payhip store API key (webhook signature = sha256 of this)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "payhip_storage_products" {
+  description = "Comma-separated Payhip product_id/product_key values that grant the 100MB storage plan"
+  type        = string
+  default     = ""
+}

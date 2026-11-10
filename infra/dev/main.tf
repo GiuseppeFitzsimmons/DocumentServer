@@ -190,6 +190,8 @@ resource "hcloud_server" "dev_app_a" {
     smtp_port      = var.smtp_port
     smtp_user      = var.smtp_user
     smtp_pass      = var.smtp_pass
+    payhip_api_key          = var.payhip_api_key
+    payhip_storage_products = var.payhip_storage_products
   })
 
   public_net {
@@ -238,6 +240,8 @@ resource "hcloud_server" "dev_app_b" {
     smtp_port      = var.smtp_port
     smtp_user      = var.smtp_user
     smtp_pass      = var.smtp_pass
+    payhip_api_key          = var.payhip_api_key
+    payhip_storage_products = var.payhip_storage_products
   })
 
   public_net {

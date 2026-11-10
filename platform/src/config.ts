@@ -32,6 +32,12 @@ const envSchema = z.object({
   SMTP_PORT: z.coerce.number().default(465),
   SMTP_USER: z.string().default(''),
   SMTP_PASS: z.string().default(''),
+  // Payhip webhook: the store API key (Settings > Developer). The webhook's
+  // "signature" field is sha256(apiKey). Empty = webhook disabled (503).
+  PAYHIP_API_KEY: z.string().default(''),
+  // Comma-separated Payhip product_id / product_key / product_link values that
+  // grant the 100MB storage plan (single-month and subscription products).
+  PAYHIP_STORAGE_PRODUCTS: z.string().default(''),
   OVH_S3_ENDPOINT: z.string().default(''),
   OVH_S3_BUCKET: z.string().default(''),
   OVH_S3_ACCESS_KEY: z.string().default(''),

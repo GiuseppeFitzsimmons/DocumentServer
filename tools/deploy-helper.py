@@ -75,6 +75,7 @@ MULTI_SERVER = {
         "compose_file": "docker-compose.multi.yml",
         "nginx_upstream": "app_backends",
         "nginx_conf": "/etc/nginx/sites-available/dev.conf",
+        "tfvars": "infra/dev/terraform.tfvars",
     },
     "prod": {
         "proxy": "prod-proxy",
@@ -87,6 +88,7 @@ MULTI_SERVER = {
         "compose_file": "docker-compose.multi.yml",
         "nginx_upstream": "app_backends",
         "nginx_conf": "/etc/nginx/sites-available/eurobureau.conf",
+        "tfvars": "infra/prod/terraform.tfvars",
     },
 }
 
@@ -188,6 +190,46 @@ ACTIONS = {
 }
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def read_tfvars(rel_path):
+    """Parse a terraform.tfvars file into a dict of KEY -> string value.
+
+    Only handles the simple `key = "value"` / `key = value` lines this repo
+    uses; comments (#) and blank lines are skipped. Used to source secrets the
+    deploy helper injects into a box's .env without SSHing by hand.
+    """
+    values = {}
+    path = os.path.join(REPO_ROOT, rel_path)
+    try:
+        with open(path, "r") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, raw = line.partition("=")
+                key = key.strip()
+                raw = raw.strip().strip('"')
+                values[key] = raw
+    except FileNotFoundError:
+        pass
+    return values
+
+
+def env_upsert_cmd(env_path, pairs):
+    """Build a shell command that sets each KEY=value in env_path, replacing an
+    existing line or appending if absent. Values are single-quote-escaped so
+    arbitrary secrets are safe. `pairs` is a list of (key, value) tuples."""
+    parts = []
+    for key, value in pairs:
+        safe = value.replace("'", "'\\''")
+        # Remove any existing line for this key, then append the fresh one.
+        parts.append(
+            f"grep -v '^{key}=' {env_path} > {env_path}.tmp 2>/dev/null; "
+            f"mv {env_path}.tmp {env_path}; "
+            f"printf '%s\\n' '{key}={safe}' >> {env_path}"
+        )
+    return " && ".join(parts)
 
 
 class DeployHelper:
@@ -1078,8 +1120,21 @@ class DeployHelper:
                 f"cd /opt/euro-office/repo/deploy && docker compose -f {compose_file} down && "
                 f"docker compose -f {compose_file} up -d --build"
             )
+            # Secrets the running box's .env can't learn from a git pull (cloud-
+            # init only writes .env on first boot). Source them from the local,
+            # gitignored tfvars and upsert into the box's .env before the portal
+            # is recreated, so no manual SSH editing is needed.
+            box_env = "/opt/euro-office/repo/deploy/.env"
+            tfvars = read_tfvars(topology.get("tfvars", "")) if topology.get("tfvars") else {}
+            secret_pairs = [
+                ("PAYHIP_API_KEY", tfvars.get("payhip_api_key", "")),
+                ("PAYHIP_STORAGE_PRODUCTS", tfvars.get("payhip_storage_products", "")),
+            ]
+
             commands = [
                 "cd /opt/euro-office/repo && git fetch && git checkout main && git pull && git submodule update --init fonts",
+                # Inject deploy-time secrets into the box .env (idempotent upsert).
+                env_upsert_cmd(box_env, secret_pairs),
                 # Reclaim disk BEFORE pulling the ~10GB DS image. Weeks of
                 # --no-cache builds pile up build cache (that filled the 40GB
                 # disk mid-deploy once). `builder prune -a` clears ALL unused
