@@ -169,6 +169,13 @@
         <div class="storage-label">
           <span id="storage-used"><%= quotaUsed %></span> of <span><%= quotaLimit %></span> used
         </div>
+        <div class="storage-label">
+          <% if (typeof plan !== 'undefined' && plan && plan !== 'free') { %>
+            Plan: <strong>100 MB storage</strong><% if (storageEndsAt) { %> &mdash; active until <%= storageEndsAt %><% } %>
+          <% } else { %>
+            Plan: <strong>Free</strong>
+          <% } %>
+        </div>
       </div>
       <style>
         .storage-bar-container { margin-top: 8px; }

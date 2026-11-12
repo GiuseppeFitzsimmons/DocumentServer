@@ -64,12 +64,16 @@ async function notifyUnknown(email: string): Promise<void> {
     'Thanks for your EuroBureau storage purchase. We could not match this email address ' +
     'to a EuroBureau account, so your storage has not been applied yet. Please contact ' +
     'support and we will sort it out for you.';
-  await sendEmail({
-    to: email,
-    subject: 'Your EuroBureau storage purchase: please contact support',
-    html: `<p>${text}</p>`,
-    text,
-  });
+  try {
+    await sendEmail({
+      to: email,
+      subject: 'Your EuroBureau storage purchase: please contact support',
+      html: `<p>${text}</p>`,
+      text,
+    });
+  } catch (err) {
+    console.error(`[payhip] failed to send unknown-email notice to ${email}:`, err);
+  }
 }
 
 function matchesProduct(items: any[] | undefined): boolean {
@@ -110,10 +114,6 @@ async function handleRefund(ev: any): Promise<void> {
   for (const r of rows) await syncPlans(r.email);
 }
 
-// subscription.created / subscription.deleted need no grant changes: every
-// charge (including renewals) arrives as a "paid" event that grants 30 days, and
-// a cancellation must leave the already-paid period intact. Grants simply stop
-// being renewed and lapse via the expiry sweep.
 
 export const payhipRouter = Router();
 
@@ -134,11 +134,10 @@ payhipRouter.post('/', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error('[payhip] webhook error:', err);
-    res.status(500).json({ error: 'internal' }); // Payhip retries hourly
+    res.status(500).json({ error: 'internal' });
   }
 });
 
-/** Hourly sweep so lapsed grants drop users back to free. */
 export function startMembershipSweep(): void {
   const run = () => syncPlans().catch((e) => console.error('[membership] sweep failed:', e));
   run();

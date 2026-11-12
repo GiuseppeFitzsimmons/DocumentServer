@@ -1169,7 +1169,6 @@ class DeployHelper:
                 # this self-healing, but we still recreate to load config changes
                 # and as a guaranteed reset.
                 f"cd /opt/euro-office/repo/deploy && docker compose -f {compose_file} up -d --force-recreate nginx",
-                f"cd /opt/euro-office/repo/deploy && docker compose -f {compose_file} exec -T portal node dist/db/migrate.js",
             ]
             for cmd in commands:
                 if not self.running:
@@ -1213,6 +1212,52 @@ class DeployHelper:
                 self._set_status("Failed - idle server unhealthy", "red")
                 return
             self._log("  ✓ Health check passed\n", "success")
+
+            if not self.running:
+                return
+
+            # Step 2b: Run DB migrations on the idle box BEFORE flipping traffic.
+            # Runs here (not in the upgrade command list) for two reasons:
+            #   1. The portal container is confirmed up by now, so `exec` won't
+            #      race a not-yet-started portal (the old bug: migrate ran last,
+            #      sometimes before the portal was ready, and failed silently).
+            #   2. A migration failure MUST abort the deploy — we return before
+            #      the proxy flip, so traffic keeps hitting the old (good) box
+            #      instead of flipping to a box whose schema didn't update.
+            # Migrations are idempotent, so re-running on each deploy is safe.
+            self._log(f"\n→ Running DB migrations on {idle_env['label']}...\n", "info")
+            migrate_ok = False
+            for attempt in range(30):  # wait up to ~60s for the portal to accept exec
+                if not self.running:
+                    return
+                client = self._get_ssh_client(idle_env)
+                stdin, stdout, stderr = client.exec_command(
+                    f"cd /opt/euro-office/repo/deploy && "
+                    f"docker compose -f {compose_file} exec -T portal node dist/db/migrate.js"
+                )
+                out = ""
+                for line in iter(stdout.readline, ""):
+                    out += line
+                    self._log_stream(line)
+                err = stderr.read().decode()
+                exit_code = stdout.channel.recv_exit_status()
+                client.close()
+                if exit_code == 0:
+                    migrate_ok = True
+                    break
+                # Portal may not be accepting exec yet; retry a few times before
+                # treating it as a real migration failure.
+                if "is not running" in (out + err) or "No such service" in (out + err) or "service \"portal\"" in (out + err):
+                    time.sleep(2)
+                    continue
+                # A genuine migration error (bad SQL, DB unreachable): stop here.
+                self._log(err, "error")
+                break
+            if not migrate_ok:
+                self._log("  ✗ Migrations failed — aborting before flip. Active server unchanged.\n", "error")
+                self._set_status("Failed - migration error", "red")
+                return
+            self._log("  ✓ Migrations complete\n", "success")
 
             if not self.running:
                 return

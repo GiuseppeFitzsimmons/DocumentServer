@@ -18,7 +18,7 @@ export const accountPageRouter = Router();
 accountPageRouter.get('/account', requireAuth, async (req, res) => {
   const userId = req.session.userId!;
   const result = await pool.query(
-    'SELECT email, display_name, created_at, nightly_backup FROM users WHERE id = $1',
+    'SELECT email, display_name, created_at, nightly_backup, plan FROM users WHERE id = $1',
     [userId]
   );
 
@@ -28,6 +28,25 @@ accountPageRouter.get('/account', requireAuth, async (req, res) => {
   }
 
   const user = result.rows[0];
+
+  // Paid-storage end date: the latest expiry among the user's active grants
+  // (matched by email, unrefunded, not yet expired). Null when they hold none.
+  const grant = await pool.query(
+    `SELECT MAX(expires_at) AS end_at
+       FROM membership_grants
+      WHERE email = LOWER($1)
+        AND refunded_at IS NULL
+        AND expires_at > NOW()`,
+    [user.email]
+  );
+  const endAtRaw = grant.rows[0]?.end_at as Date | null;
+  const storageEndsAt = endAtRaw
+    ? new Date(endAtRaw).toLocaleDateString('en-GB', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })
+    : null;
   const createdAt = new Date(user.created_at).toLocaleDateString('en-GB', {
     year: 'numeric',
     month: 'long',
@@ -51,6 +70,8 @@ accountPageRouter.get('/account', requireAuth, async (req, res) => {
     quotaPercentage: quota.percentage,
     quotaUsed: formatBytes(quota.usedBytes),
     quotaLimit: formatBytes(quota.limitBytes),
+    plan: user.plan,
+    storageEndsAt,
     layout: false,
   });
 });
