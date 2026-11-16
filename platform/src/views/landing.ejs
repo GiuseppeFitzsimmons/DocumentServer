@@ -1602,12 +1602,63 @@
         <button id="support-reset" class="support-submit">Send another</button>
       </div>
     </div>
+    <div id="invite-panel" class="support-panel" style="display:none;">
+      <div class="support-panel-header">
+        <span>Invite a friend</span>
+        <button id="invite-close" class="support-panel-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="support-form">
+        <p style="font-size:13px;color:#555;margin:0 0 12px;line-height:1.5;">
+          Can't find your friend? Invite them to join and get a free, permanent storage upgrade for both of you!
+        </p>
+        <form id="invite-widget-form">
+          <div class="support-field">
+            <label for="invite-widget-email">Friend's email</label>
+            <input type="email" id="invite-widget-email" required placeholder="friend@example.com" />
+          </div>
+          <button type="submit" class="support-submit">Send invite</button>
+        </form>
+        <div id="invite-widget-msg" style="font-size:13px;margin-top:10px;"></div>
+      </div>
+    </div>
     <div class="support-buttons">
       <a href="/faq" class="support-toggle support-toggle-secondary" aria-label="FAQ">FAQ</a>
       <a href="/terms" class="support-toggle support-toggle-secondary" aria-label="FAQ">Terms</a>
+      <button id="invite-toggle" class="support-toggle support-toggle-secondary" aria-label="Invite a friend">Invite a friend</button>
       <button id="support-toggle" class="support-toggle" aria-label="Contact support">Ask a Human</button>
     </div>
   </div>
+
+  <script>
+    (function () {
+      var toggle = document.getElementById('invite-toggle');
+      var panel = document.getElementById('invite-panel');
+      var closeBtn = document.getElementById('invite-close');
+      var form = document.getElementById('invite-widget-form');
+      var emailEl = document.getElementById('invite-widget-email');
+      var msg = document.getElementById('invite-widget-msg');
+      if (!toggle) return;
+      function show(v) { panel.style.display = v ? 'block' : 'none'; }
+      toggle.addEventListener('click', function () { show(panel.style.display === 'none'); });
+      closeBtn.addEventListener('click', function () { show(false); });
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        msg.textContent = 'Sending…'; msg.style.color = '#666';
+        fetch('/api/referrals/invite', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: emailEl.value.trim() }),
+        }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+          .then(function (res) {
+            if (res.ok) {
+              msg.textContent = 'Invite sent to ' + emailEl.value.trim() + '.';
+              msg.style.color = '#2e7d32'; emailEl.value = '';
+            } else {
+              msg.textContent = res.d.error || 'Could not send the invite.'; msg.style.color = '#b00';
+            }
+          }).catch(function () { msg.textContent = 'Could not send the invite.'; msg.style.color = '#b00'; });
+      });
+    })();
+  </script>
 
   <style>
     .support-widget {

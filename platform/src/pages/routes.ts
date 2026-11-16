@@ -84,7 +84,29 @@ pageRouter.get('/register', (req, res) => {
     res.redirect('/');
     return;
   }
-  res.render('register', { title: 'Request beta access', error: null, success: null });
+  // When arriving from a referral link the email is prefilled + locked (the
+  // reward is scoped to that address). The token is stashed in the session by
+  // the /r/:token landing route below.
+  const referralEmail = req.session.referralEmail || null;
+  res.render('register', { title: 'Request beta access', error: null, success: null, referralEmail });
+});
+
+// Referral invite landing: validate the token, remember the scoped email, and
+// drop the visitor on the signup form with that email prefilled.
+pageRouter.get('/r/:token', async (req, res) => {
+  const { lookupInvite } = await import('../referrals/service.js');
+  const invite = await lookupInvite(req.params.token);
+  if (!invite) {
+    res.render('register', {
+      title: 'Request beta access',
+      error: 'This invite link is invalid or has already been used.',
+      success: null,
+      referralEmail: null,
+    });
+    return;
+  }
+  req.session.referralEmail = invite.invitedEmail;
+  res.redirect('/register');
 });
 
 pageRouter.post('/register', async (req, res) => {
@@ -101,6 +123,8 @@ pageRouter.post('/register', async (req, res) => {
     agreeTerms: z.literal('yes'),
   });
 
+  const referralEmail = req.session.referralEmail || null;
+
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
     const agreeMissing = parsed.error.issues.some(i => i.path[0] === 'agreeTerms');
@@ -110,15 +134,18 @@ pageRouter.post('/register', async (req, res) => {
         ? 'You must agree to the Terms & Conditions to request access.'
         : 'Please fill in a valid email and name.',
       success: null,
+      referralEmail,
     });
     return;
   }
 
   const { email, displayName, reason } = parsed.data;
-  const emailLower = email.trim().toLowerCase();
+  // When arriving via a referral link the signup email is locked to the invited
+  // address so the reward stays scoped. Ignore any tampered form value.
+  const emailLower = (referralEmail || email).trim().toLowerCase();
 
   if (isDisposableEmail(emailLower)) {
-    res.render('register', { title: 'Request beta access', error: 'Disposable email addresses are not accepted.', success: null });
+    res.render('register', { title: 'Request beta access', error: 'Disposable email addresses are not accepted.', success: null, referralEmail });
     return;
   }
 
@@ -126,7 +153,7 @@ pageRouter.post('/register', async (req, res) => {
     // Check if already a registered user
     const existingUser = await pool.query('SELECT id FROM users WHERE email = $1', [emailLower]);
     if (existingUser.rows.length > 0) {
-      res.render('register', { title: 'Request beta access', error: null, success: 'An account with this email already exists. Try signing in.' });
+      res.render('register', { title: 'Request beta access', error: null, success: 'An account with this email already exists. Try signing in.', referralEmail: null });
       return;
     }
 
@@ -138,10 +165,10 @@ pageRouter.post('/register', async (req, res) => {
       [emailLower, displayName.trim(), reason.trim()]
     );
 
-    res.render('register', { title: 'Request beta access', error: null, success: 'Thanks for signing up! We\'ll review your request and get back to you shortly.' });
+    res.render('register', { title: 'Request beta access', error: null, success: 'Thanks for signing up! We\'ll review your request and get back to you shortly.', referralEmail: null });
   } catch (err) {
     console.error('Beta signup error:', err);
-    res.render('register', { title: 'Request beta access', error: 'Something went wrong. Please try again.', success: null });
+    res.render('register', { title: 'Request beta access', error: 'Something went wrong. Please try again.', success: null, referralEmail });
   }
 });
 

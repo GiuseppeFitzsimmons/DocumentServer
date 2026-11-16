@@ -5,6 +5,9 @@
 <% if (success) { %>
   <div class="success"><%= success %></div>
 <% } else { %>
+<% if (typeof referralEmail !== 'undefined' && referralEmail) { %>
+  <div class="success" style="margin-bottom:16px;">You've been invited by a friend! Sign up with this email and you'll both get a free, permanent 10&nbsp;MB storage boost.</div>
+<% } %>
 <p style="font-size:14px;color:#555;margin:0 0 20px;line-height:1.6;">EuroBureau is in closed beta. Fill in your details below and we'll get back to you shortly.</p>
 <form method="POST" action="/register">
   <div class="form-group">
@@ -13,7 +16,9 @@
   </div>
   <div class="form-group">
     <label for="email">Email</label>
-    <input type="email" id="email" name="email" required />
+    <input type="email" id="email" name="email" required
+      value="<%= (typeof referralEmail !== 'undefined' && referralEmail) ? referralEmail : '' %>"
+      <%= (typeof referralEmail !== 'undefined' && referralEmail) ? 'readonly' : '' %> />
   </div>
   <div class="form-group">
     <label for="reason">Tell us briefly why you'd like access <span style="color:#999;font-weight:normal;">(optional)</span></label>

@@ -201,6 +201,74 @@
       </style>
     </div>
 
+    <!-- Invite a Friend Section -->
+    <div class="account-section">
+      <h2>Invite a friend</h2>
+      <p style="font-size:14px;color:#666;margin:0 0 16px;line-height:1.6;">
+        Invite a friend to join EuroBureau. When they sign up and verify their email,
+        you'll <strong>both</strong> get a free, permanent 10&nbsp;MB storage boost.
+        <% if (referralBonusEarned) { %>
+          <br><span style="color:#2e7d32;">You've already earned your referral bonus — thanks for spreading the word! You can still invite others so they get theirs.</span>
+        <% } %>
+      </p>
+      <form id="invite-form" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <input type="email" id="invite-email" placeholder="friend@example.com" required
+          style="flex:1;min-width:220px;padding:8px 10px;border:1px solid #ddd;border-radius:3px;font-size:14px;" />
+        <button type="submit" class="btn" style="white-space:nowrap;">Send invite</button>
+      </form>
+      <div id="invite-msg" style="font-size:13px;margin-top:10px;"></div>
+      <div id="invite-list" style="font-size:13px;color:#666;margin-top:14px;"></div>
+      <script>
+        (function () {
+          var form = document.getElementById('invite-form');
+          var emailEl = document.getElementById('invite-email');
+          var msg = document.getElementById('invite-msg');
+          var listEl = document.getElementById('invite-list');
+
+          function statusLabel(s) {
+            if (s === 'claimed') return 'joined ✓';
+            if (s === 'void') return 'superseded';
+            return 'pending';
+          }
+          function loadInvites() {
+            fetch('/api/referrals').then(function (r) { return r.json(); }).then(function (d) {
+              if (!d.invites || !d.invites.length) { listEl.innerHTML = ''; return; }
+              var rows = d.invites.map(function (i) {
+                return '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f0f0f0;">' +
+                  '<span>' + i.invitedEmail + '</span><span>' + statusLabel(i.status) + '</span></div>';
+              }).join('');
+              listEl.innerHTML = '<div style="font-weight:600;margin-bottom:4px;">Your invites</div>' + rows;
+            }).catch(function () {});
+          }
+          form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            msg.textContent = 'Sending…';
+            msg.style.color = '#666';
+            fetch('/api/referrals/invite', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: emailEl.value.trim() }),
+            }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+              .then(function (res) {
+                if (res.ok) {
+                  msg.textContent = 'Invite sent to ' + emailEl.value.trim() + '.';
+                  msg.style.color = '#2e7d32';
+                  emailEl.value = '';
+                  loadInvites();
+                } else {
+                  msg.textContent = res.d.error || 'Could not send the invite.';
+                  msg.style.color = '#b00';
+                }
+              }).catch(function () {
+                msg.textContent = 'Could not send the invite.';
+                msg.style.color = '#b00';
+              });
+          });
+          loadInvites();
+        })();
+      </script>
+    </div>
+
     <!-- Nightly Backup Section -->
     <div class="account-section">
       <h2>Nightly backup</h2>

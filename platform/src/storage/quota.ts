@@ -1,4 +1,5 @@
 import { pool } from '../db/pool.js';
+import { planBaseBytes } from '../membership/plans.js';
 
 // Default account storage limit (10 MB) for users without an explicit override.
 // Per-user limits live in users.storage_limit_bytes; this is the fallback used
@@ -32,7 +33,9 @@ export async function getAccountUsage(userId: string): Promise<QuotaInfo> {
   // capped by MAX_VERSIONS_PER_FILE, which bounds what that costs us.
   const { rows } = await pool.query(
     `SELECT
-       u.storage_limit_bytes AS limit_bytes,
+       u.plan AS plan,
+       u.referral_bonus_bytes AS bonus_bytes,
+       u.storage_limit_override AS override_bytes,
        COALESCE((SELECT SUM(f.size_bytes) FROM files f WHERE f.user_id = u.id), 0)::bigint AS files_total
      FROM users u
      WHERE u.id = $1`,
@@ -42,10 +45,21 @@ export async function getAccountUsage(userId: string): Promise<QuotaInfo> {
   // If the user row is missing, fall back to zero usage + default limit so
   // callers get a well-formed result rather than throwing.
   const usedBytes = rows.length ? Number(rows[0].files_total) : 0;
-  const limitBytes =
-    rows.length && rows[0].limit_bytes != null
-      ? Number(rows[0].limit_bytes)
-      : ACCOUNT_QUOTA_BYTES;
+
+  // Effective limit resolution:
+  //   1. storage_limit_override (per-account hard cap, e.g. test accounts)
+  //   2. otherwise DERIVED: plan base (10 MB free / 100 MB storage_100) plus
+  //      any permanent referral bonus. Keeping plan and referral credit in
+  //      separate columns and summing here means Payhip plan changes and
+  //      referral bonuses never clobber one another.
+  let limitBytes: number;
+  if (!rows.length) {
+    limitBytes = ACCOUNT_QUOTA_BYTES;
+  } else if (rows[0].override_bytes != null) {
+    limitBytes = Number(rows[0].override_bytes);
+  } else {
+    limitBytes = planBaseBytes(rows[0].plan) + Number(rows[0].bonus_bytes ?? 0);
+  }
 
   const percentage = limitBytes > 0 ? usedBytes / limitBytes : 1;
 

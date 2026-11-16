@@ -31,10 +31,15 @@ function signatureValid(sig: unknown): boolean {
 export async function syncPlans(email?: string): Promise<void> {
   const paid = getPlan(PLAN_KEY)!;
   const free = getPlan('free')!;
+  // Sets the plan. storage_limit_bytes is kept in sync only as a derived cache
+  // (plan base + referral bonus); quota.ts derives the effective limit the same
+  // way, so referral credit is preserved across plan changes.
   await pool.query(
     `UPDATE users u
         SET plan = x.new_plan,
-            storage_limit_bytes = CASE WHEN x.new_plan = $1 THEN $2::bigint ELSE $3::bigint END,
+            storage_limit_bytes =
+              (CASE WHEN x.new_plan = $1 THEN $2::bigint ELSE $3::bigint END)
+              + COALESCE(u.referral_bonus_bytes, 0),
             updated_at = NOW()
        FROM (
          SELECT u2.id,

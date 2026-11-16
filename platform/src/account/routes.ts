@@ -18,7 +18,7 @@ export const accountPageRouter = Router();
 accountPageRouter.get('/account', requireAuth, async (req, res) => {
   const userId = req.session.userId!;
   const result = await pool.query(
-    'SELECT email, display_name, created_at, nightly_backup, plan FROM users WHERE id = $1',
+    'SELECT email, display_name, created_at, nightly_backup, plan, referral_bonus_bytes FROM users WHERE id = $1',
     [userId]
   );
 
@@ -72,6 +72,7 @@ accountPageRouter.get('/account', requireAuth, async (req, res) => {
     quotaLimit: formatBytes(quota.limitBytes),
     plan: user.plan,
     storageEndsAt,
+    referralBonusEarned: Number(user.referral_bonus_bytes ?? 0) > 0,
     layout: false,
   });
 });

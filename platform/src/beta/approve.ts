@@ -57,11 +57,22 @@ async function main() {
   const tempPassword = generateTempPassword();
   const passwordHash = await hashPassword(tempPassword);
 
-  await pool.query(
+  const { rows: created } = await pool.query(
     `INSERT INTO users (email, password_hash, display_name, email_verified, is_temp_password)
-     VALUES ($1, $2, $3, true, true)`,
+     VALUES ($1, $2, $3, true, true)
+     RETURNING id`,
     [email, passwordHash, signup.display_name]
   );
+
+  // 3b. Approval sets email_verified=true — the referral reward trigger. If this
+  // address was invited by an existing user, grant both the one-time +10 MB.
+  // (Post-Dec-1 self-serve signup should call this from its verify handler too.)
+  try {
+    const { claimReferralOnVerification } = await import('../referrals/service.js');
+    await claimReferralOnVerification(created[0].id, email);
+  } catch (err) {
+    console.error('  ⚠ Referral claim failed (non-fatal):', (err as Error).message);
+  }
 
   // 4. Mark signup as approved
   await pool.query(

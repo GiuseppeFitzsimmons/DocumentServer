@@ -354,6 +354,18 @@
         <h3 id="sharing-list-heading">Current Shares</h3>
         <ul class="sharing-list" id="sharing-list" role="list" aria-labelledby="sharing-list-heading"></ul>
       </div>
+
+      <div class="sharing-invite-section" style="margin-top:20px;padding-top:16px;border-top:1px solid #eee;">
+        <p style="font-size:13px;color:#555;margin:0 0 10px;line-height:1.5;">
+          Can't find your friend? Invite them to join and get a free, permanent storage upgrade for both of you!
+        </p>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="email" id="sharing-invite-email" placeholder="friend@example.com"
+            style="flex:1;padding:10px 12px;border:1px solid #ddd;border-radius:3px;font-size:14px;" />
+          <button id="sharing-invite-btn" class="sharing-add-btn" aria-label="Invite a friend">Invite</button>
+        </div>
+        <div id="sharing-invite-msg" style="font-size:13px;margin-top:8px;"></div>
+      </div>
     </div>
   </dialog>
 <% } %>
@@ -371,7 +383,7 @@
     var config = <%- JSON.stringify(editorConfig) %>;
 
     // Where users go to unlock more storage (shown on quota-exceeded save).
-    var STORAGE_UPGRADE_URL = 'https://ko-fi.com/eurobureau';
+    var STORAGE_UPGRADE_URL = 'https://payhip.com/eurobureau';
 
     // Context for the in-editor cursor-restore IIFE (which runs inside the DS
     // iframe, a separate document). We expose userId + canEdit on THIS (parent)
@@ -654,6 +666,38 @@
 
       // Expose loadShares globally so the onRequestSharingSettings handler can call it
       window.sharingDialogLoad = loadShares;
+
+      // Invite-a-friend: send an email-scoped referral invite from the share dialog.
+      var inviteEmailEl = document.getElementById('sharing-invite-email');
+      var inviteBtn = document.getElementById('sharing-invite-btn');
+      var inviteMsg = document.getElementById('sharing-invite-msg');
+      if (inviteBtn) {
+        inviteBtn.addEventListener('click', function() {
+          var email = (inviteEmailEl.value || '').trim();
+          if (!email) { return; }
+          inviteMsg.textContent = 'Sending…';
+          inviteMsg.style.color = '#666';
+          fetch('/api/referrals/invite', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ email: email })
+          }).then(function(r) { return r.json().then(function(d) { return { ok: r.ok, d: d }; }); })
+            .then(function(res) {
+              if (res.ok) {
+                inviteMsg.textContent = 'Invite sent to ' + email + '.';
+                inviteMsg.style.color = '#2e7d32';
+                inviteEmailEl.value = '';
+              } else {
+                inviteMsg.textContent = res.d.error || 'Could not send the invite.';
+                inviteMsg.style.color = '#b00';
+              }
+            }).catch(function() {
+              inviteMsg.textContent = 'Could not send the invite.';
+              inviteMsg.style.color = '#b00';
+            });
+        });
+      }
 
       // Debounced user search
       searchInput.addEventListener('input', function() {

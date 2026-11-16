@@ -27,6 +27,7 @@ import { landingRouter } from './pages/landing.js';
 import { homeRouter } from './pages/home.js';
 import { contentRouter } from './content/routes.js';
 import { payhipRouter, startMembershipSweep } from './membership/payhip.js';
+import { referralRouter } from './referrals/routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -128,6 +129,9 @@ app.use(accountPageRouter);
 
 // Support tickets
 app.use('/api/support', supportRouter);
+
+// Invite-a-friend referrals
+app.use('/api/referrals', referralRouter);
 
 // Font manifest proxy (filtered per-user)
 app.use('/api/fonts', fontsRouter);

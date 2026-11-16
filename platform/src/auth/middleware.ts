@@ -4,6 +4,7 @@ declare module 'express-session' {
   interface SessionData {
     userId: string;
     isTempPassword?: boolean;
+    referralEmail?: string;
   }
 }
 

@@ -20,6 +20,15 @@ export function getPlan(key: string): Plan | null {
   return PLANS[key] ?? null;
 }
 
+// Base storage for a plan key, independent of any per-account bonuses (e.g.
+// referral credit). Falls back to the free plan for unknown keys.
+export function planBaseBytes(key: string | null | undefined): number {
+  return (key && PLANS[key] ? PLANS[key] : PLANS.free).storageLimitBytes;
+}
+
+// Permanent storage credit granted to each side of a successful referral.
+export const REFERRAL_BONUS_BYTES = 10 * MB;
+
 export function planKeys(): string[] {
   return Object.keys(PLANS);
 }
