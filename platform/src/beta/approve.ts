@@ -9,9 +9,12 @@
  * permanent password (existing is_temp_password flow).
  */
 import { pool } from '../db/pool.js';
+import { config } from '../config.js';
 import { hashPassword } from '../auth/password.js';
 import { generateTempPassword } from '../auth/temp-password.js';
 import { sendEmail } from '../email.js';
+
+const LOGIN_URL = `${config.PUBLIC_BASE_URL.replace(/\/$/, '')}/login`;
 
 async function main() {
   const email = process.argv[2]?.trim().toLowerCase();
@@ -93,7 +96,7 @@ async function main() {
         `  Email:    ${email}`,
         `  Password: ${tempPassword}`,
         ``,
-        `Sign in at https://eurobureau.eu/login`,
+        `Sign in at ${LOGIN_URL}`,
         `You'll be asked to set a permanent password on your first login.`,
         ``,
         `Welcome aboard,`,
@@ -103,7 +106,7 @@ async function main() {
         `<p>Hi ${signup.display_name},</p>`,
         `<p>Your EuroBureau beta account has been created! Here are your login details:</p>`,
         `<p><strong>Email:</strong> ${email}<br><strong>Password:</strong> ${tempPassword}</p>`,
-        `<p><a href="https://eurobureau.eu/login">Sign in here</a> — you'll be asked to set a permanent password on your first login.</p>`,
+        `<p><a href="${LOGIN_URL}">Sign in here</a> — you'll be asked to set a permanent password on your first login.</p>`,
         `<p>Welcome aboard,<br>The EuroBureau team</p>`,
       ].join('\n'),
     });

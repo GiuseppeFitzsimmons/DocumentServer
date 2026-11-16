@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { pool } from '../db/pool.js';
+import { config } from '../config.js';
 import { hashPassword, verifyPassword } from '../auth/password.js';
 import { generateTempPassword } from '../auth/temp-password.js';
 import { sendEmail } from '../email.js';
@@ -271,7 +272,7 @@ pageRouter.post('/forgot-password', async (req, res) => {
       [user.id, token, expiresAt]
     );
 
-    const resetUrl = `https://eurobureau.eu/reset-password/${token}`;
+    const resetUrl = `${config.PUBLIC_BASE_URL.replace(/\/$/, '')}/reset-password/${token}`;
 
     await sendEmail({
       to: email,

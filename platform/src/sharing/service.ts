@@ -1,10 +1,11 @@
 import { pool } from '../db/pool.js';
 import { sendEmail } from '../email.js';
+import { config } from '../config.js';
 
 // User-facing base URL for links in emails. PLATFORM_BASE_URL is the internal
-// origin (e.g. http://nginx:80 in prod), so we use the public hostname here —
-// matching the convention in beta/approve.ts and the password-reset email.
-const PUBLIC_BASE_URL = 'https://eurobureau.eu';
+// origin (e.g. http://nginx:80 in prod), useless in an email; PUBLIC_BASE_URL
+// is the public site origin (prod default, dev overrides to dev.eurobureau.eu).
+const PUBLIC_BASE_URL = config.PUBLIC_BASE_URL.replace(/\/$/, '');
 
 // --- Interfaces ---
 

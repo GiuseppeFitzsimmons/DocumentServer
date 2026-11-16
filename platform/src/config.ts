@@ -25,6 +25,11 @@ const envSchema = z.object({
     .default('https://raw.githubusercontent.com/GiuseppeFitzsimmons/EuroBureau-Static/main'),
   STORAGE_BACKEND: z.enum(['local', 's3']).default('local'),
   PLATFORM_BASE_URL: z.string().url(),
+  // Public, user-facing origin for links embedded in emails (referral invites,
+  // etc). PLATFORM_BASE_URL is the INTERNAL origin DS/containers reach us on
+  // (e.g. http://nginx), which is useless in an email. Defaults to the prod
+  // site; dev should set this to https://dev.eurobureau.eu.
+  PUBLIC_BASE_URL: z.string().url().default('https://eurobureau.eu'),
   MAIL_DOMAIN: z.string().default('eurobureau.eu'),
   RESEND_API_KEY: z.string().default(''),
   DKIM_PRIVATE_KEY: z.string().default(''),

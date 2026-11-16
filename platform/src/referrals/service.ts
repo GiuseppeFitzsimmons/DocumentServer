@@ -46,7 +46,7 @@ export async function createInvite(referrerId: string, rawEmail: string): Promis
     throw err;
   }
 
-  const link = `${config.PLATFORM_BASE_URL.replace(/\/$/, '')}/r/${token}`;
+  const link = `${config.PUBLIC_BASE_URL.replace(/\/$/, '')}/r/${token}`;
   const text =
     `A friend has invited you to join EuroBureau. Sign up with this email (${email}) and ` +
     `you'll both get a free, permanent 10 MB storage boost.\n\n${link}`;

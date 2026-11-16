@@ -28,6 +28,7 @@ services:
       STORAGE_BACKEND: s3
       FILE_STORAGE_PATH: /data/files
       PLATFORM_BASE_URL: ${PLATFORM_BASE_URL}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://eurobureau.eu}
       MAIL_DOMAIN: ${MAIL_DOMAIN:-eurobureau.eu}
       DKIM_PRIVATE_KEY: ${DKIM_PRIVATE_KEY:-}
       SMTP_HOST: ${SMTP_HOST:-}

@@ -1126,9 +1126,14 @@ class DeployHelper:
             # is recreated, so no manual SSH editing is needed.
             box_env = "/opt/euro-office/repo/deploy/.env"
             tfvars = read_tfvars(topology.get("tfvars", "")) if topology.get("tfvars") else {}
+            # Public origin for links in emails (referral invites etc). Differs
+            # per environment; PLATFORM_BASE_URL is the internal origin and is
+            # useless in an email, so we set this explicitly.
+            public_base_url = "https://dev.eurobureau.eu" if environment == "dev" else "https://eurobureau.eu"
             secret_pairs = [
                 ("PAYHIP_API_KEY", tfvars.get("payhip_api_key", "")),
                 ("PAYHIP_STORAGE_PRODUCTS", tfvars.get("payhip_storage_products", "")),
+                ("PUBLIC_BASE_URL", public_base_url),
             ]
 
             commands = [
