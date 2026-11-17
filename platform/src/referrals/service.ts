@@ -46,11 +46,15 @@ export async function createInvite(referrerId: string, rawEmail: string): Promis
     throw err;
   }
 
+  // Send the invite email WITHOUT blocking the HTTP response. The record above
+  // is what matters (validation errors already surfaced); the email is a
+  // best-effort side effect. Awaiting it made the request hang whenever the
+  // SMTP relay was slow, surfacing as a socket timeout in the browser.
   const link = `${config.PUBLIC_BASE_URL.replace(/\/$/, '')}/r/${token}`;
   const text =
     `A friend has invited you to join EuroBureau. Sign up with this email (${email}) and ` +
     `you'll both get a free, permanent 10 MB storage boost.\n\n${link}`;
-  await sendEmail({
+  void sendEmail({
     to: email,
     subject: 'Your friend invited you to EuroBureau (free storage for both of you)',
     html:
@@ -58,7 +62,7 @@ export async function createInvite(referrerId: string, rawEmail: string): Promis
       `(<strong>${email}</strong>) and you'll both get a free, permanent 10&nbsp;MB storage boost.</p>` +
       `<p><a href="${link}">Accept your invite</a></p>`,
     text,
-  });
+  }).catch((err) => console.error(`[referrals] invite email to ${email} failed:`, err));
 }
 
 export interface InviteSummary {

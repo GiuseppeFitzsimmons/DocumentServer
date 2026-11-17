@@ -122,6 +122,22 @@
     </div>
   </nav>
 
+  <!-- Storage status banner -->
+  <% if (isOverCap) { %>
+    <div class="storage-banner storage-banner-over" role="status">
+      You're over your storage limit. Saving new changes may be limited and you might see error messages,
+      but your existing documents are safe — you can still open, edit, download and export them.
+      <a href="<%= 'https://payhip.com/eurobureau' %>" target="_blank" rel="noopener">Get more storage</a>
+    </div>
+  <% } else if (typeof storageEndsInDays === 'number' && storageEndsInDays !== null && storageEndsInDays <= 5) { %>
+    <div class="storage-banner storage-banner-warn" role="status">
+      Your 100&nbsp;MB storage runs out in
+      <%= storageEndsInDays <= 1 ? 'less than a day' : storageEndsInDays + ' days' %>.
+      Renew to keep the extra space.
+      <a href="<%= 'https://payhip.com/eurobureau' %>" target="_blank" rel="noopener">Renew storage</a>
+    </div>
+  <% } %>
+
   <!-- Toast Container -->
   <div class="toast-container" id="toast-container"></div>
 
@@ -1646,6 +1662,7 @@
         msg.textContent = 'Sending…'; msg.style.color = '#666';
         fetch('/api/referrals/invite', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
           body: JSON.stringify({ email: emailEl.value.trim() }),
         }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
           .then(function (res) {
@@ -1661,6 +1678,17 @@
   </script>
 
   <style>
+    .storage-banner {
+      padding: 10px 20px;
+      font-size: 13px;
+      line-height: 1.5;
+      text-align: center;
+    }
+    .storage-banner a { font-weight: 600; text-decoration: underline; margin-left: 4px; }
+    .storage-banner-over { background: #fdecea; color: #611a15; }
+    .storage-banner-over a { color: #611a15; }
+    .storage-banner-warn { background: #fff8e1; color: #6b5300; }
+    .storage-banner-warn a { color: #6b5300; }
     .support-widget {
       position: fixed;
       bottom: 24px;

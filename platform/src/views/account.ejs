@@ -171,7 +171,14 @@
         </div>
         <div class="storage-label">
           <% if (typeof plan !== 'undefined' && plan && plan !== 'free') { %>
-            Plan: <strong>100 MB storage</strong><% if (storageEndsAt) { %> &mdash; active until <%= storageEndsAt %><% } %>
+            Plan: <strong>100 MB storage</strong>
+            <% if (typeof storageRenews !== 'undefined' && storageRenews) { %>
+              &mdash; renews automatically
+            <% } else if (typeof storageCanceledEndsAt !== 'undefined' && storageCanceledEndsAt) { %>
+              &mdash; subscription cancelled, active until <%= storageCanceledEndsAt %> (won't renew)
+            <% } else if (storageEndsAt) { %>
+              &mdash; active until <%= storageEndsAt %>
+            <% } %>
           <% } else { %>
             Plan: <strong>Free</strong>
           <% } %>

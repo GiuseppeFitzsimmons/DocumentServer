@@ -29,24 +29,52 @@ accountPageRouter.get('/account', requireAuth, async (req, res) => {
 
   const user = result.rows[0];
 
-  // Paid-storage end date: the latest expiry among the user's active grants
-  // (matched by email, unrefunded, not yet expired). Null when they hold none.
+  // Paid-storage end date and whether it's a subscription that's been canceled
+  // (so we can word it "won't renew"). The end date is the furthest-out of:
+  //   - any unexpired one-off grant (single-month purchase), and
+  //   - any subscription still within its paid period.
+  // An active subscription self-renews, so it effectively has no end date; a
+  // canceled subscription shows the date its remaining period runs out.
   const grant = await pool.query(
     `SELECT MAX(expires_at) AS end_at
        FROM membership_grants
-      WHERE email = LOWER($1)
-        AND refunded_at IS NULL
-        AND expires_at > NOW()`,
+      WHERE email = LOWER($1) AND expires_at > NOW()`,
     [user.email]
   );
-  const endAtRaw = grant.rows[0]?.end_at as Date | null;
-  const storageEndsAt = endAtRaw
-    ? new Date(endAtRaw).toLocaleDateString('en-GB', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      })
-    : null;
+  const sub = await pool.query(
+    `SELECT status, current_period_end
+       FROM membership_subscriptions
+      WHERE email = LOWER($1) AND current_period_end > NOW()
+      ORDER BY current_period_end DESC
+      LIMIT 1`,
+    [user.email]
+  );
+
+  const grantEnd = (grant.rows[0]?.end_at as Date | null) ?? null;
+  const subRow = sub.rows[0] as { status: string; current_period_end: Date } | undefined;
+  const subActive = subRow?.status === 'active';
+  const subCanceled = subRow?.status === 'canceled';
+
+  const fmtDate = (d: Date) =>
+    new Date(d).toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  // An active subscription renews indefinitely — no end date shown. Otherwise
+  // show the furthest paid-through date (canceled sub period or one-off grant).
+  let storageEndsAt: string | null = null;
+  let storageRenews = false;
+  let storageCanceledEndsAt: string | null = null;
+  if (subActive) {
+    storageRenews = true;
+  } else {
+    const candidates = [grantEnd, subCanceled ? subRow!.current_period_end : null].filter(Boolean) as Date[];
+    if (candidates.length) {
+      const furthest = candidates.reduce((a, b) => (a > b ? a : b));
+      storageEndsAt = fmtDate(furthest);
+      if (subCanceled && (!grantEnd || subRow!.current_period_end >= grantEnd)) {
+        storageCanceledEndsAt = fmtDate(subRow!.current_period_end);
+      }
+    }
+  }
   const createdAt = new Date(user.created_at).toLocaleDateString('en-GB', {
     year: 'numeric',
     month: 'long',
@@ -72,6 +100,8 @@ accountPageRouter.get('/account', requireAuth, async (req, res) => {
     quotaLimit: formatBytes(quota.limitBytes),
     plan: user.plan,
     storageEndsAt,
+    storageRenews,
+    storageCanceledEndsAt,
     referralBonusEarned: Number(user.referral_bonus_bytes ?? 0) > 0,
     layout: false,
   });
