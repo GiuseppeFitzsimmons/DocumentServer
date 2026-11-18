@@ -21,8 +21,12 @@ VOLUME="ds-build-cache"
 IMAGE_ENV="ds-build-env"
 TREE="$HOME/ds-src-out/documentserver"
 
-echo "== [1/4] build JS (patches + compile) =="
-bash "$HERE/build-js.sh"
+if [ "${1:-}" = "--skip-build" ]; then
+  echo "== [1/4] build JS: skipped (--skip-build; using existing bundles) =="
+else
+  echo "== [1/4] build JS (patches + compile) =="
+  bash "$HERE/build-js.sh"
+fi
 
 echo
 echo "== [2/4] sync bundles -> out tree + host extract =="

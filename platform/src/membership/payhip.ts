@@ -283,8 +283,15 @@ export function startMembershipSweep(): void {
       // must never be seen as lapsed.
       await renewSubscriptions();
       await syncPlans();
-    } catch (e) {
-      console.error('[membership] sweep failed:', e);
+    } catch (e: any) {
+      // On first boot the sweep can run before migrations have created the
+      // membership tables. That's transient (next tick, post-migration, works),
+      // so don't spam a stack trace — just note it and move on.
+      if (e?.code === '42P01') {
+        console.warn('[membership] sweep skipped: membership tables not migrated yet');
+      } else {
+        console.error('[membership] sweep failed:', e);
+      }
     }
   };
   void run();
